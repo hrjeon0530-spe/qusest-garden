@@ -1570,8 +1570,12 @@ function StatsScreen({ quests }) {
   const daysInMonth = new Date(yr, mo + 1, 0).getDate();
   const moNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
-  // Parse quest date string to Date
-  const parseDate = d => new Date(d);
+  // Parse quest date string to Date — robust for "Mon Apr 21 2026" and ISO formats
+  const parseDate = d => {
+    if (!d) return new Date(0);
+    const p = new Date(d);
+    return isNaN(p.getTime()) ? new Date(0) : p;
+  };
 
   // Monthly: quests completed per day this month
   const moCompleted = quests.filter(q => {
@@ -2498,7 +2502,17 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('qg_user', JSON.stringify(user)); } catch {} }, [user]);
   useEffect(() => { try { localStorage.setItem('qg_pro', JSON.stringify(isProUser)); } catch {} }, [isProUser]);
   useEffect(() => { try { localStorage.setItem('qg_pages', JSON.stringify(pages)); } catch {} }, [pages]);
-  useEffect(() => { try { localStorage.setItem('qg_quests', JSON.stringify(quests)); } catch {} }, [quests]);
+  useEffect(() => {
+    try {
+      // Keep all quests (completed history preserved), prune only beyond 365 days
+      const cutoff = Date.now() - 365 * 24 * 60 * 60 * 1000;
+      const toSave = quests.filter(q => {
+        const d = new Date(q.date);
+        return isNaN(d.getTime()) || d.getTime() > cutoff;
+      });
+      localStorage.setItem('qg_quests', JSON.stringify(toSave));
+    } catch {}
+  }, [quests]);
   useEffect(() => { try { localStorage.setItem('qg_owned', JSON.stringify(owned)); } catch {} }, [owned]);
 
   const todayQ = quests.filter(q => q.date === today());
@@ -2611,7 +2625,7 @@ export default function App() {
         )}
         {createQuest && (
           <CreateQuestModal isProUser={isProUser}
-            onConfirm={nQ => { setQuests(p => [...p.filter(q => q.date !== today()), ...nQ]); setCreateQuest(false); }}
+            onConfirm={nQ => { setQuests(p => [...p.filter(q => !(q.date === today() && !q.completed)), ...nQ]); setCreateQuest(false); }}
             onCancel={() => setCreateQuest(false)} />
         )}
         {editReward && isProUser && (
