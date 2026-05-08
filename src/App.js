@@ -1148,11 +1148,14 @@ function CreatePageModal({ onConfirm, onCancel, isProUser, onNeedPro, onOpenAICh
 }
 
 /* ── CREATE QUEST MODAL ── */
-function CreateQuestModal({ onConfirm, onCancel, isProUser }) {
+function CreateQuestModal({ onConfirm, onCancel, isProUser, routines, onSaveRoutine }) {
   const [todos, setTodos] = useState(['']);
   const [rewards, setRewards] = useState([rndRewardFull()]);
   const [editIdx, setEditIdx] = useState(null);
   const [catFil, setCatFil] = useState(null);
+  const [showRoutines, setShowRoutines] = useState(false);
+  const [routineName, setRoutineName] = useState('');
+  const [savingRoutine, setSavingRoutine] = useState(false);
 
   const add = () => {
     if (todos.length >= 10) return;
@@ -1173,6 +1176,17 @@ function CreateQuestModal({ onConfirm, onCancel, isProUser }) {
       onConfirm(pairs.map(p => ({ id: uid(), title: p.t, rewardId: null, rewardCat: null, completed: false, date: today() })));
     }
   };
+  const loadRoutine = (r) => {
+    setTodos(r.todos);
+    setRewards(r.rewards.map(rw => rw || rndRewardFull()));
+    setShowRoutines(false);
+  };
+  const saveAsRoutine = () => {
+    const validTodos = todos.filter(t => t.trim());
+    if (!validTodos.length || !routineName.trim()) return;
+    onSaveRoutine({ id: uid(), name: routineName.trim(), todos: validTodos, rewards });
+    setRoutineName(''); setSavingRoutine(false);
+  };
 
   const allIt = getAllItems();
   const filtered = catFil ? allIt.filter(it => it.catKey === catFil) : allIt;
@@ -1180,9 +1194,47 @@ function CreateQuestModal({ onConfirm, onCancel, isProUser }) {
   return (
     <ModalSheet onClose={onCancel}>
       <div style={{ fontWeight: 900, fontSize: 20, marginBottom: 3 }}>오늘의 할일 ⚔️</div>
-      <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginBottom: 18 }}>
+      <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginBottom: 12 }}>
         {isProUser ? '완료하면 정원 요소를 획득해요! (최대 10개)' : '오늘 할일을 입력하세요 (최대 10개)'}
       </div>
+      {/* Routine buttons */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {(routines || []).length > 0 && (
+          <button onClick={() => setShowRoutines(s => !s)}
+            style={{ flex: 1, padding: '8px 12px', borderRadius: 10, border: `1.5px solid ${P}`, background: showRoutines ? PL : 'white', color: PD, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            📋 루틴 불러오기 {(routines||[]).length > 0 && `(${(routines||[]).length}개)`}
+          </button>
+        )}
+        <button onClick={() => setSavingRoutine(s => !s)}
+          style={{ flex: 1, padding: '8px 12px', borderRadius: 10, border: `1.5px solid ${BD}`, background: 'white', color: '#6B7280', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          💾 루틴으로 저장
+        </button>
+      </div>
+      {/* Routine list */}
+      {showRoutines && (routines||[]).length > 0 && (
+        <div style={{ background: PL, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: PD, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>저장된 루틴</div>
+          {(routines||[]).map(r => (
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: `1px solid rgba(124,58,237,0.1)` }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>{r.name}</div>
+                <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>{r.todos.slice(0,3).join(' · ')}{r.todos.length > 3 ? ` 외 ${r.todos.length-3}개` : ''}</div>
+              </div>
+              <button onClick={() => loadRoutine(r)} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: P, color: 'white', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>불러오기</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Save as routine */}
+      {savingRoutine && (
+        <div style={{ background: '#F0FDF4', border: `1.5px solid ${G}`, borderRadius: 12, padding: 12, marginBottom: 14, display: 'flex', gap: 8 }}>
+          <input value={routineName} onChange={e => setRoutineName(e.target.value)} placeholder="루틴 이름 (예: 수능 루틴)"
+            style={{ flex: 1, padding: '8px 11px', border: `1.5px solid ${G}`, borderRadius: 9, fontSize: 13, fontWeight: 600, color: '#1E1B4B' }}
+            onKeyDown={e => e.key === 'Enter' && saveAsRoutine()}/>
+          <button onClick={saveAsRoutine} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: G, color: 'white', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>저장</button>
+          <button onClick={() => setSavingRoutine(false)} style={{ padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${BD}`, background: 'none', fontSize: 13, color: '#6B7280', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
       {todos.map((t, i) => (
         <div key={i}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1414,34 +1466,49 @@ function TimerScreen({ quest, silentMode, isProUser, onComplete, onBack }) {
   const [phase, setPhase] = useState('input');
   const [mins, setMins] = useState('');
   const [secs, setSecs] = useState('');
-  const [total, setTotal] = useState(0);
-  const [rem, setRem] = useState(0);
+  const [total, setTotal] = useState(0);   // total seconds set
+  const [rem, setRem] = useState(0);       // remaining seconds (display)
   const [addM, setAddM] = useState('');
   const [addS, setAddS] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [isFlash, setIsFlash] = useState(false);
+  // Background-aware: store absolute end time
+  const endTimeRef = useRef(null);   // Date.now() when timer should finish
   const iv = useRef(null);
+  const doneRef = useRef(false);
 
-  const startCD = (s) => {
-    clearInterval(iv.current);
-    iv.current = setInterval(() => {
-      setRem(r => {
-        if (r <= 1) {
-          clearInterval(iv.current);
-          setPhase('done');
-          if (silentMode) beep();
-          else { setIsFlash(true); setTimeout(() => setIsFlash(false), 3200); }
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
+  const tick = () => {
+    if (!endTimeRef.current) return;
+    const left = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+    setRem(left);
+    if (left <= 0 && !doneRef.current) {
+      doneRef.current = true;
+      clearInterval(iv.current);
+      setPhase('done');
+      if (silentMode) beep();
+      else { setIsFlash(true); setTimeout(() => setIsFlash(false), 3200); }
+    }
   };
+
+  const startCD = (seconds) => {
+    clearInterval(iv.current);
+    doneRef.current = false;
+    endTimeRef.current = Date.now() + seconds * 1000;
+    setRem(seconds);
+    iv.current = setInterval(tick, 300); // fast interval = accurate even after tab switch
+  };
+
+  // Recalculate on visibility change (tab return)
+  useEffect(() => {
+    const onVis = () => { if (!document.hidden && phase === 'running') tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [phase]);
 
   const start = () => {
     const m = parseInt(mins) || 0, s = parseInt(secs) || 0, tot = m * 60 + s;
     if (tot <= 0) return;
-    setTotal(tot); setRem(tot); setPhase('running'); startCD(tot);
+    setTotal(tot); setPhase('running'); startCD(tot);
   };
 
   const addTime = () => {
@@ -1449,7 +1516,8 @@ function TimerScreen({ quest, silentMode, isProUser, onComplete, onBack }) {
     if (ex <= 0) return;
     setTotal(t => t + ex);
     const nr = rem + ex;
-    setRem(nr); setPhase('running'); startCD(nr);
+    doneRef.current = false;
+    setPhase('running'); startCD(nr);
     setShowAdd(false); setAddM(''); setAddS('');
   };
 
@@ -1893,8 +1961,13 @@ function QuestScreen({ quests, silent, isProUser, onToggleSilent, onOpenTimer, o
   const done = tQ.filter(q => q.completed).length;
   const allDone = tQ.length > 0 && done === tQ.length;
   const [catFil, setCatFil] = useState(null);
+  const [justDone, setJustDone] = useState(null); // id of quest just completed for animation
   const filtered = catFil ? tQ.filter(q => q.rewardCat === catFil) : tQ;
   const usedCats = [...new Set(tQ.map(q => q.rewardCat).filter(Boolean))];
+
+  const handleOpenTimer = (q) => {
+    onOpenTimer(q);
+  };
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px 90px' }}>
@@ -1936,11 +2009,11 @@ function QuestScreen({ quests, silent, isProUser, onToggleSilent, onOpenTimer, o
             return (
               <div key={q.id}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'white', border: `1.5px solid ${BD}`, borderRadius: 16, padding: '13px 12px', cursor: q.completed ? 'default' : 'pointer', opacity: q.completed ? 0.62 : 1 }}>
-                  <div onClick={() => !q.completed && onOpenTimer(q)}
-                    style={{ width: 30, height: 30, borderRadius: '50%', border: `2.5px solid ${q.completed ? G : P}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: q.completed ? 'white' : P, background: q.completed ? G : PL, transition: 'all .3s' }}>
+                  <div onClick={() => !q.completed && handleOpenTimer(q)}
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: `2.5px solid ${q.completed ? G : P}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: q.completed ? 'white' : P, background: q.completed ? G : PL, transition: 'all .3s', animation: justDone === q.id ? 'qgPop .4s cubic-bezier(.34,1.56,.64,1)' : 'none' }}>
                     {q.completed ? '✓' : i + 1}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }} onClick={() => !q.completed && onOpenTimer(q)}>
+                  <div style={{ flex: 1, minWidth: 0 }} onClick={() => !q.completed && handleOpenTimer(q)}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: q.completed ? 'line-through' : 'none' }}>{q.title}</div>
                     {/* Pro: show reward badge. Non-pro: show study time if completed */}
                     {isProUser && el && (
@@ -2113,6 +2186,94 @@ function ProfilePage({ user, isProUser, quests, onBack, onUpdate, onLogout, onSh
 
         {/* Logout */}
         <button onClick={onLogout} style={{ width: '100%', padding: '13px', borderRadius: 14, border: `1.5px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>로그아웃</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   ONBOARDING MODAL
+══════════════════════════════════════════ */
+function OnboardingModal({ onDone }) {
+  const [step, setStep] = useState(0);
+  const steps = [
+    { icon: '👋', title: 'Quest Garden에 오신 걸 환영해요!', desc: '매일 할일을 퀘스트로 등록하고 완료하면서 나만의 공부 루틴을 만들어요.', color: PL, textColor: PD },
+    { icon: '⚔️', title: '퀘스트로 할일 관리', desc: '퀘스트 탭에서 + 버튼을 눌러 오늘 할일을 입력하세요. 자주 쓰는 루틴은 저장해두면 다음날 바로 불러올 수 있어요!', color: '#EDE9FE', textColor: PD },
+    { icon: '⏱', title: '타이머로 집중 공부', desc: '퀘스트를 탭하면 타이머가 시작돼요. 탭을 바꿔도 타이머는 계속 돌아가요. 공부 시간이 자동으로 기록됩니다.', color: GL, textColor: GD },
+    { icon: '📊', title: '홈에서 성장 확인', desc: '홈 화면에서 월별·연간 공부 그래프를 볼 수 있어요. 그래프 막대를 클릭하면 그날 완료한 할일 목록도 확인할 수 있어요!', color: '#FEF9C3', textColor: '#713F12' },
+    { icon: '🌿', title: '정원으로 성취감을 (Pro)', desc: 'Pro 가입 후 퀘스트를 완료하면 보상 요소를 획득해요. 14가지 테마 배경 위에 자유롭게 배치해 나만의 정원을 꾸며보세요.', color: PL, textColor: PD },
+  ];
+  const s = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 500, background: 'rgba(10,5,30,.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ background: 'white', borderRadius: 24, width: '100%', maxWidth: 400, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,.25)' }}>
+        {/* Color header */}
+        <div style={{ background: s.color, padding: '36px 24px 28px', textAlign: 'center' }}>
+          <div style={{ fontSize: 56, marginBottom: 12 }}>{s.icon}</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: s.textColor, lineHeight: 1.3 }}>{s.title}</div>
+        </div>
+        {/* Body */}
+        <div style={{ padding: '20px 24px 24px' }}>
+          <p style={{ fontSize: 14, color: '#374151', fontWeight: 600, lineHeight: 1.7, marginBottom: 24, textAlign: 'center' }}>{s.desc}</p>
+          {/* Dot indicators */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 20 }}>
+            {steps.map((_, i) => (
+              <div key={i} style={{ width: i === step ? 20 : 8, height: 8, borderRadius: 4, background: i === step ? P : '#E5E7EB', transition: 'all .3s' }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {step > 0 && <button onClick={() => setStep(s => s - 1)} style={{ flex: 1, padding: '12px', borderRadius: 12, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>이전</button>}
+            <button onClick={() => isLast ? onDone() : setStep(s => s + 1)}
+              style={{ flex: 2, padding: '12px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 14, fontWeight: 900, cursor: 'pointer' }}>
+              {isLast ? '시작하기 🚀' : '다음 →'}
+            </button>
+          </div>
+          {!isLast && <button onClick={onDone} style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: '#9CA3AF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>건너뛰기</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   NOTIFICATION SETTINGS PANEL
+══════════════════════════════════════════ */
+function NotifPanel({ notifEnabled, setNotifEnabled, notifTime, setNotifTime, onClose }) {
+  const reqPermission = async () => {
+    if (!('Notification' in window)) { alert('이 브라우저는 알림을 지원하지 않아요.'); return; }
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+      setNotifEnabled(true);
+      new Notification('🌱 Quest Garden', { body: '알림이 설정됐어요! 매일 공부 시간에 알려드릴게요.' });
+    } else {
+      alert('알림 권한이 거부됐어요.\n브라우저 설정에서 허용해주세요.');
+    }
+  };
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 400, background: 'rgba(10,5,30,.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'white', borderRadius: 20, padding: 24, width: '100%', maxWidth: 340, boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+        <div style={{ fontWeight: 900, fontSize: 17, color: '#1E1B4B', marginBottom: 6 }}>🔔 퀘스트 리마인더</div>
+        <p style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, lineHeight: 1.65, marginBottom: 20 }}>설정한 시간에 오늘 퀘스트 진행 상황을 알려드려요.</p>
+        {/* Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${BD}`, marginBottom: 16 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1E1B4B' }}>알림 켜기</span>
+          <button onClick={() => { if (!notifEnabled) reqPermission(); else setNotifEnabled(false); }}
+            style={{ width: 48, height: 26, borderRadius: 13, border: 'none', background: notifEnabled ? P : '#D1D5DB', cursor: 'pointer', position: 'relative', transition: 'background .2s' }}>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: notifEnabled ? 25 : 3, transition: 'left .2s', boxShadow: '0 1px 4px rgba(0,0,0,.2)' }} />
+          </button>
+        </div>
+        {notifEnabled && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 8 }}>알림 시간</div>
+            <input type="time" value={notifTime} onChange={e => setNotifTime(e.target.value)}
+              style={{ width: '100%', padding: '10px 14px', border: `2px solid ${P}`, borderRadius: 12, fontSize: 16, fontWeight: 700, color: PD, background: PL }} />
+          </div>
+        )}
+        <button onClick={onClose} style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>확인</button>
       </div>
     </div>
   );
@@ -2580,6 +2741,20 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('qg_owned') || '[]'); } catch { return []; }
   });
   const [silent, setSilent] = useState(true);
+  const [routines, setRoutines] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('qg_routines') || '[]'); } catch { return []; }
+  });
+  const [notifTime, setNotifTime] = useState(() => {
+    try { return localStorage.getItem('qg_notif_time') || '20:00'; } catch { return '20:00'; }
+  });
+  const [notifEnabled, setNotifEnabled] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('qg_notif_on') || 'false'); } catch { return false; }
+  });
+  const [onboarded, setOnboarded] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('qg_onboarded') || 'false'); } catch { return false; }
+  });
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
   const [createPage, setCreatePage] = useState(false);
   const [createQuest, setCreateQuest] = useState(false);
   const [activeGarden, setActiveGarden] = useState(null);
@@ -2611,6 +2786,43 @@ export default function App() {
     }
   }, [quests]);
   useEffect(() => { try { localStorage.setItem('qg_owned', JSON.stringify(owned)); } catch {} }, [owned]);
+  useEffect(() => { try { localStorage.setItem('qg_routines', JSON.stringify(routines)); } catch {} }, [routines]);
+  useEffect(() => { try { localStorage.setItem('qg_notif_time', notifTime); } catch {} }, [notifTime]);
+  useEffect(() => { try { localStorage.setItem('qg_notif_on', JSON.stringify(notifEnabled)); } catch {} }, [notifEnabled]);
+
+  // Show onboarding on first login
+  useEffect(() => {
+    if (user && !onboarded) setShowOnboarding(true);
+  }, [user]);
+
+  // Schedule daily notification
+  useEffect(() => {
+    if (!notifEnabled) return;
+    const schedule = () => {
+      const [h, m] = notifTime.split(':').map(Number);
+      const now = new Date();
+      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      const delay = target - now;
+      return setTimeout(() => {
+        const todayDone = quests.filter(q => q.date === today() && q.completed).length;
+        const todayTotal = quests.filter(q => q.date === today()).length;
+        if (Notification.permission === 'granted') {
+          new Notification('🌱 Quest Garden', {
+            body: todayTotal === 0
+              ? '오늘 퀘스트를 아직 시작하지 않았어요. 지금 시작해볼까요?'
+              : todayDone < todayTotal
+              ? `오늘 퀘스트 ${todayDone}/${todayTotal} 완료! 마저 끝내볼까요? 💪`
+              : '오늘 모든 퀘스트 완료! 대단해요 🏆',
+            icon: '🌱',
+          });
+        }
+        schedule(); // reschedule next day
+      }, delay);
+    };
+    const t = schedule();
+    return () => clearTimeout(t);
+  }, [notifEnabled, notifTime, quests]);
 
   const todayQ = quests.filter(q => q.date === today());
   const allDone = todayQ.length > 0 && todayQ.every(q => q.completed);
@@ -2672,6 +2884,9 @@ export default function App() {
           ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {/* Notification bell */}
+          <button onClick={() => setShowNotif(true)} title="리마인더 설정"
+            style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${notifEnabled ? P : BD}`, background: notifEnabled ? PL : 'white', color: notifEnabled ? PD : '#9CA3AF', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🔔</button>
           {isProUser
             ? <span style={{ fontSize: 9, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '2px 6px', borderRadius: 5 }}>PRO</span>
             : <button onClick={() => setShowProUpgrade(true)} style={{ fontSize: 10, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '4px 8px', borderRadius: 7, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>✨ PRO</button>
@@ -2722,6 +2937,8 @@ export default function App() {
         )}
         {createQuest && (
           <CreateQuestModal isProUser={isProUser}
+            routines={routines}
+            onSaveRoutine={r => setRoutines(prev => [...prev.filter(x => x.id !== r.id), r])}
             onConfirm={nQ => { setQuests(p => [...p.filter(q => !(q.date === today() && !q.completed)), ...nQ]); setCreateQuest(false); }}
             onCancel={() => setCreateQuest(false)} />
         )}
@@ -2743,6 +2960,23 @@ export default function App() {
             onBack={() => setActiveTimer(null)} />
         )}
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
+
+        {/* Onboarding */}
+        {showOnboarding && (
+          <OnboardingModal onDone={() => {
+            setShowOnboarding(false);
+            setOnboarded(true);
+            try { localStorage.setItem('qg_onboarded', 'true'); } catch {}
+          }} />
+        )}
+
+        {/* Notification settings */}
+        {showNotif && (
+          <NotifPanel
+            notifEnabled={notifEnabled} setNotifEnabled={setNotifEnabled}
+            notifTime={notifTime} setNotifTime={setNotifTime}
+            onClose={() => setShowNotif(false)} />
+        )}
 
         {/* Profile Page */}
         {showProfile && (
