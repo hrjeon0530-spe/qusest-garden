@@ -961,16 +961,7 @@ function AuthScreen({ onAuth, accounts, onRegister }) {
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
 
-  const providers = [
-    { label: 'N', bg: '#03C75A', color: 'white', domain: '@naver.com' },
-    { label: 'G', bg: 'white', color: '#555', border: '1px solid #ddd', domain: '@gmail.com' },
-    { label: 'K', bg: '#FEE500', color: '#3C1E1E', domain: '@kakao.com' },
-  ];
 
-  const fillProvider = (domain) => {
-    setErr('');
-    setEmail(e => e.includes('@') ? e.split('@')[0] + domain : e + domain);
-  };
 
   const submit = () => {
     setErr('');
@@ -1007,20 +998,7 @@ function AuthScreen({ onAuth, accounts, onRegister }) {
               <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: tab === t ? 'white' : 'transparent', color: tab === t ? P : '#9CA3AF', fontWeight: 800, fontSize: 14, boxShadow: tab === t ? '0 2px 8px rgba(124,58,237,.12)' : 'none', transition: 'all .2s' }}>{lbl}</button>
             ))}
           </div>
-          {/* Provider buttons */}
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>이메일 빠른 선택</p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {providers.map(pr => (
-                <button key={pr.label} onClick={() => fillProvider(pr.domain)}
-                  style={{ flex: 1, padding: '10px', borderRadius: 11, border: pr.border || 'none', background: pr.bg, color: pr.color, fontWeight: 900, fontSize: 16, transition: 'opacity .15s' }}
-                  onMouseDown={e => { e.currentTarget.style.opacity = '.8'; }}
-                  onMouseUp={e => { e.currentTarget.style.opacity = '1'; }}>
-                  {pr.label}
-                </button>
-              ))}
-            </div>
-          </div>
+
           {/* Email */}
           <div style={{ position: 'relative', marginBottom: 12 }}>
             <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>✉️</span>
@@ -1575,9 +1553,8 @@ function TimerScreen({ quest, silentMode, isProUser, onComplete, onBack }) {
           <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 310 }}>
             {phase === 'running'
               ? tb('⏸ 일시정지', () => { clearInterval(iv.current); setPhase('paused'); }, false)
-              : tb('▶ 재개', () => { setPhase('running'); startCD(rem); }, false)
+              : tb('▶ 재개', () => { setPhase('running'); startCD(rem); }, true)
             }
-            {tb('끝내기', () => { clearInterval(iv.current); setPhase('done'); setRem(0); }, true)}
           </div>
         </>
       )}
@@ -2050,8 +2027,9 @@ function QuestScreen({ quests, silent, isProUser, onToggleSilent, onOpenTimer, o
 /* ══════════════════════════════════════════
    PROFILE PAGE
 ══════════════════════════════════════════ */
-function ProfilePage({ user, isProUser, quests, onBack, onUpdate, onLogout, onShowProUpgrade }) {
+function ProfilePage({ user, isProUser, quests, onBack, onUpdate, onLogout, onShowProUpgrade, onDeleteAccount }) {
   const [editNick, setEditNick] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [nick, setNick] = useState(user.nickname || user.name);
   const [changePw, setChangePw] = useState(false);
   const [oldPw, setOldPw] = useState('');
@@ -2185,7 +2163,23 @@ function ProfilePage({ user, isProUser, quests, onBack, onUpdate, onLogout, onSh
         )}
 
         {/* Logout */}
-        <button onClick={onLogout} style={{ width: '100%', padding: '13px', borderRadius: 14, border: `1.5px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>로그아웃</button>
+        <button onClick={onLogout} style={{ width: '100%', padding: '13px', borderRadius: 14, border: `1.5px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 10 }}>로그아웃</button>
+        {/* Account delete */}
+        <button onClick={() => setShowDeleteConfirm(true)} style={{ width: '100%', padding: '13px', borderRadius: 14, border: `1.5px solid #FECACA`, background: 'white', color: '#9CA3AF', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>회원 탈퇴</button>
+        {showDeleteConfirm && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 500, background: 'rgba(10,5,30,.62)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <div style={{ background: 'white', borderRadius: 20, padding: 24, width: '100%', maxWidth: 320 }}>
+              <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 12 }}>⚠️</div>
+              <div style={{ fontWeight: 900, fontSize: 16, color: '#1E1B4B', textAlign: 'center', marginBottom: 8 }}>정말 탈퇴하시겠어요?</div>
+              <p style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, lineHeight: 1.7, textAlign: 'center', marginBottom: 6 }}>모든 퀘스트 기록, 정원, 통계 데이터가 영구 삭제됩니다.</p>
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 12px', marginBottom: 18, fontSize: 12, color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>이 작업은 되돌릴 수 없어요.</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>취소</button>
+                <button onClick={() => { onDeleteAccount(); }} style={{ flex: 1, padding: 12, borderRadius: 12, border: 'none', background: '#EF4444', color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>탈퇴하기</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2755,6 +2749,10 @@ export default function App() {
   });
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
+  const [showBanner, setShowBanner] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('qg_banner') || 'true'); } catch { return true; }
+  });
+  const [demoMode, setDemoMode] = useState(false); // Pro demo for testing
   const [createPage, setCreatePage] = useState(false);
   const [createQuest, setCreateQuest] = useState(false);
   const [activeGarden, setActiveGarden] = useState(null);
@@ -2887,6 +2885,11 @@ export default function App() {
           {/* Notification bell */}
           <button onClick={() => setShowNotif(true)} title="리마인더 설정"
             style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${notifEnabled ? P : BD}`, background: notifEnabled ? PL : 'white', color: notifEnabled ? PD : '#9CA3AF', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🔔</button>
+          {/* Test / Demo button */}
+          {!isProUser && (
+            <button onClick={() => { setDemoMode(true); setIsProUser(true); }} title="Pro 기능 테스트"
+              style={{ width: 30, height: 30, borderRadius: 9, border: '1.5px solid #FDE047', background: '#FEF9C3', color: '#713F12', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🧪</button>
+          )}
           {isProUser
             ? <span style={{ fontSize: 9, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '2px 6px', borderRadius: 5 }}>PRO</span>
             : <button onClick={() => setShowProUpgrade(true)} style={{ fontSize: 10, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '4px 8px', borderRadius: 7, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>✨ PRO</button>
@@ -2895,7 +2898,27 @@ export default function App() {
         </div>
       </div>
 
-      {/* Body */}
+      {/* Promo Banner */}
+      {showBanner && (
+        <div style={{ flexShrink: 0, background: `linear-gradient(135deg,${P},${G})`, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>✨</span>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'white' }}>Pro: AI 정원 기획 + 테마 14종 + 퀘스트 보상!</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', marginLeft: 8, fontWeight: 600 }}>월 ₩9,900</span>
+          </div>
+          {!isProUser && <button onClick={() => setShowProUpgrade(true)} style={{ padding: '5px 13px', borderRadius: 20, border: '1.5px solid white', background: 'rgba(255,255,255,.18)', color: 'white', fontSize: 11, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>시작하기</button>}
+          <button onClick={() => { setShowBanner(false); try { localStorage.setItem('qg_banner','false'); } catch {} }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.7)', fontSize: 18, cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>✕</button>
+        </div>
+      )}
+      {demoMode && (
+        <div style={{ flexShrink: 0, background: '#FEF9C3', borderBottom: '1.5px solid #FDE047', padding: '7px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13 }}>🧪</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#713F12', flex: 1 }}>Pro 테스트 모드 — 실제 결제 없이 Pro 기능 체험 중</span>
+          <button onClick={() => { setDemoMode(false); setIsProUser(false); }} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #FDE047', background: 'white', color: '#713F12', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>종료</button>
+        </div>
+      )}
+
+      {/* Main body */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         {tab === 'home' && <StatsScreen quests={quests} />}
         {tab === 'quest' && (
@@ -2987,7 +3010,14 @@ export default function App() {
             onBack={() => setShowProfile(false)}
             onUpdate={updateUserProfile}
             onLogout={() => { setUser(null); setShowProfile(false); }}
-            onShowProUpgrade={() => { setShowProfile(false); setShowProUpgrade(true); }} />
+            onShowProUpgrade={() => { setShowProfile(false); setShowProUpgrade(true); }}
+            onDeleteAccount={() => {
+              try {
+                ['qg_accounts','qg_user','qg_pro','qg_pages','qg_quests','qg_owned','qg_routines','qg_notif_on','qg_notif_time','qg_onboarded'].forEach(k => localStorage.removeItem(k));
+              } catch {}
+              setUser(null); setAccounts([]); setQuests([]); setPages([]); setOwned([]); setIsProUser(false);
+              setShowProfile(false);
+            }} />
         )}
 
         {/* Pro Upgrade Overlay */}
