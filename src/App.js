@@ -1563,65 +1563,111 @@ function TimerScreen({ quest, silentMode, isProUser, onComplete, onBack }) {
 ══════════════════════════════════════════ */
 function StatsScreen({ quests }) {
   const [view, setView] = useState('month');
+  const [selectedDay, setSelectedDay] = useState(null);   // {label, quests[]}
+  const [browseYr, setBrowseYr] = useState(new Date().getFullYear());
+  const [browseMo, setBrowseMo] = useState(new Date().getMonth());
 
   const now = new Date();
-  const yr = now.getFullYear();
-  const mo = now.getMonth();
+  const yr = browseYr;
+  const mo = browseMo;
   const daysInMonth = new Date(yr, mo + 1, 0).getDate();
   const moNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}시간 ${m%60}분` : `${m}분`;
 
-  // Parse quest date string to Date — robust for "Mon Apr 21 2026" and ISO formats
   const parseDate = d => {
     if (!d) return new Date(0);
     const p = new Date(d);
     return isNaN(p.getTime()) ? new Date(0) : p;
   };
 
-  // Monthly: quests completed per day this month
-  const moCompleted = quests.filter(q => {
-    const d = parseDate(q.date);
-    return q.completed && d.getFullYear() === yr && d.getMonth() === mo;
-  });
-  const dayCounts = {};
-  moCompleted.forEach(q => { const day = parseDate(q.date).getDate(); dayCounts[day] = (dayCounts[day]||0)+1; });
-  const dayMins = {};
-  moCompleted.forEach(q => { const day = parseDate(q.date).getDate(); dayMins[day] = (dayMins[day]||0)+(q.studyMinutes||0); });
+  // All completed quests (no pruning — permanent storage)
+  const allCompleted = quests.filter(q => q.completed);
 
-  // Yearly: completed per month this year
-  const yrCompleted = quests.filter(q => q.completed && parseDate(q.date).getFullYear() === yr);
-  const moCounts = Array(12).fill(0);
-  const moMins = Array(12).fill(0);
-  yrCompleted.forEach(q => { const m = parseDate(q.date).getMonth(); moCounts[m]++; moMins[m]+=(q.studyMinutes||0); });
+  // Monthly
+  const moCompleted = allCompleted.filter(q => {
+    const d = parseDate(q.date);
+    return d.getFullYear() === yr && d.getMonth() === mo;
+  });
+  const dayCounts = {}, dayMins = {}, dayQuests = {};
+  moCompleted.forEach(q => {
+    const day = parseDate(q.date).getDate();
+    dayCounts[day] = (dayCounts[day] || 0) + 1;
+    dayMins[day] = (dayMins[day] || 0) + (q.studyMinutes || 0);
+    if (!dayQuests[day]) dayQuests[day] = [];
+    dayQuests[day].push(q);
+  });
+
+  // Yearly
+  const yrCompleted = allCompleted.filter(q => parseDate(q.date).getFullYear() === yr);
+  const moCounts = Array(12).fill(0), moMins = Array(12).fill(0), moQuestMap = {};
+  yrCompleted.forEach(q => {
+    const m = parseDate(q.date).getMonth();
+    moCounts[m]++; moMins[m] += (q.studyMinutes || 0);
+    if (!moQuestMap[m]) moQuestMap[m] = [];
+    moQuestMap[m].push(q);
+  });
 
   const totalMoQ = moCompleted.length;
-  const totalMoMin = moCompleted.reduce((s,q)=>s+(q.studyMinutes||0),0);
+  const totalMoMin = moCompleted.reduce((s, q) => s + (q.studyMinutes || 0), 0);
   const totalYrQ = yrCompleted.length;
-  const totalYrMin = yrCompleted.reduce((s,q)=>s+(q.studyMinutes||0),0);
-  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}시간 ${m%60}분` : `${m}분`;
+  const totalYrMin = yrCompleted.reduce((s, q) => s + (q.studyMinutes || 0), 0);
 
-  // SVG Bar Chart helper
-  function BarChart({ data, labels, color, height=110 }) {
+  // Clickable BarChart
+  function BarChart({ data, labels, onBarClick, height = 110 }) {
     const max = Math.max(...data, 1);
     const n = data.length;
-    const w = 560, pad = 4;
-    const bw = Math.max(6, (w - pad*(n+1)) / n);
+    const w = 560, pad = 3;
+    const bw = Math.max(5, (w - pad * (n + 1)) / n);
+    const isNowIdx = view === 'month'
+      ? (yr === now.getFullYear() && mo === now.getMonth() ? now.getDate() - 1 : -1)
+      : (yr === now.getFullYear() ? now.getMonth() : -1);
     return (
-      <svg viewBox={`0 0 ${w} ${height+24}`} width="100%" style={{display:'block'}}>
+      <svg viewBox={`0 0 ${w} ${height + 28}`} width="100%" style={{ display: 'block', cursor: 'pointer' }}>
         {data.map((v, i) => {
-          const bh = v > 0 ? Math.max(6, (v/max)*(height-10)) : 2;
-          const x = pad + i*(bw+pad);
+          const bh = v > 0 ? Math.max(8, (v / max) * (height - 10)) : 3;
+          const x = pad + i * (bw + pad);
           const y = height - bh;
-          const isNow = i === (view==='month' ? now.getDate()-1 : mo);
+          const isNow = i === isNowIdx;
+          const hasSel = selectedDay && (
+            view === 'month'
+              ? selectedDay.key === `d-${yr}-${mo}-${i + 1}`
+              : selectedDay.key === `m-${yr}-${i}`
+          );
           return (
-            <g key={i}>
+            <g key={i} style={{ cursor: v > 0 ? 'pointer' : 'default' }}
+              onClick={() => {
+                if (v === 0) return;
+                if (view === 'month') {
+                  const day = i + 1;
+                  setSelectedDay({
+                    key: `d-${yr}-${mo}-${day}`,
+                    label: `${yr}년 ${moNames[mo]} ${day}일`,
+                    quests: dayQuests[day] || [],
+                    minutes: dayMins[day] || 0,
+                  });
+                } else {
+                  setSelectedDay({
+                    key: `m-${yr}-${i}`,
+                    label: `${yr}년 ${moNames[i]}`,
+                    quests: moQuestMap[i] || [],
+                    minutes: moMins[i] || 0,
+                  });
+                }
+              }}>
+              {/* hover bg */}
+              {v > 0 && <rect x={x - 1} y={0} width={bw + 2} height={height + 24} rx="4" fill="transparent" onMouseEnter={e => e.currentTarget.setAttribute('fill', 'rgba(124,58,237,0.05)')} onMouseLeave={e => e.currentTarget.setAttribute('fill', 'transparent')} />}
               <rect x={x} y={y} width={bw} height={bh} rx="3"
-                fill={v>0 ? (isNow ? P : PL) : '#E5E7EB'}
-                stroke={isNow ? P : 'none'} strokeWidth="1.5"/>
-              {v > 0 && bh > 16 && (
-                <text x={x+bw/2} y={y+bh/2+4} textAnchor="middle" fontSize="8" fill={isNow?PD:'#9CA3AF'} fontFamily="Nunito,sans-serif">{v}</text>
+                fill={hasSel ? P : v > 0 ? (isNow ? P : PL) : '#F3F4F6'}
+                stroke={hasSel ? PD : isNow && !hasSel ? P : 'none'}
+                strokeWidth="1.5" />
+              {v > 0 && bh > 18 && (
+                <text x={x + bw / 2} y={y + bh / 2 + 4} textAnchor="middle" fontSize="8"
+                  fill={hasSel || isNow ? 'white' : '#9CA3AF'} fontFamily="Nunito,sans-serif" fontWeight="800">{v}</text>
               )}
               {labels && labels[i] && (
-                <text x={x+bw/2} y={height+16} textAnchor="middle" fontSize="9" fill={isNow?P:'#9CA3AF'} fontFamily="Nunito,sans-serif" fontWeight={isNow?"800":"400"}>{labels[i]}</text>
+                <text x={x + bw / 2} y={height + 18} textAnchor="middle" fontSize="8.5"
+                  fill={hasSel ? P : isNow ? P : '#9CA3AF'} fontFamily="Nunito,sans-serif"
+                  fontWeight={hasSel || isNow ? '800' : '400'}>{labels[i]}</text>
               )}
             </g>
           );
@@ -1630,71 +1676,120 @@ function StatsScreen({ quests }) {
     );
   }
 
-  const statCard = (icon, label, value, sub) => (
-    <div style={{flex:1,background:'white',borderRadius:16,padding:'14px 12px',border:`1.5px solid ${BD}`,textAlign:'center'}}>
-      <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
-      <div style={{fontSize:18,fontWeight:900,color:P,marginBottom:2}}>{value}</div>
-      <div style={{fontSize:11,fontWeight:700,color:'#6B7280'}}>{label}</div>
-      {sub && <div style={{fontSize:10,color:'#9CA3AF',marginTop:2,fontWeight:600}}>{sub}</div>}
+  const statCard = (icon, label, value) => (
+    <div style={{ flex: 1, background: 'white', borderRadius: 16, padding: '14px 12px', border: `1.5px solid ${BD}`, textAlign: 'center' }}>
+      <div style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: P, marginBottom: 2 }}>{value}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280' }}>{label}</div>
     </div>
   );
 
+  // Month navigation
+  const prevMo = () => {
+    if (mo === 0) { setBrowseYr(y => y - 1); setBrowseMo(11); }
+    else setBrowseMo(m => m - 1);
+    setSelectedDay(null);
+  };
+  const nextMo = () => {
+    const maxMo = yr === now.getFullYear() ? now.getMonth() : 11;
+    if (mo >= maxMo && yr >= now.getFullYear()) return;
+    if (mo === 11) { setBrowseYr(y => y + 1); setBrowseMo(0); }
+    else setBrowseMo(m => m + 1);
+    setSelectedDay(null);
+  };
+  const prevYr = () => { setBrowseYr(y => y - 1); setSelectedDay(null); };
+  const nextYr = () => { if (yr < now.getFullYear()) { setBrowseYr(y => y + 1); setSelectedDay(null); } };
+  const canNextMo = !(mo >= now.getMonth() && yr >= now.getFullYear());
+  const canNextYr = yr < now.getFullYear();
+
   return (
-    <div style={{flex:1,overflowY:'auto',padding:'18px 18px 90px'}}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
       {/* View toggle */}
-      <div style={{display:'flex',gap:6,marginBottom:20,background:PP,borderRadius:12,padding:3}}>
-        {[['month','이번 달'],['year','올해']].map(([v,l])=>(
-          <button key={v} onClick={()=>setView(v)} style={{flex:1,padding:'8px',borderRadius:9,border:'none',background:view===v?'white':'transparent',color:view===v?P:'#9CA3AF',fontWeight:800,fontSize:13,boxShadow:view===v?'0 2px 6px rgba(124,58,237,.1)':'none',transition:'all .2s'}}>{l}</button>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 18, background: PP, borderRadius: 12, padding: 3 }}>
+        {[['month', '월간'], ['year', '연간']].map(([v, l]) => (
+          <button key={v} onClick={() => { setView(v); setSelectedDay(null); }}
+            style={{ flex: 1, padding: '8px', borderRadius: 9, border: 'none', background: view === v ? 'white' : 'transparent', color: view === v ? P : '#9CA3AF', fontWeight: 800, fontSize: 13, boxShadow: view === v ? '0 2px 6px rgba(124,58,237,.1)' : 'none', transition: 'all .2s', cursor: 'pointer' }}>{l}</button>
         ))}
       </div>
 
+      {/* Period navigator */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 16 }}>
+        <button onClick={view === 'month' ? prevMo : prevYr}
+          style={{ width: 32, height: 32, borderRadius: '50%', border: `1.5px solid ${BD}`, background: 'white', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}>‹</button>
+        <span style={{ fontWeight: 900, fontSize: 15, color: '#1E1B4B', minWidth: 110, textAlign: 'center' }}>
+          {view === 'month' ? `${yr}년 ${moNames[mo]}` : `${yr}년`}
+        </span>
+        <button onClick={view === 'month' ? nextMo : nextYr}
+          style={{ width: 32, height: 32, borderRadius: '50%', border: `1.5px solid ${BD}`, background: 'white', fontSize: 16, cursor: (view === 'month' ? canNextMo : canNextYr) ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', color: (view === 'month' ? canNextMo : canNextYr) ? '#6B7280' : '#D1D5DB' }}>›</button>
+      </div>
+
       {/* Summary cards */}
-      <div style={{display:'flex',gap:10,marginBottom:20}}>
-        {view==='month'
-          ? <>
-              {statCard('✅','퀘스트 완료',totalMoQ+'개')}
-              {statCard('⏱','총 공부 시간',fmtMin(totalMoMin))}
-              {statCard('📅','완료한 날',Object.keys(dayCounts).length+'일')}
-            </>
-          : <>
-              {statCard('✅','올해 완료',totalYrQ+'개')}
-              {statCard('⏱','올해 공부',fmtMin(totalYrMin))}
-              {statCard('🔥','활동 월수',moCounts.filter(c=>c>0).length+'개월')}
-            </>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+        {view === 'month'
+          ? <>{statCard('✅', '퀘스트 완료', totalMoQ + '개')}{statCard('⏱', '총 공부 시간', fmtMin(totalMoMin))}{statCard('📅', '완료한 날', Object.keys(dayCounts).length + '일')}</>
+          : <>{statCard('✅', '올해 완료', totalYrQ + '개')}{statCard('⏱', '올해 공부', fmtMin(totalYrMin))}{statCard('🔥', '활동 월수', moCounts.filter(c => c > 0).length + '개월')}</>
         }
       </div>
 
-      {/* Chart */}
-      <div style={{background:'white',borderRadius:18,padding:'16px 14px',border:`1.5px solid ${BD}`,marginBottom:16}}>
-        <div style={{fontSize:13,fontWeight:800,color:'#1E1B4B',marginBottom:12}}>
-          {view==='month' ? `📊 ${yr}년 ${moNames[mo]} 퀘스트 완료` : `📊 ${yr}년 월별 퀘스트 완료`}
+      {/* Quest chart */}
+      <div style={{ background: 'white', borderRadius: 18, padding: '16px 14px', border: `1.5px solid ${BD}`, marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#1E1B4B', marginBottom: 4 }}>
+          📊 {view === 'month' ? `${yr}년 ${moNames[mo]} 퀘스트 완료` : `${yr}년 월별 퀘스트 완료`}
         </div>
-        {view==='month'
-          ? <BarChart
-              data={Array.from({length:daysInMonth},(_,i)=>dayCounts[i+1]||0)}
-              labels={Array.from({length:daysInMonth},(_,i)=>i+1)}
-              color={P}/>
-          : <BarChart data={moCounts} labels={moNames} color={P}/>
+        <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginBottom: 10 }}>막대를 클릭하면 완료한 할일 목록을 볼 수 있어요</div>
+        {view === 'month'
+          ? <BarChart data={Array.from({ length: daysInMonth }, (_, i) => dayCounts[i + 1] || 0)} labels={Array.from({ length: daysInMonth }, (_, i) => i + 1)} />
+          : <BarChart data={moCounts} labels={moNames} />
         }
       </div>
 
       {/* Study time chart */}
-      <div style={{background:'white',borderRadius:18,padding:'16px 14px',border:`1.5px solid ${BD}`,marginBottom:16}}>
-        <div style={{fontSize:13,fontWeight:800,color:'#1E1B4B',marginBottom:12}}>
-          {view==='month' ? '⏱ 일별 공부 시간 (분)' : '⏱ 월별 공부 시간 (분)'}
+      <div style={{ background: 'white', borderRadius: 18, padding: '16px 14px', border: `1.5px solid ${BD}`, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#1E1B4B', marginBottom: 10 }}>
+          ⏱ {view === 'month' ? '일별 공부 시간 (분)' : '월별 공부 시간 (분)'}
         </div>
-        {view==='month'
-          ? <BarChart
-              data={Array.from({length:daysInMonth},(_,i)=>dayMins[i+1]||0)}
-              labels={Array.from({length:daysInMonth},(_,i)=>i+1)}/>
-          : <BarChart data={moMins} labels={moNames}/>
+        {view === 'month'
+          ? <BarChart data={Array.from({ length: daysInMonth }, (_, i) => dayMins[i + 1] || 0)} labels={Array.from({ length: daysInMonth }, (_, i) => i + 1)} />
+          : <BarChart data={moMins} labels={moNames} />
         }
       </div>
 
-      {/* Empty state */}
-      {totalMoQ===0 && view==='month' && (
-        <div style={{textAlign:'center',padding:'24px',color:'#9CA3AF',fontSize:13,fontWeight:600}}>
-          아직 완료한 퀘스트가 없어요.<br/>퀘스트 탭에서 오늘의 할일을 시작해보세요! ⚔️
+      {/* Clicked day detail panel */}
+      {selectedDay && (
+        <div style={{ background: 'white', borderRadius: 18, border: `2px solid ${P}`, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ background: `linear-gradient(135deg,${PL},${GL})`, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 14, color: PD }}>{selectedDay.label}</div>
+              <div style={{ fontSize: 12, color: PM, fontWeight: 600, marginTop: 2 }}>
+                완료 {selectedDay.quests.length}개 · {fmtMin(selectedDay.minutes)}
+              </div>
+            </div>
+            <button onClick={() => setSelectedDay(null)}
+              style={{ background: 'rgba(124,58,237,.15)', border: 'none', borderRadius: 8, width: 28, height: 28, fontSize: 14, color: PD, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          </div>
+          <div style={{ padding: '10px 16px 14px' }}>
+            {selectedDay.quests.length === 0
+              ? <div style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 600, textAlign: 'center', padding: '12px 0' }}>완료된 퀘스트가 없어요</div>
+              : selectedDay.quests.map((q, i) => (
+                <div key={q.id || i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < selectedDay.quests.length - 1 ? `1px solid ${BD}` : 'none' }}>
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: G, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12, flexShrink: 0 }}>✓</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1E1B4B' }}>{q.title}</div>
+                    {q.studyMinutes > 0 && <div style={{ fontSize: 11, color: GD, fontWeight: 600, marginTop: 1 }}>⏱ {fmtMin(q.studyMinutes)}</div>}
+                  </div>
+                  {q.rewardId && <span style={{ fontSize: 18 }}>{(() => { const el = (() => { try { return Object.values(typeof RCATS !== 'undefined' ? RCATS : {}).flatMap(v => v.items).find(it => it.id === q.rewardId); } catch { return null; } })(); return el ? el.e : ''; })()}</span>}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      )}
+
+      {totalMoQ === 0 && view === 'month' && !selectedDay && (
+        <div style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontSize: 13, fontWeight: 600 }}>
+          {yr === now.getFullYear() && mo === now.getMonth()
+            ? '아직 완료한 퀘스트가 없어요.\n퀘스트 탭에서 오늘의 할일을 시작해보세요! ⚔️'
+            : `${yr}년 ${moNames[mo]}에는 완료된 퀘스트가 없어요.`}
         </div>
       )}
     </div>
@@ -2504,14 +2599,16 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('qg_pages', JSON.stringify(pages)); } catch {} }, [pages]);
   useEffect(() => {
     try {
-      // Keep all quests (completed history preserved), prune only beyond 365 days
-      const cutoff = Date.now() - 365 * 24 * 60 * 60 * 1000;
-      const toSave = quests.filter(q => {
-        const d = new Date(q.date);
-        return isNaN(d.getTime()) || d.getTime() > cutoff;
-      });
-      localStorage.setItem('qg_quests', JSON.stringify(toSave));
-    } catch {}
+      // Save all quests permanently — no pruning
+      localStorage.setItem('qg_quests', JSON.stringify(quests));
+    } catch (e) {
+      // If storage is full, keep only completed ones (they're the history)
+      try {
+        const onlyCompleted = quests.filter(q => q.completed);
+        const todayPending = quests.filter(q => !q.completed && q.date === today());
+        localStorage.setItem('qg_quests', JSON.stringify([...onlyCompleted, ...todayPending]));
+      } catch {}
+    }
   }, [quests]);
   useEffect(() => { try { localStorage.setItem('qg_owned', JSON.stringify(owned)); } catch {} }, [owned]);
 
