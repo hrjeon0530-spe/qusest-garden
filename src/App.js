@@ -1287,13 +1287,16 @@ function EditRewardModal({ quest, onSave, onCancel }) {
 }
 
 /* ── GARDEN DETAIL ── */
-function GardenDetail({ page, owned, customCategories, onClose, onUpdate }) {
+function GardenDetail({ page, owned, customCategories, onClose, onUpdate, onDelete }) {
   const [edit, setEdit] = useState(false);
   const [els, setEls] = useState(page.elements || []);
   const [selId, setSelId] = useState(null);
   const [catFil, setCatFil] = useState(null);
   const [isDark, setIsDark] = useState(page.isDark || false);
-  const [ctxMenu, setCtxMenu] = useState(null); // { id, x, y }
+  const [ctxMenu, setCtxMenu] = useState(null);
+  const [sizePickerEl, setSizePickerEl] = useState(null); // element waiting to be placed
+  const [pickerSize, setPickerSize] = useState(42);        // chosen size before placing
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const cvRef = useRef(null);
   const drg = useRef(null);
   const th = THEMES[page.theme] || THEMES.nature;
@@ -1303,11 +1306,19 @@ function GardenDetail({ page, owned, customCategories, onClose, onUpdate }) {
   };
 
   const addEl = (el) => {
+    // Show size picker instead of placing immediately
+    setPickerSize(42);
+    setSizePickerEl(el);
+  };
+
+  const confirmAddEl = () => {
     const c = cvRef.current, w = c ? c.offsetWidth : 900, h = c ? c.offsetHeight : 500;
-    const ne = { id: uid(), emoji: el.e || el.emoji, name: el.n || el.name, catKey: el.catKey, x: 20 + Math.random() * (w - 100), y: 20 + Math.random() * (h - 100), size: 42 };
+    const el = sizePickerEl;
+    const ne = { id: uid(), emoji: el.e || el.emoji, name: el.n || el.name, catKey: el.catKey, x: 20 + Math.random() * (w - 120), y: 20 + Math.random() * (h - 120), size: pickerSize };
     const u = [...els, ne];
     setEls(u);
     save(u);
+    setSizePickerEl(null);
   };
 
   const onMD = (e, id) => {
@@ -1348,10 +1359,11 @@ function GardenDetail({ page, owned, customCategories, onClose, onUpdate }) {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: 54, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', background: 'rgba(0,0,0,.28)', backdropFilter: 'blur(12px)', color: 'white', gap: 8 }}>
-        <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 11, background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>←</button>
+        <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 11, background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>←</button>
         <span style={{ fontWeight: 800, fontSize: 15, flex: 1, textAlign: 'center' }}>{th.e} {page.title}</span>
-        {th.hasDN && <button onClick={toggleDark} style={{ padding: '5px 11px', borderRadius: 9, background: 'rgba(255,255,255,.18)', border: 'none', color: 'white', fontSize: 12, fontWeight: 700 }}>{isDark ? '🌙 밤' : '☀️ 낮'}</button>}
-        <button onClick={() => { setEdit(!edit); setSelId(null); }} style={{ padding: '6px 13px', borderRadius: 10, background: edit ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.2)', border: 'none', color: edit ? PD : 'white', fontWeight: 700, fontSize: 13 }}>{edit ? '완료' : '✏️ 수정'}</button>
+        {th.hasDN && <button onClick={toggleDark} style={{ padding: '5px 11px', borderRadius: 9, background: 'rgba(255,255,255,.18)', border: 'none', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{isDark ? '🌙 밤' : '☀️ 낮'}</button>}
+        <button onClick={() => { setEdit(!edit); setSelId(null); }} style={{ padding: '6px 13px', borderRadius: 10, background: edit ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.2)', border: 'none', color: edit ? PD : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{edit ? '완료' : '✏️ 수정'}</button>
+        <button onClick={() => setShowDeleteConfirm(true)} style={{ width: 34, height: 34, borderRadius: 11, background: 'rgba(239,68,68,.25)', border: '1px solid rgba(239,68,68,.4)', color: 'white', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="정원 삭제">🗑️</button>
       </div>
       <div ref={cvRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none' }}
         onMouseMove={onMM} onMouseUp={onMU} onTouchMove={onTM} onTouchEnd={onMU}
@@ -1432,6 +1444,75 @@ function GardenDetail({ page, owned, customCategories, onClose, onUpdate }) {
                   <span style={{ fontSize: 10, color: 'rgba(255,255,255,.65)', fontWeight: 700 }}>{el.name}</span>
                 </button>
               ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Size Picker Overlay ── */}
+      {sizePickerEl && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(10,5,30,.65)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <div style={{ width: '100%', maxWidth: 480, background: 'white', borderRadius: '24px 24px 0 0', padding: '24px 24px 40px' }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: '#E5E7EB', margin: '0 auto 20px' }} />
+            <div style={{ fontWeight: 900, fontSize: 17, color: '#1E1B4B', marginBottom: 4, textAlign: 'center' }}>크기 조정</div>
+            <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, textAlign: 'center', marginBottom: 20 }}>배치할 크기를 선택하세요</div>
+
+            {/* Preview at chosen size */}
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 96, marginBottom: 18 }}>
+              <span style={{ fontSize: pickerSize, lineHeight: 1, transition: 'font-size .18s' }}>
+                {sizePickerEl.e || sizePickerEl.emoji}
+              </span>
+            </div>
+
+            {/* Preset buttons S / M / L / XL */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 18, justifyContent: 'center' }}>
+              {[{ label: 'S', size: 24 }, { label: 'M', size: 42 }, { label: 'L', size: 64 }, { label: 'XL', size: 90 }].map(({ label, size }) => (
+                <button key={label} onClick={() => setPickerSize(size)}
+                  style={{ width: 60, height: 60, borderRadius: 16, border: `2px solid ${pickerSize === size ? P : BD}`, background: pickerSize === size ? PL : 'white', color: pickerSize === size ? PD : '#6B7280', fontWeight: 900, fontSize: 15, cursor: 'pointer', transition: 'all .15s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                  {label}
+                  <span style={{ fontSize: 9, fontWeight: 600, color: pickerSize === size ? P : '#9CA3AF' }}>{size}px</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Slider */}
+            <div style={{ marginBottom: 24, padding: '0 4px' }}>
+              <input type="range" min="18" max="120" value={pickerSize}
+                onChange={e => setPickerSize(Number(e.target.value))}
+                style={{ width: '100%', accentColor: P, cursor: 'pointer' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 4 }}>
+                <span>작게</span>
+                <span style={{ fontWeight: 900, color: PD }}>{pickerSize}px</span>
+                <span>크게</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setSizePickerEl(null)}
+                style={{ flex: 1, padding: '13px', borderRadius: 14, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>취소</button>
+              <button onClick={confirmAddEl}
+                style={{ flex: 2, padding: '13px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 14, fontWeight: 900, cursor: 'pointer' }}>
+                ✅ 이 크기로 배치하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Garden Confirm ── */}
+      {showDeleteConfirm && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(10,5,30,.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'white', borderRadius: 22, padding: 28, width: '100%', maxWidth: 340, boxShadow: '0 8px 40px rgba(0,0,0,.25)' }}>
+            <div style={{ fontSize: 48, textAlign: 'center', marginBottom: 14 }}>🗑️</div>
+            <div style={{ fontWeight: 900, fontSize: 18, color: '#1E1B4B', textAlign: 'center', marginBottom: 10 }}>정원을 삭제할까요?</div>
+            <p style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, lineHeight: 1.75, textAlign: 'center', marginBottom: 10 }}>
+              <strong style={{ color: '#1E1B4B' }}>{th.e} {page.title}</strong> 정원과<br/>배치된 모든 요소가 삭제됩니다.
+            </p>
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 14px', marginBottom: 22, fontSize: 12, color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>이 작업은 되돌릴 수 없어요.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: 13, borderRadius: 12, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>취소</button>
+              <button onClick={() => { setShowDeleteConfirm(false); onDelete(page.id); onClose(); }}
+                style={{ flex: 1, padding: 13, borderRadius: 12, border: 'none', background: '#EF4444', color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>삭제하기</button>
+            </div>
           </div>
         </div>
       )}
@@ -2975,7 +3056,8 @@ export default function App() {
         {pageObj && (
           <GardenDetail page={pageObj} owned={owned} customCategories={customCategories}
             onClose={() => setActiveGarden(null)}
-            onUpdate={u => setPages(p => p.map(x => x.id === u.id ? u : x))} />
+            onUpdate={u => setPages(p => p.map(x => x.id === u.id ? u : x))}
+            onDelete={id => { setPages(p => p.filter(x => x.id !== id)); setActiveGarden(null); }} />
         )}
         {activeTimer && (
           <TimerScreen quest={activeTimer} silentMode={silent} isProUser={isProUser}
