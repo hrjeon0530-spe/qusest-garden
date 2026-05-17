@@ -5,6 +5,39 @@ const P = '#7C3AED', PD = '#5B21B6', PM = '#6D28D9', PL = '#EDE9FE', PP = '#F5F3
 const G = '#10B981', GD = '#059669', GL = '#D1FAE5';
 const BD = 'rgba(124,58,237,0.13)';
 
+/* ── ANALYTICS ── */
+const GA_ID = 'G-XXXXXXXXXX'; // ← 여기에 본인 GA4 측정 ID 입력
+
+/* ── Supabase 연결 ── */
+const SB_URL = 'https://gzusdoyfjjgarjxescog.supabase.co';
+const SB_KEY = 'sb_publishable_3ZsSoIoB-PZeLYGAZNWGrw_cGCXpkOt';
+const sbFetch = (path, options = {}) => fetch(SB_URL + path, {
+  ...options,
+  headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', ...(options.headers || {}) }
+});
+
+const track = (eventName, params = {}) => {
+  try {
+    // GA4 전송
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', eventName, { ...params, app: 'quest_garden' });
+    }
+    // 로컬 로그 저장 (관리자 대시보드 보조용)
+    const logs = JSON.parse(localStorage.getItem('qg_event_logs') || '[]');
+    logs.push({ event: eventName, params, time: Date.now() });
+    if (logs.length > 500) logs.splice(0, logs.length - 500);
+    localStorage.setItem('qg_event_logs', JSON.stringify(logs));
+    // Supabase 실시간 전송
+    sbFetch('/rest/v1/qg_events', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ event_name: eventName, params })
+    }).catch(() => {});
+  } catch (e) {}
+};
+
+
+
 /* ── UTILS ── */
 const uid = () => Math.random().toString(36).slice(2, 9);
 const today = () => new Date().toDateString();
@@ -971,11 +1004,13 @@ function AuthScreen({ onAuth, accounts, onRegister }) {
       const acct = accounts.find(a => a.email === email.trim());
       if (!acct) { setErr('등록되지 않은 이메일이에요. 가입하기 탭에서 회원가입을 해주세요.'); return; }
       if (acct.pw !== pw) { setErr('비밀번호가 올바르지 않아요.'); return; }
+      track('login', { method: 'email' });
       onAuth({ name: acct.name, email: acct.email, nickname: acct.nickname || acct.name });
     } else {
       if (!uname.trim()) { setErr('사용자 이름을 입력해주세요.'); return; }
       if (accounts.find(a => a.email === email.trim())) { setErr('이미 가입된 이메일이에요. 로그인 탭에서 로그인해주세요.'); return; }
       const newAcct = { email: email.trim(), name: uname.trim(), nickname: uname.trim(), pw, avatar: null };
+      track('sign_up', { method: 'email' });
       onRegister(newAcct);
       onAuth({ name: uname.trim(), email: email.trim(), nickname: uname.trim() });
     }
@@ -1155,6 +1190,7 @@ function CreateQuestModal({ onConfirm, onCancel, isProUser, routines, onSaveRout
     }
   };
   const loadRoutine = (r) => {
+    track('routine_loaded', { routine_name: r.name });
     setTodos(r.todos);
     setRewards(r.rewards.map(rw => rw || rndRewardFull()));
     setShowRoutines(false);
@@ -1567,6 +1603,7 @@ function TimerScreen({ quest, silentMode, isProUser, onComplete, onBack }) {
   const start = () => {
     const m = parseInt(mins) || 0, s = parseInt(secs) || 0, tot = m * 60 + s;
     if (tot <= 0) return;
+    track('timer_start', { duration_minutes: Math.round(tot / 60), quest_title: quest.title });
     setTotal(tot); setPhase('running'); startCD(tot);
   };
 
@@ -1655,12 +1692,12 @@ function TimerScreen({ quest, silentMode, isProUser, onComplete, onBack }) {
               </div>
               <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 310, marginBottom: 14 }}>
                 {tb('건너뛰기', () => onBack(), false)}
-                {tb('획득하기 🎁', () => onComplete(Math.max(0, Math.floor(total / 60))), true)}
+                {tb('획득하기 🎁', () => { track('timer_complete', { quest_title: quest.title, minutes: Math.floor(total/60), reward_obtained: true }); onComplete(Math.max(0, Math.floor(total / 60))); }, true)}
               </div>
             </>
           ) : (
             <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 310, marginBottom: 14 }}>
-              {tb('완료! ✓', () => onComplete(Math.max(0, Math.floor(total / 60))), true)}
+              {tb('완료! ✓', () => { track('timer_complete', { quest_title: quest.title, minutes: Math.floor(total/60), reward_obtained: false }); onComplete(Math.max(0, Math.floor(total / 60))); }, true)}
             </div>
           )}
           <button onClick={() => setShowAdd(s => !s)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.5)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 시간 더 추가하기</button>
@@ -2415,6 +2452,7 @@ function ProUpgradePage({ onBack, onUpgrade, userName }) {
     setPaying(false);
     setDone(true);
     await new Promise(r => setTimeout(r, 1200));
+    track('pro_upgrade_completed', { plan: sel });
     onUpgrade();
   };
 
@@ -2794,6 +2832,269 @@ function AIChatPage({ onBack, onCreatePage, onDeletePages, pages }) {
   );
 }
 
+/* ══════════════════════════════════════════
+   ADMIN DASHBOARD
+══════════════════════════════════════════ */
+const ADMIN_EMAIL = 'hrjeon0530@gmail.com';
+
+function AdminDashboard({ accounts, quests, pages, onLogout }) {
+  const [selTab, setSelTab] = useState('overview');
+  const [sbLogs, setSbLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  // Supabase에서 실시간 이벤트 불러오기
+  const fetchLogs = async () => {
+    setLoading(true);
+    try {
+      const res = await sbFetch('/rest/v1/qg_events?select=*&order=created_at.desc&limit=500');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setSbLogs(data);
+        setLastRefresh(new Date());
+      }
+    } catch (e) {}
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchLogs();
+    // 30초마다 자동 새로고침
+    const iv = setInterval(fetchLogs, 30000);
+    return () => clearInterval(iv);
+  }, []);
+  const totalUsers = accounts.length;
+  const proUsers = accounts.filter(a => a.isPro).length;
+  const totalQuests = quests.length;
+  const completedQuests = quests.filter(q => q.completed).length;
+  const completionRate = totalQuests > 0 ? Math.round((completedQuests / totalQuests) * 100) : 0;
+  const totalStudyMin = quests.filter(q => q.completed).reduce((s, q) => s + (q.studyMinutes || 0), 0);
+  const totalGardens = pages.length;
+
+  // 이벤트 로그 — Supabase 실시간 데이터 사용
+  const logs = sbLogs.map(row => ({
+    event: row.event_name,
+    params: row.params || {},
+    time: new Date(row.created_at).getTime()
+  }));
+
+  // 이벤트별 집계
+  const eventCounts = logs.reduce((acc, e) => {
+    acc[e.event] = (acc[e.event] || 0) + 1;
+    return acc;
+  }, {});
+
+  // 탭별 클릭 집계
+  const tabClicks = logs.filter(e => e.event === 'tab_switch').reduce((acc, e) => {
+    const t = e.params?.tab_name || 'unknown';
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+
+  // 오늘 로그인 수
+  const todayStr = new Date().toDateString();
+  const todayLogins = logs.filter(e => e.event === 'login' && new Date(e.time).toDateString() === todayStr).length;
+
+  // 최근 7일 퀘스트 완료 추이
+  const last7 = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    const ds = d.toDateString();
+    const count = quests.filter(q => q.completed && new Date(q.date).toDateString() === ds).length;
+    return { label: `${d.getMonth() + 1}/${d.getDate()}`, count };
+  });
+  const maxCount = Math.max(...last7.map(d => d.count), 1);
+
+  const fmtMin = m => m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`;
+
+  const card = (icon, label, value, sub, color = P) => (
+    <div style={{ flex: 1, minWidth: 140, background: 'white', borderRadius: 16, padding: '16px 14px', border: `1.5px solid ${BD}`, textAlign: 'center' }}>
+      <div style={{ fontSize: 28, marginBottom: 6 }}>{icon}</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color, marginBottom: 2 }}>{value}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280' }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 3, fontWeight: 600 }}>{sub}</div>}
+    </div>
+  );
+
+  const tabs = [
+    { id: 'overview', label: '📊 개요' },
+    { id: 'users', label: '👤 유저' },
+    { id: 'behavior', label: '🖱️ 행동' },
+    { id: 'logs', label: '📋 로그' },
+  ];
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: '#F5F3FF', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ height: 54, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 20px', background: `linear-gradient(135deg,${PD},${GD})`, gap: 12 }}>
+        <div style={{ fontSize: 20 }}>🛡️</div>
+        <div style={{ flex: 1, fontWeight: 900, fontSize: 15, color: 'white' }}>Quest Garden 관리자</div>
+        {lastRefresh && <span style={{ fontSize: 10, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>{lastRefresh.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} 기준</span>}
+        <button onClick={fetchLogs} disabled={loading}
+          style={{ padding: '5px 12px', borderRadius: 9, border: '1.5px solid rgba(255,255,255,.4)', background: 'none', color: 'white', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+          {loading ? '⏳' : '🔄 새로고침'}
+        </button>
+        <button onClick={onLogout} style={{ padding: '5px 12px', borderRadius: 9, border: '1.5px solid rgba(255,255,255,.4)', background: 'none', color: 'white', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>로그아웃</button>
+      </div>
+
+      {/* Tab nav */}
+      <div style={{ display: 'flex', background: 'white', borderBottom: `1.5px solid ${BD}`, flexShrink: 0 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setSelTab(t.id)}
+            style={{ flex: 1, padding: '11px 0', border: 'none', background: 'none', fontWeight: 800, fontSize: 12, color: selTab === t.id ? P : '#9CA3AF', borderBottom: selTab === t.id ? `2.5px solid ${P}` : '2.5px solid transparent', cursor: 'pointer', transition: 'all .15s' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 40px' }}>
+
+        {/* ── 개요 ── */}
+        {selTab === 'overview' && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>전체 요약</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 22 }}>
+              {card('👥', '총 가입자', totalUsers + '명', null, P)}
+              {card('✨', 'Pro 유저', proUsers + '명', `전환율 ${totalUsers > 0 ? Math.round(proUsers / totalUsers * 100) : 0}%`, G_COLOR)}
+              {card('🌿', '총 정원', totalGardens + '개', null, '#06B6D4')}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 28 }}>
+              {card('✅', '완료 퀘스트', completedQuests + '개', `완료율 ${completionRate}%`, G_COLOR)}
+              {card('⏱', '총 공부 시간', fmtMin(totalStudyMin), null, '#F59E0B')}
+              {card('🔑', '오늘 로그인', todayLogins + '명', null, P)}
+            </div>
+
+            {/* 최근 7일 그래프 */}
+            <div style={{ background: 'white', borderRadius: 18, padding: '18px 16px', border: `1.5px solid ${BD}`, marginBottom: 20 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B', marginBottom: 16 }}>📈 최근 7일 퀘스트 완료</div>
+              <svg viewBox="0 0 420 100" width="100%" style={{ display: 'block' }}>
+                {last7.map((d, i) => {
+                  const bh = d.count > 0 ? Math.max(8, (d.count / maxCount) * 72) : 3;
+                  const x = 10 + i * 58;
+                  return (
+                    <g key={i}>
+                      <rect x={x} y={80 - bh} width={38} height={bh} rx="5"
+                        fill={d.count > 0 ? PL : '#F3F4F6'} stroke={d.count > 0 ? P : '#E5E7EB'} strokeWidth="1.5" />
+                      {d.count > 0 && <text x={x + 19} y={80 - bh - 5} textAnchor="middle" fontSize="10" fill={PD} fontWeight="800">{d.count}</text>}
+                      <text x={x + 19} y={96} textAnchor="middle" fontSize="9" fill="#9CA3AF">{d.label}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </>
+        )}
+
+        {/* ── 유저 ── */}
+        {selTab === 'users' && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>가입자 목록</div>
+            {accounts.length === 0
+              ? <div style={{ textAlign: 'center', padding: '48px', color: '#9CA3AF', fontSize: 14, fontWeight: 600 }}>아직 가입자가 없어요</div>
+              : accounts.map((a, i) => (
+                <div key={i} style={{ background: 'white', borderRadius: 14, padding: '14px 16px', border: `1.5px solid ${BD}`, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: a.isPro ? `linear-gradient(135deg,${P},${G_COLOR})` : PL, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                    {a.avatar ? <img src={a.avatar} style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }} alt="" /> : '👤'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nickname || a.name}</div>
+                    <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>{a.email}</div>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 8px', borderRadius: 6, background: a.isPro ? 'linear-gradient(135deg,#F59E0B,#EF4444)' : '#F3F4F6', color: a.isPro ? 'white' : '#9CA3AF' }}>{a.isPro ? 'PRO' : '무료'}</span>
+                </div>
+              ))
+            }
+          </>
+        )}
+
+        {/* ── 행동 ── */}
+        {selTab === 'behavior' && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>유저 행동 분석</div>
+
+            {/* 탭 클릭 분포 */}
+            <div style={{ background: 'white', borderRadius: 16, padding: '16px', border: `1.5px solid ${BD}`, marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B', marginBottom: 14 }}>🖱️ 탭 클릭 횟수</div>
+              {Object.keys(tabClicks).length === 0
+                ? <p style={{ color: '#9CA3AF', fontSize: 13, fontWeight: 600 }}>아직 데이터가 없어요</p>
+                : Object.entries(tabClicks).map(([tab, cnt]) => {
+                  const total = Object.values(tabClicks).reduce((a, b) => a + b, 0);
+                  const pct = Math.round((cnt / total) * 100);
+                  const icons = { home: '📊', quest: '⚔️', garden: '🌿' };
+                  return (
+                    <div key={tab} style={{ marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{icons[tab] || '📌'} {tab}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: P }}>{cnt}회 ({pct}%)</span>
+                      </div>
+                      <div style={{ height: 8, background: '#F3F4F6', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: pct + '%', background: `linear-gradient(90deg,${P},${G_COLOR})`, borderRadius: 4, transition: 'width .5s' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* 이벤트 요약 */}
+            <div style={{ background: 'white', borderRadius: 16, padding: '16px', border: `1.5px solid ${BD}` }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B', marginBottom: 14 }}>📌 주요 이벤트 발생 횟수</div>
+              {[
+                { key: 'sign_up', label: '회원가입', icon: '✍️' },
+                { key: 'login', label: '로그인', icon: '🔑' },
+                { key: 'quest_created', label: '퀘스트 생성', icon: '⚔️' },
+                { key: 'timer_start', label: '타이머 시작', icon: '⏱' },
+                { key: 'timer_complete', label: '타이머 완료', icon: '✅' },
+                { key: 'pro_upgrade_viewed', label: 'Pro 페이지 방문', icon: '👀' },
+                { key: 'pro_upgrade_completed', label: 'Pro 가입 완료', icon: '💳' },
+                { key: 'ai_chat_opened', label: 'AI 채팅 사용', icon: '🤖' },
+                { key: 'garden_created', label: '정원 생성', icon: '🌿' },
+                { key: 'routine_saved', label: '루틴 저장', icon: '💾' },
+              ].map(({ key, label, icon }) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${BD}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{icon} {label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: eventCounts[key] > 0 ? P : '#D1D5DB' }}>{eventCounts[key] || 0}회</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── 로그 ── */}
+        {selTab === 'logs' && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em' }}>이벤트 로그 ({logs.length}개)</div>
+              <button onClick={() => { try { localStorage.removeItem('qg_event_logs'); window.location.reload(); } catch {} }}
+                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontWeight: 700, cursor: 'pointer' }}>로그 초기화</button>
+            </div>
+            {logs.length === 0
+              ? <div style={{ textAlign: 'center', padding: '48px', color: '#9CA3AF', fontSize: 14, fontWeight: 600 }}>아직 기록이 없어요</div>
+              : [...logs].reverse().slice(0, 100).map((log, i) => (
+                <div key={i} style={{ background: 'white', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${BD}`, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: P, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: '#1E1B4B' }}>{log.event}</div>
+                    {log.params && Object.keys(log.params).length > 0 && (
+                      <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, marginTop: 2 }}>
+                        {Object.entries(log.params).filter(([k]) => k !== 'app').map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, flexShrink: 0 }}>
+                    {new Date(log.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              ))
+            }
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const G_COLOR = '#10B981';
+
 export default function App() {
   // Persistent accounts (simulated DB in memory)
   const [accounts, setAccounts] = useState(() => {
@@ -2841,7 +3142,9 @@ export default function App() {
   const [editReward, setEditReward] = useState(null);
   const [confetti, setConfetti] = useState(false);
   const [showProUpgrade, setShowProUpgrade] = useState(false);
+  const openProUpgrade = () => { track('pro_upgrade_viewed'); openProUpgrade(); };
   const [showAIChat, setShowAIChat] = useState(false);
+  const openAIChat = () => { track('ai_chat_opened'); openAIChat(); };
   const [showProfile, setShowProfile] = useState(false);
   const [customCategories, setCustomCategories] = useState([]);
   const prevDone = useRef(false);
@@ -2942,6 +3245,20 @@ export default function App() {
     );
   }
 
+  // 관리자 화면
+  if (user.email === ADMIN_EMAIL) {
+    return (
+      <div className="qg">
+        <Styles />
+        <AdminDashboard
+          accounts={accounts}
+          quests={quests}
+          pages={pages}
+          onLogout={() => { setUser(null); try { localStorage.removeItem('qg_user'); } catch {} }} />
+      </div>
+    );
+  }
+
   const tabs = [
     { id: 'home',   icon: '📊', label: '홈' },
     { id: 'quest',  icon: '⚔️', label: '퀘스트' },
@@ -2956,7 +3273,7 @@ export default function App() {
         <div style={{ fontWeight: 900, fontSize: 14, background: `linear-gradient(135deg,${PD},${GD})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', flexShrink: 0 }}>🌱 Quest Garden</div>
         <div style={{ display: 'flex', gap: 2, background: PP, borderRadius: 10, padding: '2px' }}>
           {tabs.map(({ id, icon, label }) => (
-            <button key={id} onClick={() => setTab(id)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 8, border: 'none', background: tab === id ? 'white' : 'transparent', color: tab === id ? P : '#9CA3AF', fontWeight: 800, fontSize: 11, boxShadow: tab === id ? '0 2px 6px rgba(124,58,237,.1)' : 'none', transition: 'all .2s', position: 'relative', whiteSpace: 'nowrap' }}>
+            <button key={id} onClick={() => { setTab(id); track('tab_switch', { tab_name: id }); }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 8, border: 'none', background: tab === id ? 'white' : 'transparent', color: tab === id ? P : '#9CA3AF', fontWeight: 800, fontSize: 11, boxShadow: tab === id ? '0 2px 6px rgba(124,58,237,.1)' : 'none', transition: 'all .2s', position: 'relative', whiteSpace: 'nowrap' }}>
               <span style={{ fontSize: 12 }}>{icon}</span>{label}
               {id === 'quest' && undoneQ > 0 && <div style={{ position: 'absolute', top: 3, right: 3, width: 6, height: 6, borderRadius: '50%', background: G, border: '2px solid white' }} />}
             </button>
@@ -2968,12 +3285,12 @@ export default function App() {
             style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${notifEnabled ? P : BD}`, background: notifEnabled ? PL : 'white', color: notifEnabled ? PD : '#9CA3AF', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🔔</button>
           {/* Test / Demo button */}
           {!isProUser && (
-            <button onClick={() => { setDemoMode(true); setIsProUser(true); }} title="Pro 기능 테스트"
+            <button onClick={() => { track('demo_mode_activated'); setDemoMode(true); setIsProUser(true); }} title="Pro 기능 테스트"
               style={{ width: 30, height: 30, borderRadius: 9, border: '1.5px solid #FDE047', background: '#FEF9C3', color: '#713F12', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🧪</button>
           )}
           {isProUser
             ? <span style={{ fontSize: 9, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '2px 6px', borderRadius: 5 }}>PRO</span>
-            : <button onClick={() => setShowProUpgrade(true)} style={{ fontSize: 10, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '4px 8px', borderRadius: 7, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>✨ PRO</button>
+            : <button onClick={() => openProUpgrade()} style={{ fontSize: 10, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '4px 8px', borderRadius: 7, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>✨ PRO</button>
           }
           <button onClick={() => setShowProfile(true)} style={{ fontSize: 12, fontWeight: 800, color: PM, background: PL, padding: '4px 10px', borderRadius: 999, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>{user.avatar ? <img src={user.avatar} style={{width:20,height:20,borderRadius:'50%',objectFit:'cover'}} alt=''/> : <span style={{fontSize:16}}>👤</span>}{user.nickname || user.name}</button>
         </div>
@@ -2987,7 +3304,7 @@ export default function App() {
             <span style={{ fontSize: 13, fontWeight: 800, color: 'white' }}>Pro: AI 정원 기획 + 테마 14종 + 퀘스트 보상!</span>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', marginLeft: 8, fontWeight: 600 }}>월 ₩9,900</span>
           </div>
-          {!isProUser && <button onClick={() => setShowProUpgrade(true)} style={{ padding: '5px 13px', borderRadius: 20, border: '1.5px solid white', background: 'rgba(255,255,255,.18)', color: 'white', fontSize: 11, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>시작하기</button>}
+          {!isProUser && <button onClick={() => openProUpgrade()} style={{ padding: '5px 13px', borderRadius: 20, border: '1.5px solid white', background: 'rgba(255,255,255,.18)', color: 'white', fontSize: 11, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>시작하기</button>}
           <button onClick={() => { setShowBanner(false); try { localStorage.setItem('qg_banner','false'); } catch {} }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.7)', fontSize: 18, cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>✕</button>
         </div>
       )}
@@ -3012,7 +3329,7 @@ export default function App() {
           <GardenScreen isProUser={isProUser} pages={pagesWithCb} owned={owned} customCategories={customCategories}
             onNewPage={() => setCreatePage(true)}
             onOpenPage={id => setActiveGarden(id)}
-            onShowProUpgrade={() => setShowProUpgrade(true)} />
+            onShowProUpgrade={() => openProUpgrade()} />
         )}
 
         {/* FAB – context-aware */}
@@ -3028,22 +3345,22 @@ export default function App() {
         {tab === 'garden' && isProUser && (
           <GardenFab
             onTheme={() => setCreatePage(true)}
-            onAI={() => setShowAIChat(true)} />
+            onAI={() => openAIChat()} />
         )}
 
         {/* Modals */}
         {createPage && (
           <CreatePageModal isProUser={isProUser}
-            onNeedPro={() => { setCreatePage(false); setShowProUpgrade(true); }}
-            onOpenAIChat={() => { setCreatePage(false); setShowAIChat(true); }}
-            onConfirm={p => { setPages(prev => [...prev, { id: uid(), ...p }]); setCreatePage(false); }}
+            onNeedPro={() => { setCreatePage(false); openProUpgrade(); }}
+            onOpenAIChat={() => { setCreatePage(false); openAIChat(); }}
+            onConfirm={p => { track('garden_created', { theme: p.theme, is_dark: p.isDark }); setPages(prev => [...prev, { id: uid(), ...p }]); setCreatePage(false); }}
             onCancel={() => setCreatePage(false)} />
         )}
         {createQuest && (
           <CreateQuestModal isProUser={isProUser}
             routines={routines}
-            onSaveRoutine={r => setRoutines(prev => [...prev.filter(x => x.id !== r.id), r])}
-            onConfirm={nQ => { setQuests(p => [...p.filter(q => !(q.date === today() && !q.completed)), ...nQ]); setCreateQuest(false); }}
+            onSaveRoutine={r => { track('routine_saved', { todo_count: r.todos.length }); setRoutines(prev => [...prev.filter(x => x.id !== r.id), r]); }}
+            onConfirm={nQ => { track('quest_created', { quest_count: nQ.length }); setQuests(p => [...p.filter(q => !(q.date === today() && !q.completed)), ...nQ]); setCreateQuest(false); }}
             onCancel={() => setCreateQuest(false)} />
         )}
         {editReward && isProUser && (
@@ -3069,6 +3386,7 @@ export default function App() {
         {/* Onboarding */}
         {showOnboarding && (
           <OnboardingModal onDone={() => {
+            track('onboarding_complete');
             setShowOnboarding(false);
             setOnboarded(true);
             try { localStorage.setItem('qg_onboarded', 'true'); } catch {}
@@ -3092,7 +3410,7 @@ export default function App() {
             onBack={() => setShowProfile(false)}
             onUpdate={updateUserProfile}
             onLogout={() => { setUser(null); setShowProfile(false); }}
-            onShowProUpgrade={() => { setShowProfile(false); setShowProUpgrade(true); }}
+            onShowProUpgrade={() => { setShowProfile(false); openProUpgrade(); }}
             onDeleteAccount={() => {
               try {
                 ['qg_accounts','qg_user','qg_pro','qg_pages','qg_quests','qg_owned','qg_routines','qg_notif_on','qg_notif_time','qg_onboarded'].forEach(k => localStorage.removeItem(k));
