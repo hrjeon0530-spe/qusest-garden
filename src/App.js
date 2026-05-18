@@ -1,30 +1,4 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>🌱 Quest Garden</title>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){ dataLayer.push(arguments); }
-  gtag('js', new Date());
-  gtag('config', 'G-XXXXXXXXXX');
-</script>
-<script defer src="/_vercel/insights/script.js"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; overflow: hidden; }
-  #root { width: 100%; height: 100%; }
-</style>
-</head>
-<body>
-<div id="root"></div>
-<script type="text/babel">
-const { useState, useEffect, useRef } = React;
+import { useState, useEffect, useRef } from "react";
 
 /* ── COLORS ── */
 const P = '#7C3AED', PD = '#5B21B6', PM = '#6D28D9', PL = '#EDE9FE', PP = '#F5F3FF';
@@ -3121,7 +3095,7 @@ function AdminDashboard({ accounts, quests, pages, onLogout }) {
 
 const G_COLOR = '#10B981';
 
-function App() {
+export default function App() {
   // Persistent accounts (simulated DB in memory)
   const [accounts, setAccounts] = useState(() => {
     try { return JSON.parse(localStorage.getItem('qg_accounts') || '[]'); } catch { return []; }
@@ -3473,8 +3447,3 @@ function App() {
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-</script>
-</body>
-</html>
