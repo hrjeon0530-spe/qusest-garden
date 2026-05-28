@@ -5,26 +5,8 @@ const P = '#7C3AED', PD = '#5B21B6', PM = '#6D28D9', PL = '#EDE9FE', PP = '#F5F3
 const G = '#10B981', GD = '#059669', GL = '#D1FAE5';
 const BD = 'rgba(124,58,237,0.13)';
 
-/* ── Supabase 연결 ── */
-const SB_URL = 'https://gzusdoyfjjgarjxescog.supabase.co';
-const SB_KEY = 'sb_publishable_3ZsSoIoB-PZeLYGAZNWGrw_cGCXpkOt';
-const sbFetch = (path, options = {}) => fetch(SB_URL + path, {
-  ...options,
-  headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', ...(options.headers || {}) }
-});
-
 const track = (eventName, params = {}) => {
-  try {
-    const logs = JSON.parse(localStorage.getItem('qg_event_logs') || '[]');
-    logs.push({ event: eventName, params, time: Date.now() });
-    if (logs.length > 500) logs.splice(0, logs.length - 500);
-    localStorage.setItem('qg_event_logs', JSON.stringify(logs));
-    sbFetch('/rest/v1/qg_events', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ event_name: eventName, params })
-    }).catch(() => {});
-  } catch (e) {}
+  // 이벤트 추적 비활성화 (Supabase 제거)
 };
 
 /* ── UTILS ── */
@@ -1727,21 +1709,6 @@ const G_COLOR = '#10B981';
 
 function AdminDashboard({ accounts, quests, pages, onLogout }) {
   const [selTab, setSelTab] = useState('overview');
-  const [sbLogs, setSbLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState(null);
-
-  const fetchLogs = async () => {
-    setLoading(true);
-    try {
-      const res = await sbFetch('/rest/v1/qg_events?select=*&order=created_at.desc&limit=500');
-      const data = await res.json();
-      if (Array.isArray(data)) { setSbLogs(data); setLastRefresh(new Date()); }
-    } catch (e) {}
-    setLoading(false);
-  };
-
-  useEffect(() => { fetchLogs(); const iv = setInterval(fetchLogs, 30000); return () => clearInterval(iv); }, []);
 
   const totalUsers = accounts.length, proUsers = accounts.filter(a => a.isPro).length;
   const totalQuests = quests.length, completedQuests = quests.filter(q => q.completed).length;
@@ -1749,12 +1716,7 @@ function AdminDashboard({ accounts, quests, pages, onLogout }) {
   const totalStudyMin = quests.filter(q => q.completed).reduce((s, q) => s + (q.studyMinutes || 0), 0);
   const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}시간 ${m%60}분` : `${m}분`;
 
-  const logs = sbLogs.map(row => ({ event: row.event_name, params: row.params || {}, time: new Date(row.created_at).getTime() }));
-  const eventCounts = logs.reduce((acc, e) => { acc[e.event] = (acc[e.event] || 0) + 1; return acc; }, {});
-  const tabClicks = logs.filter(e => e.event === 'tab_switch').reduce((acc, e) => { const t = e.params?.tab_name || 'unknown'; acc[t] = (acc[t] || 0) + 1; return acc; }, {});
   const todayStr = new Date().toDateString();
-  const todayLogins = logs.filter(e => e.event === 'login' && new Date(e.time).toDateString() === todayStr).length;
-
   const last7 = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); const ds = d.toDateString(); return { label: `${d.getMonth() + 1}/${d.getDate()}`, count: quests.filter(q => q.completed && new Date(q.date).toDateString() === ds).length }; });
   const maxCount = Math.max(...last7.map(d => d.count), 1);
 
@@ -1767,15 +1729,13 @@ function AdminDashboard({ accounts, quests, pages, onLogout }) {
     </div>
   );
 
-  const tabs = [{ id: 'overview', label: '📊 개요' }, { id: 'users', label: '👤 유저' }, { id: 'behavior', label: '🖱️ 행동' }, { id: 'logs', label: '📋 로그' }];
+  const tabs = [{ id: 'overview', label: '📊 개요' }, { id: 'users', label: '👤 유저' }];
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#F5F3FF', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ height: 54, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 20px', background: `linear-gradient(135deg,${PD},${GD})`, gap: 12 }}>
         <div style={{ fontSize: 20 }}>🛡️</div>
         <div style={{ flex: 1, fontWeight: 900, fontSize: 15, color: 'white' }}>Quest Garden 관리자</div>
-        {lastRefresh && <span style={{ fontSize: 10, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>{lastRefresh.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} 기준</span>}
-        <button onClick={fetchLogs} disabled={loading} style={{ padding: '5px 12px', borderRadius: 9, border: '1.5px solid rgba(255,255,255,.4)', background: 'none', color: 'white', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{loading ? '⏳' : '🔄 새로고침'}</button>
         <button onClick={onLogout} style={{ padding: '5px 12px', borderRadius: 9, border: '1.5px solid rgba(255,255,255,.4)', background: 'none', color: 'white', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>로그아웃</button>
       </div>
       <div style={{ display: 'flex', background: 'white', borderBottom: `1.5px solid ${BD}`, flexShrink: 0 }}>
@@ -1792,7 +1752,6 @@ function AdminDashboard({ accounts, quests, pages, onLogout }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 22 }}>
               {card('✅', '완료 퀘스트', completedQuests + '개', `완료율 ${completionRate}%`, G_COLOR)}
               {card('⏱', '총 공부 시간', fmtMin(totalStudyMin), null, '#F59E0B')}
-              {card('🔑', '오늘 로그인', todayLogins + '명', null, P)}
             </div>
             <div style={{ background: 'white', borderRadius: 18, padding: '18px 16px', border: `1.5px solid ${BD}` }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B', marginBottom: 16 }}>📈 최근 7일 퀘스트 완료</div>
@@ -1815,35 +1774,6 @@ function AdminDashboard({ accounts, quests, pages, onLogout }) {
                   <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>{a.email}</div>
                 </div>
                 <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 8px', borderRadius: 6, background: a.isPro ? 'linear-gradient(135deg,#F59E0B,#EF4444)' : '#F3F4F6', color: a.isPro ? 'white' : '#9CA3AF' }}>{a.isPro ? 'PRO' : '무료'}</span>
-              </div>
-            ))}
-          </>
-        )}
-        {selTab === 'behavior' && (
-          <>
-            <div style={{ background: 'white', borderRadius: 16, padding: '16px', border: `1.5px solid ${BD}`, marginBottom: 16 }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B', marginBottom: 14 }}>🖱️ 탭 클릭 횟수</div>
-              {Object.keys(tabClicks).length === 0 ? <p style={{ color: '#9CA3AF', fontSize: 13 }}>아직 데이터가 없어요</p> : Object.entries(tabClicks).map(([tab, cnt]) => {
-                const total = Object.values(tabClicks).reduce((a, b) => a + b, 0), pct = Math.round((cnt / total) * 100);
-                return (<div key={tab} style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{tab}</span><span style={{ fontSize: 13, fontWeight: 800, color: P }}>{cnt}회 ({pct}%)</span></div>
-                  <div style={{ height: 8, background: '#F3F4F6', borderRadius: 4, overflow: 'hidden' }}><div style={{ height: '100%', width: pct + '%', background: `linear-gradient(90deg,${P},${G_COLOR})`, borderRadius: 4 }} /></div>
-                </div>);
-              })}
-            </div>
-          </>
-        )}
-        {selTab === 'logs' && (
-          <>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>이벤트 로그 ({logs.length}개)</div>
-            {[...logs].reverse().slice(0, 100).map((log, i) => (
-              <div key={i} style={{ background: 'white', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${BD}`, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: P, flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: '#1E1B4B' }}>{log.event}</div>
-                  {log.params && Object.keys(log.params).length > 0 && <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, marginTop: 2 }}>{Object.entries(log.params).filter(([k]) => k !== 'app').map(([k, v]) => `${k}: ${v}`).join(' · ')}</div>}
-                </div>
-                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, flexShrink: 0 }}>{new Date(log.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</div>
               </div>
             ))}
           </>
