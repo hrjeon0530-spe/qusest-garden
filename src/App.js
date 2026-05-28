@@ -1701,87 +1701,7 @@ function ProUpgradePage({ onBack, onUpgrade, userName }) {
   );
 }
 
-/* ══════════════════════════════════════════
-   ADMIN DASHBOARD
-══════════════════════════════════════════ */
-const ADMIN_EMAIL = 'hrjeon0530@gmail.com';
 const G_COLOR = '#10B981';
-
-function AdminDashboard({ accounts, quests, pages, onLogout }) {
-  const [selTab, setSelTab] = useState('overview');
-
-  const totalUsers = accounts.length, proUsers = accounts.filter(a => a.isPro).length;
-  const totalQuests = quests.length, completedQuests = quests.filter(q => q.completed).length;
-  const completionRate = totalQuests > 0 ? Math.round((completedQuests / totalQuests) * 100) : 0;
-  const totalStudyMin = quests.filter(q => q.completed).reduce((s, q) => s + (q.studyMinutes || 0), 0);
-  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}시간 ${m%60}분` : `${m}분`;
-
-  const todayStr = new Date().toDateString();
-  const last7 = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); const ds = d.toDateString(); return { label: `${d.getMonth() + 1}/${d.getDate()}`, count: quests.filter(q => q.completed && new Date(q.date).toDateString() === ds).length }; });
-  const maxCount = Math.max(...last7.map(d => d.count), 1);
-
-  const card = (icon, label, value, sub, color = P) => (
-    <div style={{ flex: 1, minWidth: 140, background: 'white', borderRadius: 16, padding: '16px 14px', border: `1.5px solid ${BD}`, textAlign: 'center' }}>
-      <div style={{ fontSize: 28, marginBottom: 6 }}>{icon}</div>
-      <div style={{ fontSize: 22, fontWeight: 900, color, marginBottom: 2 }}>{value}</div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280' }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 3, fontWeight: 600 }}>{sub}</div>}
-    </div>
-  );
-
-  const tabs = [{ id: 'overview', label: '📊 개요' }, { id: 'users', label: '👤 유저' }];
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, background: '#F5F3FF', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ height: 54, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 20px', background: `linear-gradient(135deg,${PD},${GD})`, gap: 12 }}>
-        <div style={{ fontSize: 20 }}>🛡️</div>
-        <div style={{ flex: 1, fontWeight: 900, fontSize: 15, color: 'white' }}>Quest Garden 관리자</div>
-        <button onClick={onLogout} style={{ padding: '5px 12px', borderRadius: 9, border: '1.5px solid rgba(255,255,255,.4)', background: 'none', color: 'white', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>로그아웃</button>
-      </div>
-      <div style={{ display: 'flex', background: 'white', borderBottom: `1.5px solid ${BD}`, flexShrink: 0 }}>
-        {tabs.map(t => (<button key={t.id} onClick={() => setSelTab(t.id)} style={{ flex: 1, padding: '11px 0', border: 'none', background: 'none', fontWeight: 800, fontSize: 12, color: selTab === t.id ? P : '#9CA3AF', borderBottom: selTab === t.id ? `2.5px solid ${P}` : '2.5px solid transparent', cursor: 'pointer' }}>{t.label}</button>))}
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 40px' }}>
-        {selTab === 'overview' && (
-          <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-              {card('👥', '총 가입자', totalUsers + '명', null, P)}
-              {card('✨', 'Pro 유저', proUsers + '명', `전환율 ${totalUsers > 0 ? Math.round(proUsers / totalUsers * 100) : 0}%`, G_COLOR)}
-              {card('🌿', '총 정원', pages.length + '개', null, '#06B6D4')}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 22 }}>
-              {card('✅', '완료 퀘스트', completedQuests + '개', `완료율 ${completionRate}%`, G_COLOR)}
-              {card('⏱', '총 공부 시간', fmtMin(totalStudyMin), null, '#F59E0B')}
-            </div>
-            <div style={{ background: 'white', borderRadius: 18, padding: '18px 16px', border: `1.5px solid ${BD}` }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B', marginBottom: 16 }}>📈 최근 7일 퀘스트 완료</div>
-              <svg viewBox="0 0 420 100" width="100%" style={{ display: 'block' }}>
-                {last7.map((d, i) => { const bh = d.count > 0 ? Math.max(8, (d.count / maxCount) * 72) : 3; const x = 10 + i * 58; return (<g key={i}><rect x={x} y={80 - bh} width={38} height={bh} rx="5" fill={d.count > 0 ? PL : '#F3F4F6'} stroke={d.count > 0 ? P : '#E5E7EB'} strokeWidth="1.5" />{d.count > 0 && <text x={x + 19} y={80 - bh - 5} textAnchor="middle" fontSize="10" fill={PD} fontWeight="800">{d.count}</text>}<text x={x + 19} y={96} textAnchor="middle" fontSize="9" fill="#9CA3AF">{d.label}</text></g>); })}
-              </svg>
-            </div>
-          </>
-        )}
-        {selTab === 'users' && (
-          <>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>가입자 목록</div>
-            {accounts.map((a, i) => (
-              <div key={i} style={{ background: 'white', borderRadius: 14, padding: '14px 16px', border: `1.5px solid ${BD}`, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: a.isPro ? `linear-gradient(135deg,${P},${G_COLOR})` : PL, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                  {a.avatar ? <img src={a.avatar} style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }} alt="" /> : '👤'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: '#1E1B4B' }}>{a.nickname || a.name}</div>
-                  <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>{a.email}</div>
-                </div>
-                <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 8px', borderRadius: 6, background: a.isPro ? 'linear-gradient(135deg,#F59E0B,#EF4444)' : '#F3F4F6', color: a.isPro ? 'white' : '#9CA3AF' }}>{a.isPro ? 'PRO' : '무료'}</span>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════
    APP ROOT
@@ -1850,15 +1770,6 @@ export default function App() {
       <div className="qg">
         <Styles />
         <AuthScreen accounts={accounts} onRegister={acct => setAccounts(prev => [...prev, acct])} onAuth={u => setUser(u)} />
-      </div>
-    );
-  }
-
-  if (user.email === ADMIN_EMAIL) {
-    return (
-      <div className="qg">
-        <Styles />
-        <AdminDashboard accounts={accounts} quests={quests} pages={pages} onLogout={() => { setUser(null); try { localStorage.removeItem('qg_user'); } catch {} }} />
       </div>
     );
   }
