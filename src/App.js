@@ -1434,200 +1434,444 @@ function NotifScreen({ user, spaces, setSpaces, notifs, setNotifs }) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   WORKSPACE SCREEN (Pro — 이메일 초대 방식, 초대코드 없음)
+   COMMENT TEXT / INPUT / SECTION
+══════════════════════════════════════════════════════════ */
+function CommentText({ text }) {
+  const parts = text.split(/(@\S+)/g);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        part.startsWith('@')
+          ? <span key={i} style={{ color:'#4F46E5',fontWeight:800,background:'#EEF2FF',borderRadius:4,padding:'0 4px' }}>{part}</span>
+          : part
+      )}
+    </span>
+  );
+}
+
+function CommentInput({ members, onSubmit, placeholder, accentColor }) {
+  const [text, setText] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const handleChange = (val) => {
+    setText(val);
+    const lastWord = val.split(/\s/).pop() || '';
+    if (lastWord.startsWith('@') && lastWord.length > 1) {
+      const q = lastWord.slice(1).toLowerCase();
+      setSuggestions(members.filter(m => m.name.toLowerCase().includes(q)));
+    } else { setSuggestions([]); }
+  };
+  const insertMention = (m) => {
+    const words = text.split(/\s/);
+    words[words.length - 1] = '@' + m.name;
+    setText(words.join(' ') + ' ');
+    setSuggestions([]);
+  };
+  const submit = () => {
+    if (!text.trim()) return;
+    onSubmit(text.trim()); setText(''); setSuggestions([]);
+  };
+  return (
+    <div style={{ position:'relative' }}>
+      {suggestions.length > 0 && (
+        <div className="fu" style={{ position:'absolute',bottom:'100%',left:0,right:0,background:'white',border:'1.5px solid #E5E7EB',borderRadius:12,boxShadow:'0 4px 16px rgba(0,0,0,.1)',marginBottom:6,overflow:'hidden',zIndex:10 }}>
+          {suggestions.map(m => (
+            <button key={m.id} onClick={() => insertMention(m)} style={{ width:'100%',padding:'9px 14px',border:'none',background:'none',display:'flex',alignItems:'center',gap:10,cursor:'pointer',textAlign:'left' }}>
+              <div style={{ width:26,height:26,borderRadius:'50%',background:accentColor||'#6366F1',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:800,flexShrink:0 }}>{m.name[0]}</div>
+              <span style={{ fontSize:13,fontWeight:700,color:'#374151' }}>@{m.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ display:'flex',gap:8 }}>
+        <textarea value={text} onChange={e=>handleChange(e.target.value)}
+          placeholder={placeholder||'댓글 입력... (@이름 멘션, Shift+Enter 줄바꿈)'}
+          rows={2}
+          style={{ flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:11,resize:'none',fontFamily:'inherit',lineHeight:1.5 }}
+          onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();} }} />
+        <button onClick={submit} disabled={!text.trim()} style={{ padding:'10px 16px',borderRadius:11,border:'none',background:text.trim()?(accentColor||'#4F46E5'):'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:text.trim()?'pointer':'default',flexShrink:0,alignSelf:'flex-end' }}>전송</button>
+      </div>
+    </div>
+  );
+}
+
+function CommentSection({ comments, members, user, onAddComment, onAddReply, onDelete, accentColor }) {
+  const [replyTo, setReplyTo] = useState(null);
+  const [expanded, setExpanded] = useState({});
+  const toggleExpand = (id) => setExpanded(p=>({...p,[id]:!p[id]}));
+  return (
+    <div>
+      {comments.length===0&&<div style={{ textAlign:'center',padding:'24px 0',color:'#9CA3AF',fontSize:13 }}>아직 댓글이 없어요 💬</div>}
+      {comments.map(c=>(
+        <div key={c.id} className="fu" style={{ marginBottom:16 }}>
+          {c.linkedTitle&&<div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:6 }}>{c.linkedType==='todo'?'✅':'📅'} {c.linkedTitle}에 댓글</div>}
+          <div style={{ display:'flex',gap:10,alignItems:'flex-start' }}>
+            <div style={{ width:34,height:34,borderRadius:'50%',background:accentColor||'#6366F1',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:14,fontWeight:900,flexShrink:0 }}>{(c.authorName||'?')[0]}</div>
+            <div style={{ flex:1 }}>
+              <div style={{ background:'white',border:'1px solid #F3F4F6',borderRadius:'0 14px 14px 14px',padding:'12px 14px',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+                <div style={{ display:'flex',justifyContent:'space-between',marginBottom:5 }}>
+                  <span style={{ fontSize:13,fontWeight:800,color:'#111827' }}>{c.authorName}</span>
+                  <span style={{ fontSize:11,color:'#9CA3AF' }}>{timeAgo(c.createdAt)}</span>
+                </div>
+                <div style={{ fontSize:14,color:'#374151',lineHeight:1.65 }}><CommentText text={c.text}/></div>
+              </div>
+              <div style={{ display:'flex',gap:12,marginTop:6,paddingLeft:4 }}>
+                <button onClick={()=>setReplyTo(replyTo===c.id?null:c.id)} style={{ background:'none',border:'none',fontSize:12,fontWeight:700,color:'#6B7280',cursor:'pointer' }}>↩ 답글</button>
+                {c.replies&&c.replies.length>0&&<button onClick={()=>toggleExpand(c.id)} style={{ background:'none',border:'none',fontSize:12,fontWeight:700,color:accentColor||'#4F46E5',cursor:'pointer' }}>{expanded[c.id]?'▲ 접기':'▼ 답글 '+c.replies.length+'개'}</button>}
+                {c.authorId===user.id&&<button onClick={()=>onDelete(c.id)} style={{ background:'none',border:'none',fontSize:12,fontWeight:700,color:'#EF4444',cursor:'pointer' }}>삭제</button>}
+              </div>
+              {expanded[c.id]&&c.replies&&c.replies.map(r=>(
+                <div key={r.id} style={{ display:'flex',gap:8,alignItems:'flex-start',marginTop:8,marginLeft:16 }}>
+                  <div style={{ width:28,height:28,borderRadius:'50%',background:'#E5E7EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#6B7280',flexShrink:0 }}>{(r.authorName||'?')[0]}</div>
+                  <div style={{ flex:1,background:'#F9FAFB',border:'1px solid #F3F4F6',borderRadius:'0 10px 10px 10px',padding:'9px 12px' }}>
+                    <div style={{ display:'flex',justifyContent:'space-between',marginBottom:3 }}>
+                      <span style={{ fontSize:12,fontWeight:800,color:'#374151' }}>{r.authorName}</span>
+                      <span style={{ fontSize:11,color:'#9CA3AF' }}>{timeAgo(r.createdAt)}</span>
+                    </div>
+                    <div style={{ fontSize:13,color:'#374151',lineHeight:1.6 }}><CommentText text={r.text}/></div>
+                  </div>
+                </div>
+              ))}
+              {replyTo===c.id&&(
+                <div className="fu" style={{ marginTop:10,marginLeft:16 }}>
+                  <CommentInput members={members} accentColor={accentColor} placeholder={'@'+c.authorName+'에게 답글...'}
+                    onSubmit={(text)=>{onAddReply(c.id,text);setReplyTo(null);}}/>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div style={{ marginTop:16,borderTop:'1px solid #F3F4F6',paddingTop:16 }}>
+        <CommentInput members={members} accentColor={accentColor} onSubmit={(text)=>onAddComment(text,null,null,null)}/>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   WORKSPACE SCREEN (Pro — 공유 할일/캘린더/댓글 포함)
 ══════════════════════════════════════════════════════════ */
 function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
   const cfg = WS[user.wsType] || WS.personal;
   const [view, setView] = useState('list');
   const [selSpace, setSelSpace] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', type: user.wsType });
-
-  // 이메일 초대 상태
+  const [form, setForm] = useState({ name:'', description:'', type:user.wsType });
   const [invEmail, setInvEmail] = useState('');
-  const [invResult, setInvResult] = useState(null); // null | 'not_found' | 'already_member' | userObject
+  const [invResult, setInvResult] = useState(null);
   const [showMsgInput, setShowMsgInput] = useState(false);
   const [invMsg, setInvMsg] = useState('');
   const [invSent, setInvSent] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [tab, setTab] = useState('members');
+  const [showTodoForm, setShowTodoForm] = useState(false);
+  const [todoForm, setTodoForm] = useState({ title:'', priority:'medium', dueDate:'', assigneeId:'' });
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [eventForm, setEventForm] = useState({ title:'', date:tod(), time:'', color:'#4F46E5' });
+  const [commentModal, setCommentModal] = useState(null);
+
+  const updateSpace = (updated) => {
+    const all = spaces.map(s => s.id===updated.id ? updated : s);
+    setSpaces(all); sv('wl_spaces', all); setSelSpace(updated);
+  };
 
   const createSpace = () => {
     if (!form.name.trim()) return;
-    const space = {
-      id: uid(), name: form.name.trim(), description: form.description,
-      type: form.type, ownerId: user.id,
-      members: [{ id: user.id, name: user.nickname || user.name, role: 'owner' }],
-      createdAt: new Date().toISOString(),
-    };
+    const space = { id:uid(), name:form.name.trim(), description:form.description, type:form.type, ownerId:user.id, members:[{ id:user.id, name:user.nickname||user.name, role:'owner' }], todos:[], events:[], comments:[], createdAt:new Date().toISOString() };
     const updated = [...spaces, space];
-    setSpaces(updated);
-    sv('wl_spaces', updated);
-    setForm({ name: '', description: '', type: user.wsType });
-    setSelSpace(space);
-    setView('detail');
+    setSpaces(updated); sv('wl_spaces', updated);
+    setForm({ name:'', description:'', type:user.wsType });
+    setSelSpace(space); setTab('members'); setView('detail');
   };
 
   const searchEmail = async () => {
     if (!invEmail.trim()) return;
-    setSearching(true);
-    setInvResult(null);
-    setShowMsgInput(false);
-    setInvMsg('');
-    await new Promise(r => setTimeout(r, 450));
+    setSearching(true); setInvResult(null); setShowMsgInput(false); setInvMsg('');
+    await new Promise(r => setTimeout(r, 400));
     setSearching(false);
-    const found = accounts.find(a => a.email.toLowerCase() === invEmail.trim().toLowerCase() && a.id !== user.id);
-    const space = spaces.find(s => s.id === selSpace?.id);
-    if (found && space?.members.find(m => m.id === found.id)) {
-      setInvResult('already_member');
-    } else {
-      setInvResult(found || 'not_found');
-    }
+    const found = accounts.find(a => a.email.toLowerCase()===invEmail.trim().toLowerCase()&&a.id!==user.id);
+    const space = spaces.find(s=>s.id===selSpace?.id);
+    if (found && space?.members.find(m=>m.id===found.id)) setInvResult('already_member');
+    else setInvResult(found||'not_found');
   };
 
   const sendInvite = () => {
-    if (!invResult || invResult === 'not_found' || invResult === 'already_member') return;
-    const space = spaces.find(s => s.id === selSpace.id) || selSpace;
-    const notif = {
-      id: uid(), type: 'invite',
-      fromId: user.id, fromName: user.nickname || user.name,
-      spaceId: space.id, spaceName: space.name, spaceType: space.type,
-      message: invMsg.trim(),
-      status: 'pending', read: false,
-      createdAt: new Date().toISOString(),
-    };
-    // 수신자의 알림함에 저장 (같은 기기/localStorage 활용)
-    const recipientNotifs = ld(`wl_notifs_${invResult.id}`, []);
-    sv(`wl_notifs_${invResult.id}`, [...recipientNotifs, notif]);
-    // 초기화
-    setInvSent(true);
-    setInvEmail(''); setInvResult(null); setShowMsgInput(false); setInvMsg('');
-    setTimeout(() => setInvSent(false), 3500);
+    if (!invResult||invResult==='not_found'||invResult==='already_member') return;
+    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const notif = { id:uid(), type:'invite', fromId:user.id, fromName:user.nickname||user.name, spaceId:space.id, spaceName:space.name, spaceType:space.type, message:invMsg.trim(), status:'pending', read:false, createdAt:new Date().toISOString() };
+    sv('wl_notifs_'+invResult.id, [...ld('wl_notifs_'+invResult.id,[]), notif]);
+    setInvSent(true); setInvEmail(''); setInvResult(null); setShowMsgInput(false); setInvMsg('');
+    setTimeout(()=>setInvSent(false), 3500);
   };
 
-  const mySpaces = spaces.filter(s => s.members.find(m => m.id === user.id));
+  const addTodo = () => {
+    if (!todoForm.title.trim()) return;
+    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const assignee = space.members.find(m=>m.id===todoForm.assigneeId);
+    const todo = { id:uid(), title:todoForm.title.trim(), status:'todo', priority:todoForm.priority, dueDate:todoForm.dueDate, assigneeId:todoForm.assigneeId, assigneeName:assignee?.name||'', createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
+    updateSpace({ ...space, todos:[...(space.todos||[]), todo] });
+    setTodoForm({ title:'', priority:'medium', dueDate:'', assigneeId:'' }); setShowTodoForm(false);
+  };
+  const cycleTodo = (id) => {
+    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const order = ['todo','progress','done'];
+    updateSpace({ ...space, todos:(space.todos||[]).map(t=>t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t) });
+  };
+  const delTodo = (id) => { const s=spaces.find(x=>x.id===selSpace.id)||selSpace; updateSpace({...s,todos:(s.todos||[]).filter(t=>t.id!==id)}); };
 
-  // ── 워크스페이스 상세 뷰 ──
-  if (view === 'detail' && selSpace) {
-    const space = spaces.find(s => s.id === selSpace.id) || selSpace;
-    const wCfg = WS[space.type] || WS.personal;
-    const isOwner = space.ownerId === user.id;
+  const addEvent = () => {
+    if (!eventForm.title.trim()) return;
+    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const ev = { id:uid(), ...eventForm, title:eventForm.title.trim(), createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
+    updateSpace({ ...space, events:[...(space.events||[]), ev].sort((a,b)=>a.date.localeCompare(b.date)) });
+    setEventForm({ title:'', date:tod(), time:'', color:'#4F46E5' }); setShowEventForm(false);
+  };
+  const delEvent = (id) => { const s=spaces.find(x=>x.id===selSpace.id)||selSpace; updateSpace({...s,events:(s.events||[]).filter(e=>e.id!==id)}); };
 
+  const addComment = (text, linkedId, linkedType, linkedTitle) => {
+    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const c = { id:uid(), linkedId, linkedType, linkedTitle, authorId:user.id, authorName:user.nickname||user.name, text, replies:[], createdAt:new Date().toISOString() };
+    updateSpace({ ...space, comments:[...(space.comments||[]), c] });
+  };
+  const addReply = (commentId, text) => {
+    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const r = { id:uid(), authorId:user.id, authorName:user.nickname||user.name, text, createdAt:new Date().toISOString() };
+    updateSpace({ ...space, comments:(space.comments||[]).map(c=>c.id===commentId?{...c,replies:[...(c.replies||[]),r]}:c) });
+  };
+  const delComment = (id) => { const s=spaces.find(x=>x.id===selSpace.id)||selSpace; updateSpace({...s,comments:(s.comments||[]).filter(c=>c.id!==id)}); };
+
+  const mySpaces = spaces.filter(s=>s.members&&s.members.find(m=>m.id===user.id));
+
+  if (view==='detail'&&selSpace) {
+    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const wCfg = WS[space.type]||WS.personal;
+    const isOwner = space.ownerId===user.id;
+    const members = space.members||[];
+    const todos = space.todos||[];
+    const events = space.events||[];
+    const comments = space.comments||[];
+    const EV_COLORS = ['#4F46E5','#059669','#D97706','#DC2626','#0891B2','#BE185D'];
+    const COLS = ['todo','progress','done'];
+    const TABS = [
+      { id:'members', label:'👥 멤버', count:members.length },
+      { id:'todo', label:'✅ 할일', count:todos.filter(t=>t.status!=='done').length||0 },
+      { id:'cal', label:'📅 캘린더', count:events.length||0 },
+      { id:'comments', label:'💬 댓글', count:comments.length||0 },
+    ];
     return (
-      <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
-        <div className="fu" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <button onClick={() => { setView('list'); setInvResult(null); setInvEmail(''); setInvSent(false); }}
-            style={{ width:36,height:36,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>←</button>
-          <div>
-            <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>{space.name}</div>
-            <div style={{ fontSize:12,color:'#9CA3AF' }}>{wCfg.icon} {wCfg.label}용 · {space.members.length}명 참여 중</div>
+      <div style={{ height:'100%',display:'flex',flexDirection:'column',overflow:'hidden' }}>
+        <div style={{ padding:'14px 20px',borderBottom:'1px solid #F3F4F6',flexShrink:0,display:'flex',alignItems:'center',gap:12,background:'white' }}>
+          <button onClick={()=>{setView('list');setInvResult(null);setInvEmail('');}} style={{ width:34,height:34,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>←</button>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:17,fontWeight:900,color:'#111827' }}>{space.name}</div>
+            <div style={{ fontSize:12,color:'#9CA3AF' }}>{wCfg.icon} {wCfg.label}용 · {members.length}명</div>
           </div>
         </div>
-
-        {/* 멤버 목록 */}
-        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
-          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>👥 멤버 ({space.members.length}명)</div>
-          <div style={{ display:'flex',flexWrap:'wrap',gap:10 }}>
-            {space.members.map(m => (
-              <div key={m.id} style={{ display:'flex',alignItems:'center',gap:8,background:'#F9FAFB',borderRadius:99,padding:'7px 14px',border:'1px solid #F3F4F6' }}>
-                <div style={{ width:28,height:28,borderRadius:'50%',background:`linear-gradient(135deg,${wCfg.c},${wCfg.d})`,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:12,fontWeight:800 }}>{(m.name||'?')[0]}</div>
-                <span style={{ fontSize:13,fontWeight:600,color:'#374151' }}>{m.name}</span>
-                {m.role==='owner'&&<Badge color={wCfg.d} bg={wCfg.l}>관리자</Badge>}
-              </div>
-            ))}
-          </div>
+        <div style={{ display:'flex',borderBottom:'1px solid #F3F4F6',background:'white',flexShrink:0,padding:'0 16px',overflowX:'auto' }}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:'11px 13px',border:'none',background:'none',fontWeight:tab===t.id?800:600,fontSize:13,color:tab===t.id?wCfg.c:'#6B7280',borderBottom:'2.5px solid '+(tab===t.id?wCfg.c:'transparent'),cursor:'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap' }}>
+              {t.label}
+              {t.count>0&&<span style={{ fontSize:11,fontWeight:800,background:tab===t.id?wCfg.l:'#F3F4F6',color:tab===t.id?wCfg.c:'#9CA3AF',borderRadius:99,padding:'1px 6px' }}>{t.count}</span>}
+            </button>
+          ))}
         </div>
-
-        {/* 이메일 초대 패널 (관리자만) */}
-        {isOwner && (
-          <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
-            <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:4 }}>📧 이메일로 초대하기</div>
-            <div style={{ fontSize:12,color:'#9CA3AF',marginBottom:16 }}>Workly에 가입된 이메일로만 초대할 수 있어요</div>
-
-            {invSent && (
-              <div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:12,padding:'12px 16px',fontSize:13,fontWeight:700,color:'#059669',display:'flex',alignItems:'center',gap:10,marginBottom:16 }}>
-                <span style={{ fontSize:18 }}>✉️</span> 초대가 성공적으로 전송되었어요!
-              </div>
-            )}
-
-            <div style={{ display:'flex',gap:8,marginBottom:12 }}>
-              <input value={invEmail} onChange={e => { setInvEmail(e.target.value); setInvResult(null); }}
-                placeholder="친구의 이메일 주소 입력"
-                onKeyDown={e => e.key==='Enter'&&searchEmail()}
-                style={{ flex:1,padding:'11px 14px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:11,fontFamily:'inherit',color:'#1F2937',fontWeight:500 }}/>
-              <button onClick={searchEmail} disabled={!invEmail.trim()||searching}
-                style={{ padding:'11px 18px',borderRadius:11,border:'none',background:invEmail.trim()&&!searching?wCfg.c:'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:invEmail.trim()?'pointer':'default',display:'flex',alignItems:'center',gap:6,minWidth:72,justifyContent:'center' }}>
-                {searching?<div style={{ width:14,height:14,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .6s linear infinite' }}/>:'검색'}
-              </button>
-            </div>
-
-            {invResult==='not_found' && (
-              <div className="fu" style={{ background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:11,padding:'12px 16px',display:'flex',alignItems:'center',gap:10 }}>
-                <span style={{ fontSize:18 }}>❌</span>
-                <span style={{ fontSize:13,fontWeight:700,color:'#DC2626' }}>등록된 이메일이 없습니다.</span>
-              </div>
-            )}
-            {invResult==='already_member' && (
-              <div className="fu" style={{ background:'#FFFBEB',border:'1.5px solid #FDE68A',borderRadius:11,padding:'12px 16px',display:'flex',alignItems:'center',gap:10 }}>
-                <span style={{ fontSize:18 }}>ℹ️</span>
-                <span style={{ fontSize:13,fontWeight:700,color:'#D97706' }}>이미 이 워크스페이스의 멤버예요.</span>
-              </div>
-            )}
-            {invResult&&invResult!=='not_found'&&invResult!=='already_member'&&(
-              <div className="fu" style={{ background:'#F9FAFB',border:'1.5px solid #E5E7EB',borderRadius:14,overflow:'hidden' }}>
-                <div style={{ padding:'16px',display:'flex',alignItems:'center',gap:14 }}>
-                  <div style={{ width:50,height:50,borderRadius:'50%',background:`linear-gradient(135deg,${wCfg.c},${wCfg.d})`,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:22,fontWeight:900,flexShrink:0,overflow:'hidden' }}>
-                    {invResult.avatar?<img src={invResult.avatar} style={{ width:'100%',height:'100%',objectFit:'cover' }} alt=""/>:(invResult.nickname||invResult.name||'?')[0]}
+        <div style={{ flex:1,overflowY:'auto',padding:'20px' }}>
+          {tab==='members'&&(
+            <div>
+              <div style={{ background:'white',borderRadius:14,padding:'16px',border:'1px solid #F3F4F6',marginBottom:16 }}>
+                <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>멤버 ({members.length}명)</div>
+                {members.map(m=>(
+                  <div key={m.id} style={{ display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #F9FAFB' }}>
+                    <div style={{ width:38,height:38,borderRadius:'50%',background:'linear-gradient(135deg,'+wCfg.c+','+wCfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:15,fontWeight:900,flexShrink:0 }}>{(m.name||'?')[0]}</div>
+                    <div style={{ flex:1 }}><div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{m.name}</div></div>
+                    <Badge color={m.role==='owner'?wCfg.d:'#6B7280'} bg={m.role==='owner'?wCfg.l:'#F3F4F6'}>{m.role==='owner'?'관리자':'멤버'}</Badge>
                   </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:16,fontWeight:800,color:'#111827' }}>{invResult.nickname||invResult.name}</div>
-                    <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>{invResult.email}</div>
-                    {invResult.wsType&&<div style={{ marginTop:6 }}><Badge color={WS[invResult.wsType]?.d} bg={WS[invResult.wsType]?.l}>{WS[invResult.wsType]?.icon} {WS[invResult.wsType]?.label}</Badge></div>}
+                ))}
+              </div>
+              {isOwner&&(
+                <div style={{ background:'white',borderRadius:14,padding:'18px',border:'1px solid #F3F4F6' }}>
+                  <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:4 }}>📧 이메일로 초대</div>
+                  <div style={{ fontSize:12,color:'#9CA3AF',marginBottom:14 }}>Workly 가입된 이메일로만 초대 가능해요</div>
+                  {invSent&&<div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#059669',marginBottom:12 }}>✉️ 초대 전송됨!</div>}
+                  <div style={{ display:'flex',gap:8,marginBottom:10 }}>
+                    <input value={invEmail} onChange={e=>{setInvEmail(e.target.value);setInvResult(null);}} placeholder="이메일 주소" onKeyDown={e=>e.key==='Enter'&&searchEmail()} style={{ flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit' }}/>
+                    <button onClick={searchEmail} disabled={!invEmail.trim()||searching} style={{ padding:'10px 16px',borderRadius:10,border:'none',background:invEmail.trim()?wCfg.c:'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:'pointer',minWidth:64,display:'flex',alignItems:'center',justifyContent:'center' }}>
+                      {searching?<div style={{ width:13,height:13,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .6s linear infinite' }}/>:'검색'}
+                    </button>
                   </div>
-                  {!showMsgInput&&(
-                    <button onClick={() => setShowMsgInput(true)} style={{ padding:'9px 18px',borderRadius:99,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap' }}>초대하기</button>
+                  {invResult==='not_found'&&<div className="fu" style={{ background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#DC2626' }}>❌ 등록된 이메일이 없습니다.</div>}
+                  {invResult==='already_member'&&<div className="fu" style={{ background:'#FFFBEB',border:'1.5px solid #FDE68A',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#D97706' }}>ℹ️ 이미 멤버예요.</div>}
+                  {invResult&&invResult!=='not_found'&&invResult!=='already_member'&&(
+                    <div className="fu" style={{ background:'#F9FAFB',border:'1.5px solid #E5E7EB',borderRadius:12,overflow:'hidden' }}>
+                      <div style={{ padding:'14px',display:'flex',alignItems:'center',gap:12 }}>
+                        <div style={{ width:44,height:44,borderRadius:'50%',background:'linear-gradient(135deg,'+wCfg.c+','+wCfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:19,fontWeight:900,flexShrink:0 }}>{(invResult.nickname||invResult.name||'?')[0]}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>{invResult.nickname||invResult.name}</div>
+                          <div style={{ fontSize:12,color:'#9CA3AF' }}>{invResult.email}</div>
+                        </div>
+                        {!showMsgInput&&<button onClick={()=>setShowMsgInput(true)} style={{ padding:'8px 14px',borderRadius:99,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>초대</button>}
+                      </div>
+                      {showMsgInput&&(
+                        <div style={{ padding:'0 14px 14px',borderTop:'1px solid #F3F4F6' }}>
+                          <textarea value={invMsg} onChange={e=>setInvMsg(e.target.value)} placeholder="초대 메시지 (선택)" rows={2} style={{ width:'100%',padding:'10px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:9,resize:'none',fontFamily:'inherit',marginTop:12,marginBottom:10 }}/>
+                          <div style={{ display:'flex',gap:8 }}>
+                            <button onClick={()=>setShowMsgInput(false)} style={{ flex:1,padding:'9px',borderRadius:9,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer' }}>취소</button>
+                            <button onClick={sendInvite} style={{ flex:2,padding:'9px',borderRadius:9,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>✉️ 초대 보내기</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-                {showMsgInput&&(
-                  <div style={{ padding:'0 16px 16px',borderTop:'1px solid #F3F4F6' }}>
-                    <div style={{ paddingTop:14,marginBottom:10 }}>
-                      <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>초대 메시지 (선택)</div>
-                      <textarea value={invMsg} onChange={e => setInvMsg(e.target.value)}
-                        placeholder='예: 안녕! 우리 같이 이 워크스페이스 써보자 😊'
-                        rows={3}
-                        style={{ width:'100%',padding:'10px 12px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,resize:'none',fontFamily:'inherit',lineHeight:1.55 }}/>
+              )}
+            </div>
+          )}
+          {tab==='todo'&&(
+            <div>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
+                <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>공유 할일</div>
+                <button onClick={()=>setShowTodoForm(p=>!p)} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
+              </div>
+              {showTodoForm&&(
+                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+wCfg.m,marginBottom:16 }}>
+                  <Field value={todoForm.title} onChange={v=>setTodoForm(p=>({...p,title:v}))} label="할일 제목" placeholder="할일을 입력하세요" required/>
+                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+                    <Select label="우선순위" value={todoForm.priority} onChange={v=>setTodoForm(p=>({...p,priority:v}))} options={Object.entries(PRIO).map(([k,v])=>({value:k,label:v.l}))}/>
+                    <Field value={todoForm.dueDate} onChange={v=>setTodoForm(p=>({...p,dueDate:v}))} label="마감일" type="date"/>
+                  </div>
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em' }}>담당자</div>
+                    <select value={todoForm.assigneeId} onChange={e=>setTodoForm(p=>({...p,assigneeId:e.target.value}))} style={{ width:'100%',padding:'10px 13px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:10,background:'white' }}>
+                      <option value="">담당자 없음</option>
+                      {members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display:'flex',gap:8 }}>
+                    <Btn onClick={()=>setShowTodoForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+                    <Btn onClick={addTodo} bg={wCfg.c} disabled={!todoForm.title.trim()} style={{ flex:2 }}>추가</Btn>
+                  </div>
+                </div>
+              )}
+              <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12 }}>
+                {COLS.map(col=>{
+                  const colTodos = todos.filter(t=>t.status===col);
+                  const S = STAT[col];
+                  return (
+                    <div key={col}>
+                      <div style={{ display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:S.bg,borderRadius:9,marginBottom:10 }}>
+                        <span style={{ fontSize:12 }}>{S.icon}</span>
+                        <span style={{ fontSize:12,fontWeight:800,color:S.c }}>{S.l}</span>
+                        <span style={{ marginLeft:'auto',fontSize:11,fontWeight:700,color:S.c,background:'white',borderRadius:99,padding:'1px 6px' }}>{colTodos.length}</span>
+                      </div>
+                      {colTodos.length===0&&<div style={{ textAlign:'center',padding:'20px 8px',color:'#D1D5DB',fontSize:12 }}>없음</div>}
+                      {colTodos.map(t=>(
+                        <div key={t.id} style={{ background:'white',borderRadius:12,padding:'12px',border:'1px solid #F3F4F6',marginBottom:8,boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+                          <div style={{ display:'flex',justifyContent:'space-between',gap:6,marginBottom:8 }}>
+                            <div style={{ fontSize:13,fontWeight:700,color:'#111827',lineHeight:1.4,textDecoration:t.status==='done'?'line-through':'none',opacity:t.status==='done'?.6:1 }}>{t.title}</div>
+                            <button onClick={()=>delTodo(t.id)} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:12,flexShrink:0 }}>✕</button>
+                          </div>
+                          <div style={{ display:'flex',gap:4,flexWrap:'wrap',marginBottom:8 }}>
+                            <Badge color={PRIO[t.priority]&&PRIO[t.priority].c} bg={PRIO[t.priority]&&PRIO[t.priority].bg}>{PRIO[t.priority]&&PRIO[t.priority].l}</Badge>
+                            {t.dueDate&&<Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(t.dueDate)}</Badge>}
+                            {t.assigneeName&&<Badge color={wCfg.d} bg={wCfg.l}>👤 {t.assigneeName}</Badge>}
+                          </div>
+                          <div style={{ display:'flex',gap:6 }}>
+                            <button onClick={()=>cycleTodo(t.id)} style={{ flex:1,padding:'5px 8px',borderRadius:7,border:'1px solid '+wCfg.m,background:wCfg.l,color:wCfg.d,fontSize:11,fontWeight:700,cursor:'pointer' }}>상태 변경</button>
+                            <button onClick={()=>setCommentModal({id:t.id,type:'todo',title:t.title})} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:11,fontWeight:700,cursor:'pointer' }}>
+                              {'💬 '+(comments.filter(c=>c.linkedId===t.id).length||'')}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {tab==='cal'&&(
+            <div>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
+                <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>공유 일정</div>
+                <button onClick={()=>setShowEventForm(p=>!p)} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
+              </div>
+              {showEventForm&&(
+                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+wCfg.m,marginBottom:16 }}>
+                  <Field value={eventForm.title} onChange={v=>setEventForm(p=>({...p,title:v}))} label="일정 제목" placeholder="일정 제목 입력" required/>
+                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+                    <Field value={eventForm.date} onChange={v=>setEventForm(p=>({...p,date:v}))} label="날짜" type="date"/>
+                    <Field value={eventForm.time} onChange={v=>setEventForm(p=>({...p,time:v}))} label="시간" placeholder="14:00"/>
+                  </div>
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>색상</div>
                     <div style={{ display:'flex',gap:8 }}>
-                      <button onClick={() => setShowMsgInput(false)} style={{ flex:1,padding:'10px',borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer' }}>취소</button>
-                      <button onClick={sendInvite} style={{ flex:2,padding:'10px',borderRadius:10,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6 }}>
-                        ✉️ 초대 보내기
-                      </button>
+                      {EV_COLORS.map(c=><button key={c} onClick={()=>setEventForm(p=>({...p,color:c}))} style={{ width:26,height:26,borderRadius:'50%',background:c,border:eventForm.color===c?'3px solid #111827':'3px solid transparent',cursor:'pointer' }}/>)}
                     </div>
                   </div>
-                )}
+                  <div style={{ display:'flex',gap:8 }}>
+                    <Btn onClick={()=>setShowEventForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+                    <Btn onClick={addEvent} bg={wCfg.c} disabled={!eventForm.title.trim()} style={{ flex:2 }}>추가</Btn>
+                  </div>
+                </div>
+              )}
+              {events.length===0&&<Empty icon="📅" title="일정이 없어요" desc="+ 추가 버튼으로 팀 일정을 추가하세요"/>}
+              {events.map(ev=>(
+                <div key={ev.id} style={{ background:'white',borderRadius:13,padding:'14px 16px',border:'1px solid #F3F4F6',marginBottom:10,display:'flex',gap:12,alignItems:'center' }}>
+                  <div style={{ width:4,alignSelf:'stretch',borderRadius:2,background:ev.color||wCfg.c,flexShrink:0 }}/>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14,fontWeight:700,color:'#111827',marginBottom:4 }}>{ev.title}</div>
+                    <div style={{ fontSize:12,color:'#6B7280' }}>{'📅 '+fmtFull(ev.date)+(ev.time?' · 🕐 '+ev.time:'')}</div>
+                    <div style={{ fontSize:11,color:'#9CA3AF',marginTop:2 }}>등록: {ev.createdByName}</div>
+                  </div>
+                  <div style={{ display:'flex',gap:6 }}>
+                    <button onClick={()=>setCommentModal({id:ev.id,type:'event',title:ev.title})} style={{ padding:'6px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:12,fontWeight:700,cursor:'pointer' }}>
+                      {'💬 '+(comments.filter(c=>c.linkedId===ev.id).length||'댓글')}
+                    </button>
+                    <button onClick={()=>delEvent(ev.id)} style={{ padding:'6px 8px',borderRadius:8,border:'1px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,cursor:'pointer' }}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab==='comments'&&(
+            <div>
+              <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:16 }}>전체 댓글</div>
+              <CommentSection comments={comments} members={members} user={user} onAddComment={addComment} onAddReply={addReply} onDelete={delComment} accentColor={wCfg.c}/>
+            </div>
+          )}
+        </div>
+        {commentModal&&(
+          <div style={{ position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.4)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center' }}
+            onClick={e=>e.target===e.currentTarget&&setCommentModal(null)}>
+            <div className="fu" style={{ background:'white',borderRadius:'20px 20px 0 0',width:'100%',maxWidth:640,maxHeight:'75vh',display:'flex',flexDirection:'column',boxShadow:'0 -8px 40px rgba(0,0,0,.15)' }}>
+              <div style={{ padding:'16px 20px',borderBottom:'1px solid #F3F4F6',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+                <div>
+                  <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:2 }}>{commentModal.type==='todo'?'✅ 할일':'📅 일정'}에 댓글</div>
+                  <div style={{ fontSize:15,fontWeight:800,color:'#111827' }}>{commentModal.title}</div>
+                </div>
+                <button onClick={()=>setCommentModal(null)} style={{ width:30,height:30,borderRadius:8,border:'none',background:'#F9FAFB',color:'#6B7280',fontSize:14,cursor:'pointer' }}>✕</button>
               </div>
-            )}
-          </div>
-        )}
-
-        {space.description&&(
-          <div style={{ background:'white',borderRadius:14,padding:'16px',border:'1px solid #F3F4F6' }}>
-            <div style={{ fontSize:13,fontWeight:800,color:'#111827',marginBottom:6 }}>설명</div>
-            <div style={{ fontSize:14,color:'#6B7280',lineHeight:1.6 }}>{space.description}</div>
+              <div style={{ flex:1,overflowY:'auto',padding:'16px 20px' }}>
+                <CommentSection
+                  comments={comments.filter(c=>c.linkedId===commentModal.id)}
+                  members={members} user={user}
+                  onAddComment={(text)=>addComment(text,commentModal.id,commentModal.type,commentModal.title)}
+                  onAddReply={addReply} onDelete={delComment} accentColor={wCfg.c}/>
+              </div>
+            </div>
           </div>
         )}
       </div>
     );
   }
 
-  // ── 워크스페이스 목록 ──
   return (
     <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
       <div className="fu" style={{ marginBottom:24 }}>
         <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>👥 협업 워크스페이스</div>
         <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>팀원들과 함께 작업하는 공간이에요</div>
       </div>
-
       {view!=='create'&&(
-        <button onClick={() => setView('create')} style={{ width:'100%',padding:'20px',borderRadius:16,border:`2px dashed ${cfg.c}`,background:cfg.l,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',gap:14,textAlign:'left' }}>
+        <button onClick={()=>setView('create')} style={{ width:'100%',padding:'20px',borderRadius:16,border:'2px dashed '+cfg.c,background:cfg.l,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',gap:14,textAlign:'left' }}>
           <div style={{ width:48,height:48,borderRadius:14,background:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,.08)' }}>＋</div>
           <div>
             <div style={{ fontSize:15,fontWeight:800,color:cfg.c }}>새 워크스페이스 만들기</div>
@@ -1635,34 +1879,36 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
           </div>
         </button>
       )}
-
       {view==='create'&&(
         <div className="fu" style={{ background:'white',borderRadius:16,padding:'20px',border:'1px solid #F3F4F6',marginBottom:20 }}>
           <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:16 }}>새 워크스페이스 만들기</div>
-          <Field value={form.name} onChange={v => setForm(p=>({...p,name:v}))} label="이름" placeholder="예: 3학년 2반, 마케팅팀" required/>
-          <Field value={form.description} onChange={v => setForm(p=>({...p,description:v}))} label="설명" placeholder="워크스페이스 설명 (선택)" rows={2}/>
-          <Select label="유형" value={form.type} onChange={v => setForm(p=>({...p,type:v}))} options={Object.entries(WS).map(([k,v])=>({value:k,label:`${v.icon} ${v.label}용`}))}/>
+          <Field value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} label="이름" placeholder="예: 3학년 2반, 마케팅팀" required/>
+          <Field value={form.description} onChange={v=>setForm(p=>({...p,description:v}))} label="설명" placeholder="설명 (선택)" rows={2}/>
+          <Select label="유형" value={form.type} onChange={v=>setForm(p=>({...p,type:v}))} options={Object.entries(WS).map(([k,v])=>({value:k,label:v.icon+' '+v.label+'용'}))}/>
           <div style={{ display:'flex',gap:10 }}>
-            <Btn onClick={() => setView('list')} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={()=>setView('list')} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
             <Btn onClick={createSpace} bg={cfg.c} disabled={!form.name.trim()} style={{ flex:2 }}>만들기</Btn>
           </div>
         </div>
       )}
-
       {mySpaces.length>0&&(
         <>
           <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:12 }}>내 워크스페이스</div>
-          {mySpaces.map(s => {
+          {mySpaces.map(s=>{
             const wCfg=WS[s.type]||WS.personal;
             return (
-              <div key={s.id} onClick={() => { setSelSpace(s); setView('detail'); setInvResult(null); setInvEmail(''); }}
+              <div key={s.id} onClick={()=>{setSelSpace(s);setTab('members');setView('detail');setInvResult(null);setInvEmail('');}}
                 style={{ background:'white',borderRadius:14,padding:'16px 18px',border:'1px solid #F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',gap:14,marginBottom:10,boxShadow:'0 2px 8px rgba(0,0,0,.04)',transition:'all .15s' }}
                 onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)';e.currentTarget.style.transform='translateY(-1px)';}}
                 onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';e.currentTarget.style.transform='translateY(0)';}}>
                 <div style={{ width:46,height:46,borderRadius:13,background:wCfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0 }}>{wCfg.icon}</div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:2 }}>{s.name}</div>
-                  <div style={{ fontSize:12,color:'#9CA3AF' }}>{s.members.length}명 · {wCfg.label}용{s.ownerId===user.id?' · 관리자':''}</div>
+                  <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:3 }}>{s.name}</div>
+                  <div style={{ fontSize:12,color:'#9CA3AF',display:'flex',gap:10 }}>
+                    <span>{'👥 '+(s.members&&s.members.length||1)+'명'}</span>
+                    <span>{'✅ '+((s.todos||[]).filter(t=>t.status!=='done').length)+'개 진행중'}</span>
+                    {(s.comments||[]).length>0&&<span>{'💬 '+(s.comments||[]).length}</span>}
+                  </div>
                 </div>
                 <span style={{ fontSize:16,color:'#D1D5DB' }}>›</span>
               </div>
@@ -1670,7 +1916,6 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
           })}
         </>
       )}
-
       {mySpaces.length===0&&view!=='create'&&<Empty icon="👥" title="참여 중인 워크스페이스가 없어요" desc="새 워크스페이스를 만들거나 초대를 기다려보세요"/>}
     </div>
   );
