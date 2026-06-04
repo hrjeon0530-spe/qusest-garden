@@ -1,539 +1,219 @@
 import { useState, useEffect, useRef } from "react";
 
-/* ── COLORS ── */
-const P = '#7C3AED', PD = '#5B21B6', PM = '#6D28D9', PL = '#EDE9FE', PP = '#F5F3FF';
-const G = '#10B981', GD = '#059669', GL = '#D1FAE5';
-const BD = 'rgba(124,58,237,0.13)';
-
-const track = (eventName, params = {}) => {
-  // 이벤트 추적 비활성화 (Supabase 제거)
+/* ══════════════════════════════════════════════════════════
+   WORKSPACE TYPE CONFIG
+══════════════════════════════════════════════════════════ */
+const WS = {
+  school: {
+    label: '학교', icon: '🎓', c: '#2563EB', l: '#EFF6FF', d: '#1D4ED8', m: '#DBEAFE',
+    tagline: '과제, 노트, 일정을 한 곳에서',
+    perks: ['📚 과제 트래커', '📝 수업 노트', '📅 시험 캘린더', '✅ 할일 관리'],
+    nav: [
+      { id:'home',    e:'🏠', n:'홈' },
+      { id:'todo',    e:'✅', n:'할일' },
+      { id:'cal',     e:'📅', n:'캘린더' },
+      { id:'assign',  e:'📚', n:'과제' },
+      { id:'notes',   e:'📝', n:'노트' },
+    ],
+  },
+  company: {
+    label: '회사', icon: '💼', c: '#0F766E', l: '#F0FDFA', d: '#0D5C56', m: '#CCFBF1',
+    tagline: '업무, 회의, 프로젝트를 효율적으로',
+    perks: ['✅ 업무 관리', '🎙️ 회의록', '📊 프로젝트 보드', '👥 팀 협업'],
+    nav: [
+      { id:'home',     e:'🏠', n:'홈' },
+      { id:'todo',     e:'✅', n:'업무' },
+      { id:'cal',      e:'📅', n:'일정' },
+      { id:'meetings', e:'🎙️', n:'회의' },
+      { id:'projects', e:'📊', n:'프로젝트' },
+    ],
+  },
+  personal: {
+    label: '개인', icon: '✨', c: '#7C3AED', l: '#F5F3FF', d: '#5B21B6', m: '#EDE9FE',
+    tagline: '목표, 습관, 일상을 체계적으로',
+    perks: ['🎯 목표 트래커', '💪 습관 관리', '📖 개인 일기', '📅 일정 관리'],
+    nav: [
+      { id:'home',  e:'🏠', n:'홈' },
+      { id:'todo',  e:'✅', n:'할일' },
+      { id:'cal',   e:'📅', n:'캘린더' },
+      { id:'goals', e:'🎯', n:'목표' },
+      { id:'jour',  e:'📖', n:'일기' },
+    ],
+  },
 };
 
-/* ── UTILS ── */
-const uid = () => Math.random().toString(36).slice(2, 9);
-const today = () => new Date().toDateString();
-const rn = (s) => ((s * 9301 + 49297) % 233280) / 233280;
-
-const beep = () => {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [[440, 0], [554, 0.2], [660, 0.4]].forEach(([f, t]) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = f; o.type = 'sine';
-      g.gain.setValueAtTime(0.25, ctx.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.4);
-      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.5);
-    });
-  } catch (e) {}
+const PRIO = {
+  high:   { l:'높음', c:'#DC2626', bg:'#FEF2F2', border:'#FECACA' },
+  medium: { l:'중간', c:'#D97706', bg:'#FFFBEB', border:'#FDE68A' },
+  low:    { l:'낮음', c:'#059669', bg:'#ECFDF5', border:'#A7F3D0' },
 };
 
-/* ── THEMES ── */
+const STAT = {
+  todo:     { l:'할일',  c:'#6B7280', bg:'#F9FAFB', icon:'○' },
+  progress: { l:'진행중', c:'#2563EB', bg:'#EFF6FF', icon:'◐' },
+  done:     { l:'완료',  c:'#059669', bg:'#ECFDF5', icon:'●' },
+};
+
+const MOOD = ['😞','😕','😐','😊','😄'];
+
+/* ══════════════════════════════════════════════════════════
+   THEMES — 이미지의 뽀용한 파스텔 색감 기반 7가지 테마
+══════════════════════════════════════════════════════════ */
 const THEMES = {
-  city:    { n: '도시',     e: '🏙️',  hasDN: true,  kw: ['도시','빌딩','city','urban','밤','타워','골목'] },
-  nature:  { n: '자연',     e: '🌿',  hasDN: false, kw: ['자연','공원','들판','풀밭','녹색'] },
-  forest:  { n: '숲',       e: '🌲',  hasDN: false, kw: ['숲','나무','밀림','깊은','forest'] },
-  spring:  { n: '봄',       e: '🌸',  hasDN: false, kw: ['봄','꽃','flower','따뜻','봄날'] },
-  summer:  { n: '여름',     e: '☀️', hasDN: false, kw: ['여름','더위','해변','바다','beach'] },
-  autumn:  { n: '가을',     e: '🍂',  hasDN: false, kw: ['가을','단풍','낙엽','수확','선선'] },
-  winter:  { n: '겨울',     e: '❄️',  hasDN: false, kw: ['겨울','눈','snow','크리스마스','추위'] },
-  space:   { n: '우주',     e: '🌌',  hasDN: false, kw: ['우주','space','별','행성','galaxy','은하'] },
-  ocean:   { n: '바다',     e: '🌊',  hasDN: false, kw: ['바다','ocean','sea','파도','산호'] },
-  desert:  { n: '사막',     e: '🏜️', hasDN: true,  kw: ['사막','모래','건조','피라미드','낙타'] },
-  fantasy: { n: '판타지',   e: '🏰',  hasDN: false, kw: ['판타지','마법','castle','성','드래곤'] },
-  sakura:  { n: '벚꽃길',   e: '🌺',  hasDN: false, kw: ['벚꽃','sakura','연분홍'] },
-  rain:    { n: '비오는날', e: '🌧️', hasDN: false, kw: ['비','rain','우울','흐린','폭풍'] },
-  sunset:  { n: '노을',     e: '🌅',  hasDN: false, kw: ['노을','sunset','저녁','황혼','오렌지'] },
-  yard:    { n: '주택마당',  e: '🏡',  hasDN: true,  kw: ['주택','마당','집','yard','house','정원','뜰','한옥','깔끔','주거','동네','골목','마을'] },
-  mediter: { n: '지중해',   e: '🏖️', hasDN: false, kw: ['지중해','mediterranean','해안','코발트','테라코타','흰벽','거실','터키블루','에게해','그리스','이탈리아','프로방스','리조트','빌라','해변거실','해안가'] },
+  default: {
+    id:'default', name:'기본', emoji:'⚪', desc:'깔끔한 화이트',
+    sidebarBg:'#FFFFFF', sidebarBorder:'#F3F4F6',
+    navActiveBg:null, // wsType 색상 사용
+    pageBg:'#F8FAFC',
+    cardBg:'#FFFFFF', cardBorder:'#F3F4F6',
+    navTextColor:'#6B7280', navTextActive:null,
+    preview:['#FFFFFF','#F3F4F6','#E5E7EB'],
+  },
+  bbosung: {
+    id:'bbosung', name:'뽀송이', emoji:'🌸', desc:'달콤한 코튼캔디 핑크',
+    sidebarBg:'#FFF0F6', sidebarBorder:'#FFD6E8',
+    navActiveBg:'#FFD6E8',
+    pageBg:'#FFF5FA',
+    cardBg:'#FFFFFF', cardBorder:'#FFE4EF',
+    navTextColor:'#C47BA0', navTextActive:'#A8517A',
+    preview:['#FFF0F6','#FFD6E8','#F8A8C4'],
+  },
+  mintChoco: {
+    id:'mintChoco', name:'민트초코', emoji:'🍃', desc:'상쾌한 민트 파스텔',
+    sidebarBg:'#F0FAF5', sidebarBorder:'#C4E8D4',
+    navActiveBg:'#C4E8D4',
+    pageBg:'#F5FBF7',
+    cardBg:'#FFFFFF', cardBorder:'#D4EFE0',
+    navTextColor:'#5C9B78', navTextActive:'#3A7A58',
+    preview:['#F0FAF5','#C4E8D4','#8BCCA8'],
+  },
+  butterLemon: {
+    id:'butterLemon', name:'버터레몬', emoji:'🌼', desc:'따뜻한 버터 옐로우',
+    sidebarBg:'#FFFEF0', sidebarBorder:'#FFF0B3',
+    navActiveBg:'#FFF0B3',
+    pageBg:'#FFFEF5',
+    cardBg:'#FFFFFF', cardBorder:'#FFF5C0',
+    navTextColor:'#B89A2C', navTextActive:'#8C7520',
+    preview:['#FFFEF0','#FFF0B3','#F5D65C'],
+  },
+  lavender: {
+    id:'lavender', name:'라벤더', emoji:'💜', desc:'몽환적인 소프트 퍼플',
+    sidebarBg:'#F5F0FF', sidebarBorder:'#DDD0FF',
+    navActiveBg:'#DDD0FF',
+    pageBg:'#FAF7FF',
+    cardBg:'#FFFFFF', cardBorder:'#E8DCFF',
+    navTextColor:'#8B6DC4', navTextActive:'#6B4DA8',
+    preview:['#F5F0FF','#DDD0FF','#BBA8F0'],
+  },
+  rosePink: {
+    id:'rosePink', name:'로즈쿼츠', emoji:'🌷', desc:'부드러운 더스티 로즈',
+    sidebarBg:'#FAF0F4', sidebarBorder:'#F0C8D8',
+    navActiveBg:'#F0C8D8',
+    pageBg:'#FDF5F8',
+    cardBg:'#FFFFFF', cardBorder:'#F5D4E4',
+    navTextColor:'#C4788C', navTextActive:'#A05A70',
+    preview:['#FAF0F4','#F0C8D8','#E8A0B4'],
+  },
+  powderBlue: {
+    id:'powderBlue', name:'파우더블루', emoji:'💙', desc:'시원한 파우더 블루',
+    sidebarBg:'#F0F5FF', sidebarBorder:'#C8D8F0',
+    navActiveBg:'#C8D8F0',
+    pageBg:'#F5F8FF',
+    cardBg:'#FFFFFF', cardBorder:'#D4E0F5',
+    navTextColor:'#5A88C4', navTextActive:'#3A68A8',
+    preview:['#F0F5FF','#C8D8F0','#90B4E0'],
+  },
+  peachCream: {
+    id:'peachCream', name:'피치크림', emoji:'🍑', desc:'복숭아빛 크리미 톤',
+    sidebarBg:'#FFF3EE', sidebarBorder:'#FFD4BE',
+    navActiveBg:'#FFD4BE',
+    pageBg:'#FFF8F5',
+    cardBg:'#FFFFFF', cardBorder:'#FFE0D0',
+    navTextColor:'#C4784A', navTextActive:'#A05830',
+    preview:['#FFF3EE','#FFD4BE','#F5B090'],
+  },
 };
 
-const matchTheme = (txt) => {
-  const t = (txt || '').toLowerCase();
-  if (['지중해','mediterranean','에게해','그리스','이탈리아','프로방스','코발트','흰벽','테라코타'].some(w => t.includes(w))) return 'mediter';
-  if (['주택마당','주택','마당','뜰','한옥'].some(w => t.includes(w))) return 'yard';
-  if (['우주','은하','행성','로켓','galaxy'].some(w => t.includes(w))) return 'space';
-  if (['판타지','드래곤','마법','castle','성'].some(w => t.includes(w))) return 'fantasy';
-  if (['벚꽃','sakura','연분홍'].some(w => t.includes(w))) return 'sakura';
-  if (['노을','황혼','sunset'].some(w => t.includes(w))) return 'sunset';
-  if (['비오는','폭풍','흐린'].some(w => t.includes(w))) return 'rain';
-  let best = 'city', best_s = 0;
-  Object.entries(THEMES).forEach(([k, v]) => {
-    const sc = v.kw.filter(w => t.includes(w)).length;
-    if (sc > best_s) { best_s = sc; best = k; }
-  });
-  return best;
+/* ══════════════════════════════════════════════════════════
+   ICON SETS — 사이드바 네비게이션 아이콘 스타일
+══════════════════════════════════════════════════════════ */
+const ICON_SETS = {
+  default: {
+    id:'default', name:'기본', preview:'🏠',
+    home:'🏠', todo:'✅', cal:'📅', assign:'📚', notes:'📝',
+    meetings:'🎙️', projects:'📊', goals:'🎯', jour:'📖',
+    workspace:'👥', notif:'🔔', template:'🎨', profile:'👤',
+  },
+  star: {
+    id:'star', name:'별빛', preview:'⭐',
+    home:'⭐', todo:'✨', cal:'🌙', assign:'📖', notes:'💫',
+    meetings:'🌟', projects:'🪄', goals:'🌠', jour:'✨',
+    workspace:'💫', notif:'🔔', template:'✨', profile:'🌟',
+  },
+  flower: {
+    id:'flower', name:'꽃밭', preview:'🌸',
+    home:'🌸', todo:'🌷', cal:'🌼', assign:'🌺', notes:'🌻',
+    meetings:'🌹', projects:'💐', goals:'🌿', jour:'🍀',
+    workspace:'🌱', notif:'🔔', template:'🎀', profile:'🌸',
+  },
+  minimal: {
+    id:'minimal', name:'미니멀', preview:'○',
+    home:'◎', todo:'□', cal:'△', assign:'◇', notes:'○',
+    meetings:'▷', projects:'▣', goals:'◉', jour:'◈',
+    workspace:'▣', notif:'●', template:'◈', profile:'○',
+  },
 };
 
-/* ── REWARD CATEGORIES ── */
-const RCATS = {
-  city:    { n: '도시',   c: '#475569', e: '🏙️', items: [{id:'car',e:'🚗',n:'자동차'},{id:'bus',e:'🚌',n:'버스'},{id:'trf',e:'🚦',n:'신호등'},{id:'bld',e:'🏢',n:'빌딩'},{id:'brg',e:'🌉',n:'다리'},{id:'sub',e:'🚇',n:'지하철'},{id:'crn',e:'🏗️',n:'크레인'},{id:'taxi',e:'🚕',n:'택시'}] },
-  nature:  { n: '자연',   c: '#16A34A', e: '🌿', items: [{id:'flw',e:'🌺',n:'꽃'},{id:'tre',e:'🌳',n:'나무'},{id:'but',e:'🦋',n:'나비'},{id:'bir',e:'🐦',n:'새'},{id:'bee',e:'🐝',n:'꿀벌'},{id:'rbo',e:'🌈',n:'무지개'},{id:'sun2',e:'☀️',n:'해'},{id:'cld',e:'☁️',n:'구름'}] },
-  forest:  { n: '숲',     c: '#15803D', e: '🌲', items: [{id:'msh',e:'🍄',n:'버섯'},{id:'pin',e:'🌲',n:'소나무'},{id:'fox',e:'🦊',n:'여우'},{id:'owl',e:'🦉',n:'부엉이'},{id:'acn',e:'🌰',n:'도토리'},{id:'lef',e:'🍃',n:'잎'},{id:'der',e:'🦌',n:'사슴'},{id:'frn',e:'🌿',n:'양치류'}] },
-  spring:  { n: '봄',     c: '#DB2777', e: '🌸', items: [{id:'skr',e:'🌸',n:'벚꽃'},{id:'tlp',e:'🌷',n:'튤립'},{id:'dsy',e:'🌼',n:'데이지'},{id:'bug',e:'🐞',n:'무당벌레'},{id:'chk',e:'🐣',n:'병아리'},{id:'sdl',e:'🌱',n:'새싹'},{id:'kit',e:'🪁',n:'연'},{id:'pch',e:'🍑',n:'복숭아'}] },
-  summer:  { n: '여름',   c: '#D97706', e: '☀️', items: [{id:'wml',e:'🍉',n:'수박'},{id:'ice',e:'🍦',n:'아이스크림'},{id:'sfr',e:'🌻',n:'해바라기'},{id:'crb',e:'🦀',n:'게'},{id:'shl',e:'🐚',n:'조개'},{id:'par',e:'⛱️',n:'파라솔'},{id:'fsh',e:'🐠',n:'열대어'},{id:'wav',e:'🌊',n:'파도'}] },
-  autumn:  { n: '가을',   c: '#C2410C', e: '🍂', items: [{id:'mpl',e:'🍁',n:'단풍'},{id:'wht',e:'🌾',n:'수확'},{id:'pmp',e:'🎃',n:'호박'},{id:'nut',e:'🌰',n:'밤'},{id:'grp',e:'🍇',n:'포도'},{id:'ms2',e:'🍄',n:'버섯'},{id:'mn2',e:'🌕',n:'보름달'},{id:'wnd',e:'🌬️',n:'바람'}] },
-  winter:  { n: '겨울',   c: '#1D4ED8', e: '❄️', items: [{id:'snm',e:'⛄',n:'눈사람'},{id:'flk',e:'❄️',n:'눈송이'},{id:'cco',e:'☕',n:'코코아'},{id:'mtt',e:'🧤',n:'장갑'},{id:'hat',e:'🎩',n:'모자'},{id:'pgn',e:'🐧',n:'펭귄'},{id:'sld',e:'🛷',n:'썰매'},{id:'crs',e:'💎',n:'크리스탈'}] },
-  space:   { n: '우주',   c: '#7C3AED', e: '🌌', items: [{id:'plt',e:'🪐',n:'행성'},{id:'rkt',e:'🚀',n:'로켓'},{id:'str',e:'⭐',n:'별'},{id:'mon',e:'🌙',n:'달'},{id:'ufo',e:'🛸',n:'UFO'},{id:'cmt',e:'☄️',n:'혜성'},{id:'ast',e:'👨‍🚀',n:'우주인'},{id:'gal',e:'🌌',n:'은하'}] },
-  ocean:   { n: '바다',   c: '#0369A1', e: '🌊', items: [{id:'whl',e:'🐋',n:'고래'},{id:'dlp',e:'🐬',n:'돌고래'},{id:'oct',e:'🐙',n:'문어'},{id:'crl',e:'🪸',n:'산호'},{id:'jly',e:'🪼',n:'해파리'},{id:'anc',e:'⚓',n:'닻'},{id:'shp',e:'⛵',n:'배'},{id:'lth',e:'🏠',n:'등대'}] },
-  desert:  { n: '사막',   c: '#B45309', e: '🏜️', items: [{id:'cct',e:'🌵',n:'선인장'},{id:'cml',e:'🐪',n:'낙타'},{id:'scp',e:'🦂',n:'전갈'},{id:'pyr',e:'🏛️',n:'피라미드'},{id:'oas',e:'🌴',n:'오아시스'},{id:'snd',e:'⏳',n:'모래시계'},{id:'lzd',e:'🦎',n:'도마뱀'},{id:'srp',e:'🐍',n:'뱀'}] },
-  fantasy: { n: '판타지', c: '#7E22CE', e: '🏰', items: [{id:'cst',e:'🏰',n:'성'},{id:'drg',e:'🐉',n:'드래곤'},{id:'mag',e:'✨',n:'마법'},{id:'bal',e:'🔮',n:'수정구슬'},{id:'crw',e:'👑',n:'왕관'},{id:'swd',e:'⚔️',n:'검'},{id:'uni',e:'🦄',n:'유니콘'},{id:'fry',e:'🧚',n:'요정'}] },
+/* ══════════════════════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════════════════════ */
+const uid = () => Math.random().toString(36).slice(2, 9);
+const tod = () => new Date().toISOString().split('T')[0];
+const gc = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+const ld = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? JSON.stringify(d)); } catch { return d; } };
+const sv = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const moNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const dayNames = ['일','월','화','수','목','금','토'];
+const fmtD = (d) => { if (!d) return ''; const dt = new Date(d + 'T00:00:00'); return `${dt.getMonth()+1}/${dt.getDate()}(${dayNames[dt.getDay()]})`; };
+const fmtFull = (d) => { if (!d) return ''; const dt = new Date(d + 'T00:00:00'); return `${dt.getFullYear()}년 ${dt.getMonth()+1}월 ${dt.getDate()}일`; };
+const dimMo = (y, m) => new Date(y, m + 1, 0).getDate();
+const firstDay = (y, m) => new Date(y, m, 1).getDay();
+const timeAgo = (iso) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return '방금 전';
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
 };
 
-const getAllItems = () =>
-  Object.entries(RCATS).flatMap(([k, v]) => v.items.map(it => ({ ...it, catKey: k })));
-
-const rndRewardFull = () => {
-  const keys = Object.keys(RCATS);
-  const k = keys[Math.floor(Math.random() * keys.length)];
-  const it = RCATS[k].items[Math.floor(Math.random() * RCATS[k].items.length)];
-  return { ...it, catKey: k };
-};
-
-/* ── CONFETTI ── */
-const CCOLS = ['#7C3AED','#10B981','#F59E0B','#EF4444','#3B82F6','#EC4899','#8B5CF6','#34D399'];
-
-function Confetti({ onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 4000); return () => clearTimeout(t); }, []);
-  const pieces = Array.from({ length: 70 }, (_, i) => ({
-    id: i, color: CCOLS[i % CCOLS.length],
-    left: rn(i * 7) * 108 - 3,
-    startY: rn(i) > 0.5 ? '-18px' : '108vh',
-    dur: (1.5 + rn(i * 2) * 2).toFixed(2) + 's',
-    delay: (rn(i * 11) * 0.9).toFixed(2) + 's',
-    to: (rn(i) > 0.5 ? 1 : -1) * (44 + rn(i * 3) * 70) + 'vh',
-    size: 7 + rn(i * 13) * 10,
-    round: rn(i) > 0.5,
-  }));
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 500, overflow: 'hidden', pointerEvents: 'none' }}>
-      {pieces.map(p => (
-        <div key={p.id} style={{
-          position: 'absolute', left: p.left + '%', top: p.startY,
-          width: p.size, height: p.size, background: p.color,
-          borderRadius: p.round ? '50%' : '3px',
-          animation: `qgConfetti ${p.dur} ease-out ${p.delay} forwards`,
-          '--to': p.to,
-        }} />
-      ))}
-    </div>
-  );
-}
-
-/* ── SVG BACKGROUNDS ── */
-function CityBg({ isDark }) {
-  const blds = [[0,85,245],[72,60,318],[134,108,182],[238,72,368],[306,52,272],[352,130,170],[474,68,302],[540,102,248],[638,56,340],[690,124,213],[808,78,290],[882,82,202],[960,60,275]];
-  const gy = 490;
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="csky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={isDark ? '#010915' : '#1565C0'} />
-          <stop offset="55%" stopColor={isDark ? '#0A1832' : '#42A5F5'} />
-          <stop offset="100%" stopColor={isDark ? '#101E3A' : '#90CAF9'} />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#csky)" />
-      {isDark && Array.from({ length: 90 }, (_, i) => (
-        <circle key={i} cx={rn(i * 7) * 1024} cy={rn(i * 13) * 390} r={0.4 + rn(i * 3) * 1.4} fill="#FFF" opacity={0.3 + rn(i * 11) * 0.6} />
-      ))}
-      {isDark && <><circle cx="820" cy="80" r="42" fill="#FFFDE7" opacity=".94" /><circle cx="834" cy="68" r="33" fill="#0A1832" opacity=".28" /></>}
-      {!isDark && (
-        <>
-          <circle cx="900" cy="72" r="54" fill="#FFF176" opacity=".94" />
-          {[[130,62,82],[370,45,66],[610,74,78]].map(([cx, cy, sz], i) => (
-            <g key={i}>
-              <ellipse cx={cx} cy={cy} rx={sz} ry={sz * 0.42} fill="white" opacity=".88" />
-              <ellipse cx={cx - sz * 0.35} cy={cy + sz * 0.12} rx={sz * 0.62} ry={sz * 0.35} fill="white" opacity=".88" />
-              <ellipse cx={cx + sz * 0.38} cy={cy + sz * 0.08} rx={sz * 0.55} ry={sz * 0.32} fill="white" opacity=".88" />
-            </g>
-          ))}
-        </>
-      )}
-      {blds.map(([x, w, h], i) => {
-        const bc = isDark ? ['#0D1829','#0E1B2C','#091523','#0C1A28','#0F1D30'][i % 5] : ['#8898AA','#7A8FA5','#95A8B5','#6D8498','#8BADBE'][i % 5];
-        const ty = gy - h, wc = Math.max(2, Math.floor(w / 22)), wr = Math.max(2, Math.floor(h / 22));
-        return (
-          <g key={i}>
-            <rect x={x} y={ty} width={w} height={h} fill={bc} />
-            {i % 4 === 0 && <rect x={x + w / 2 - 2} y={ty - 14} width={4} height={14} fill={bc} />}
-            {Array.from({ length: wr }, (_, r) =>
-              Array.from({ length: wc }, (_, c) => {
-                const lit = isDark ? rn(i * 17 + r * 7 + c * 3) > 0.36 : true;
-                return lit ? (
-                  <rect key={`${r}-${c}`} x={x + 7 + c * (w - 14) / wc} y={ty + 9 + r * 21}
-                    width={Math.min(9, (w - 18) / wc)} height={7}
-                    fill={isDark ? '#FFEDB0' : '#B8CEE0'} opacity={isDark ? 0.88 : 0.52} />
-                ) : null;
-              })
-            )}
-          </g>
-        );
-      })}
-      <rect x="0" y={gy} width="1024" height="90" fill={isDark ? '#060606' : '#3D3D3D'} />
-      {Array.from({ length: 10 }, (_, i) => (
-        <rect key={i} x={i * 106 + 14} y={gy + 42} width={58} height={5} fill="#F9C74F" opacity=".7" />
-      ))}
-    </svg>
-  );
-}
-
-function NatureBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="nsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#2196F3" /><stop offset="55%" stopColor="#81D4FA" /><stop offset="100%" stopColor="#A5D6A7" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#nsky)" />
-      <circle cx="880" cy="78" r="54" fill="#FFF176" opacity=".94" />
-      {[[145,62,82],[380,46,68],[625,76,85]].map(([cx, cy, sz], i) => (
-        <g key={i}>
-          <ellipse cx={cx} cy={cy} rx={sz} ry={sz * 0.42} fill="white" opacity=".9" />
-          <ellipse cx={cx - sz * 0.35} cy={cy + sz * 0.12} rx={sz * 0.62} ry={sz * 0.35} fill="white" opacity=".9" />
-          <ellipse cx={cx + sz * 0.38} cy={cy + sz * 0.08} rx={sz * 0.55} ry={sz * 0.32} fill="white" opacity=".9" />
-        </g>
-      ))}
-      <rect x="0" y="468" width="1024" height="112" fill="#66BB6A" />
-      <ellipse cx="512" cy="555" rx="640" ry="148" fill="#81C784" />
-      {[65,190,348,490,638,800,920].map((x, i) => {
-        const h = 88 + (i % 3) * 44;
-        return (
-          <g key={i}>
-            <rect x={x + 7} y={470 - h} width={9} height={h + 22} fill="#5D4037" />
-            <ellipse cx={x + 11} cy={470 - h} rx={28} ry={42} fill={['#2E7D32','#388E3C','#43A047'][i % 3]} />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function ForestBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="fsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1B2A1B" /><stop offset="50%" stopColor="#2E4A2E" /><stop offset="100%" stopColor="#1A3A1A" />
-        </linearGradient>
-        <linearGradient id="ffog" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(180,210,180,0)" /><stop offset="100%" stopColor="rgba(180,210,180,.32)" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#fsky)" />
-      {Array.from({ length: 18 }, (_, i) => {
-        const x = i * 58 + rn(i * 17) * 16 - 8, h = 175 + rn(i * 13) * 115, w = 34 + rn(i * 7) * 18;
-        return (
-          <g key={i} opacity=".38">
-            <rect x={x + w / 2 - 4} y={510 - h} width={8} height={h} fill="#1A2E1A" />
-            <polygon points={`${x + w / 2},${510 - h - 76} ${x},${510 - h + 56} ${x + w},${510 - h + 56}`} fill="#1E3D1E" />
-          </g>
-        );
-      })}
-      {[0,128,256,400,558,708,870,980].map((x, i) => {
-        const h = 218 + rn(i * 31) * 98, w = 54 + rn(i * 11) * 28;
-        return (
-          <g key={i}>
-            <rect x={x + w / 2 - 6} y={515 - h} width={12} height={h} fill="#2D1B0E" />
-            <polygon points={`${x + w / 2},${515 - h - 88} ${x},${515 - h + 76} ${x + w},${515 - h + 76}`} fill="#1B3D1A" />
-            <polygon points={`${x + w / 2},${515 - h - 144} ${x + 12},${515 - h + 18} ${x + w - 12},${515 - h + 18}`} fill="#1E4A1E" />
-          </g>
-        );
-      })}
-      <rect x="0" y="515" width="1024" height="65" fill="#0F1F0F" />
-      <rect x="0" y="452" width="1024" height="118" fill="url(#ffog)" />
-    </svg>
-  );
-}
-
-function SpringBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="spsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#FFF0F5" /><stop offset="50%" stopColor="#FFB7C5" /><stop offset="100%" stopColor="#FF8FAB" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#spsky)" />
-      {[75, 268, 480, 676, 876].map((x, i) => {
-        const h = 165 + i * 18;
-        return (
-          <g key={i}>
-            <rect x={x - 5} y={478 - h} width={10} height={h + 18} fill="#5D3A1A" />
-            {[[0,-28,58],[-28,8,48],[28,8,52],[-8,48,43],[8,48,38]].map(([dx, dy, r], j) => (
-              <ellipse key={j} cx={x + dx} cy={478 - h + dy} rx={r} ry={r * 0.78}
-                fill={['#FFB7C5','#FF80A0','#FFC0D0','#FF90B3','#FFAACC'][j]} opacity=".9" />
-            ))}
-          </g>
-        );
-      })}
-      <rect x="0" y="488" width="1024" height="92" fill="#C8E6C9" />
-    </svg>
-  );
-}
-
-function SummerBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="susky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1565C0" /><stop offset="42%" stopColor="#1E88E5" />
-          <stop offset="55%" stopColor="#29B6F6" /><stop offset="100%" stopColor="#006994" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#susky)" />
-      <circle cx="900" cy="74" r="60" fill="#FFF176" opacity=".94" />
-      {[375, 405, 432, 458].map((y, i) => (
-        <path key={i} d={`M0,${y} Q256,${y - 18} 512,${y} Q768,${y + 18} 1024,${y} L1024,580 L0,580 Z`}
-          fill={`rgba(2,136,209,${0.38 + i * 0.14})`} />
-      ))}
-      <rect x="0" y="510" width="1024" height="70" fill="#FFCA28" />
-    </svg>
-  );
-}
-
-function AutumnBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="ausky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#BF360C" /><stop offset="40%" stopColor="#E64A19" />
-          <stop offset="80%" stopColor="#FF7043" /><stop offset="100%" stopColor="#FF8A65" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#ausky)" />
-      {[55, 200, 376, 556, 724, 896].map((x, i) => {
-        const h = 155 + (i % 3) * 38;
-        return (
-          <g key={i}>
-            <rect x={x - 5} y={482 - h} width={10} height={h + 18} fill="#3E2723" />
-            <ellipse cx={x} cy={482 - h} rx={42} ry={54}
-              fill={['#E65100','#BF360C','#FF8F00','#DD2C00','#FF6D00','#D84315'][i]} />
-          </g>
-        );
-      })}
-      <rect x="0" y="482" width="1024" height="98" fill="#4E342E" />
-    </svg>
-  );
-}
-
-function WinterBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="wsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#B0BEC5" /><stop offset="50%" stopColor="#CFD8DC" /><stop offset="100%" stopColor="#ECEFF1" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#wsky)" />
-      {Array.from({ length: 48 }, (_, i) => (
-        <text key={i} x={rn(i * 11) * 1000} y={rn(i * 7) * 470 + 18}
-          fontSize={8 + rn(i * 3) * 14} fill="white" opacity={0.36 + rn(i) * 0.5}>❄</text>
-      ))}
-      <rect x="0" y="476" width="1024" height="104" fill="white" />
-      <ellipse cx="512" cy="472" rx="720" ry="60" fill="white" />
-    </svg>
-  );
-}
-
-function SpaceBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <radialGradient id="spbg" cx="30%" cy="40%">
-          <stop offset="0%" stopColor="#1A0040" /><stop offset="50%" stopColor="#0A0020" /><stop offset="100%" stopColor="#000000" />
-        </radialGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#spbg)" />
-      {Array.from({ length: 120 }, (_, i) => (
-        <circle key={i} cx={rn(i * 7) * 1024} cy={rn(i * 13) * 580}
-          r={0.3 + rn(i * 3) * 1.7} fill="white" opacity={0.28 + rn(i * 11) * 0.68} />
-      ))}
-      <circle cx="820" cy="148" r="78" fill="#9C27B0" opacity=".9" />
-      <ellipse cx="820" cy="148" rx="122" ry="19" fill="none" stroke="#CE93D8" strokeWidth="11" opacity=".7" />
-      <rect x="0" y="528" width="1024" height="52" fill="#1A1A2E" />
-    </svg>
-  );
-}
-
-function OceanBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="ocsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#006064" /><stop offset="100%" stopColor="#00BCD4" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#ocsky)" />
-      <rect x="0" y="535" width="1024" height="45" fill="#004D40" opacity=".8" />
-    </svg>
-  );
-}
-
-function DesertBg({ isDark }) {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="dsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={isDark ? '#1A0500' : '#FF6F00'} />
-          <stop offset="100%" stopColor={isDark ? '#3E1A00' : '#FFB300'} />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#dsky)" />
-      <rect x="0" y="478" width="1024" height="102" fill={isDark ? '#3D1600' : '#FF8F00'} />
-    </svg>
-  );
-}
-
-function FantasyBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="fanbg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1A0030" /><stop offset="100%" stopColor="#6A00B0" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#fanbg)" />
-      {Array.from({ length: 80 }, (_, i) => (
-        <circle key={i} cx={rn(i * 7) * 1024} cy={rn(i * 13) * 450}
-          r={0.4 + rn(i * 3) * 1.9} fill={['#FFF','#FFD700','#E0B0FF','#B0E0FF'][i % 4]}
-          opacity={0.28 + rn(i * 11) * 0.68} />
-      ))}
-      <rect x="0" y="492" width="1024" height="88" fill="#0D0020" />
-    </svg>
-  );
-}
-
-function SakuraBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="saksky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#FCE4EC" /><stop offset="100%" stopColor="#F48FB1" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#saksky)" />
-      <rect x="0" y="478" width="1024" height="102" fill="#E8F5E9" />
-    </svg>
-  );
-}
-
-function RainBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="rsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#455A64" /><stop offset="100%" stopColor="#607D8B" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#rsky)" />
-      {Array.from({ length: 80 }, (_, i) => (
-        <line key={i} x1={rn(i * 7) * 1024} y1={rn(i * 13) * 498}
-          x2={rn(i * 7) * 1024 - 7} y2={rn(i * 13) * 498 + 19}
-          stroke="#B0BEC5" strokeWidth="1.2" opacity={0.36 + rn(i * 3) * 0.46} />
-      ))}
-      <rect x="0" y="490" width="1024" height="90" fill="#37474F" />
-    </svg>
-  );
-}
-
-function SunsetBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="susetsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1A237E" /><stop offset="42%" stopColor="#E53935" />
-          <stop offset="78%" stopColor="#FFB74D" /><stop offset="100%" stopColor="#FFD54F" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#susetsky)" />
-      <circle cx="512" cy="490" r="80" fill="#FFD54F" opacity=".94" />
-      <polygon points="0,490 148,418 300,458 448,388 512,408 608,368 712,428 858,398 1024,448 1024,490" fill="#1A237E" opacity=".82" />
-    </svg>
-  );
-}
-
-function MediterraneanBg() {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="mdsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1565C0" /><stop offset="100%" stopColor="#0277BD" />
-        </linearGradient>
-        <linearGradient id="mdsea" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#006994" /><stop offset="100%" stopColor="#29B6F6" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#mdsky)" />
-      <circle cx="880" cy="80" r="58" fill="#FFF176" opacity=".92" />
-      <rect x="0" y="390" width="1024" height="190" fill="url(#mdsea)" />
-      <rect x="340" y="208" width="440" height="196" rx="4" fill="#FAFAFA" />
-      <rect x="328" y="190" width="368" height="30" rx="3" fill="#E64A19" />
-    </svg>
-  );
-}
-
-function YardBg({ isDark }) {
-  return (
-    <svg viewBox="0 0 1024 580" width="100%" height="100%" preserveAspectRatio="xMidYMax slice">
-      <defs>
-        <linearGradient id="ydsky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={isDark ? '#0A0A1A' : '#E3F2FD'} />
-          <stop offset="100%" stopColor={isDark ? '#1A1A3A' : '#90CAF9'} />
-        </linearGradient>
-        <linearGradient id="ydgrass" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={isDark ? '#1A2E1A' : '#66BB6A'} />
-          <stop offset="100%" stopColor={isDark ? '#0F1F0F' : '#388E3C'} />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="580" fill="url(#ydsky)" />
-      <rect x="292" y="208" width="440" height="196" fill={isDark ? '#2C2C3E' : '#FAFAFA'} />
-      <polygon points="292,210 512,100 732,210" fill={isDark ? '#1A2535' : '#37474F'} />
-      <rect x="0" y="476" width="1024" height="104" fill="url(#ydgrass)" />
-    </svg>
-  );
-}
-
-function ThemeBg({ themeId, isDark }) {
-  const map = {
-    city: <CityBg isDark={isDark} />, nature: <NatureBg />, forest: <ForestBg />,
-    spring: <SpringBg />, summer: <SummerBg />, autumn: <AutumnBg />, winter: <WinterBg />,
-    space: <SpaceBg />, ocean: <OceanBg />, desert: <DesertBg isDark={isDark} />,
-    fantasy: <FantasyBg />, sakura: <SakuraBg />, rain: <RainBg />, sunset: <SunsetBg />,
-    yard: <YardBg isDark={isDark} />, mediter: <MediterraneanBg />,
-  };
-  return map[themeId] || <NatureBg />;
-}
-
-/* ── GLOBAL STYLES ── */
+/* ══════════════════════════════════════════════════════════
+   STYLES
+══════════════════════════════════════════════════════════ */
 function Styles() {
   useEffect(() => {
     const el = document.createElement('style');
     el.textContent = `
-      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
-      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body, #root { width: 100%; height: 100%; overflow: hidden; }
-      .qg { font-family: 'Nunito', system-ui, sans-serif; color: #1E1B4B; display: flex; flex-direction: column; height: 100vh; width: 100vw; background: #F5F3FF; overflow: hidden; }
-      input, button, textarea { font-family: 'Nunito', system-ui, sans-serif; }
-      input::placeholder, textarea::placeholder { color: rgba(100,100,100,0.38); }
-      input:focus, textarea:focus { outline: none; }
-      button { cursor: pointer; }
-      ::-webkit-scrollbar { width: 4px; height: 4px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.2); border-radius: 2px; }
-      @keyframes qgFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes qgSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-      @keyframes qgPop { 0% { transform: scale(0.7); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
-      @keyframes qgBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-      @keyframes qgConfetti { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(var(--to)) rotate(540deg); opacity: 0; } }
-      @keyframes qgFlash { 0%, 100% { opacity: 1; } 25%, 75% { opacity: 0.06; } 50% { opacity: 0.88; } }
-      @keyframes qgCheck { 0% { transform: scale(0) rotate(-45deg); } 70% { transform: scale(1.3) rotate(5deg); } 100% { transform: scale(1) rotate(0); } }
-      @keyframes qgSpin { to { transform: rotate(360deg); } }
-      .qg-fu { animation: qgFadeUp 0.35s ease both; }
-      .qg-pop { animation: qgPop 0.4s cubic-bezier(.34,1.56,.64,1) both; }
-      .qg-bi { animation: qgBounce 2.5s ease-in-out infinite; }
-      .qg-su { animation: qgSlideUp 0.32s cubic-bezier(.34,1.2,.64,1); }
+      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+      html,body,#root{width:100%;height:100%;overflow:hidden;}
+      body{font-family:'Nunito',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+      button,input,textarea,select{font-family:inherit;}
+      input:focus,textarea:focus,select:focus{outline:none;}
+      ::-webkit-scrollbar{width:5px;height:5px;}
+      ::-webkit-scrollbar-track{background:transparent;}
+      ::-webkit-scrollbar-thumb{background:#E5E7EB;border-radius:99px;}
+      @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+      @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+      @keyframes pop{0%{transform:scale(.8);opacity:0;}70%{transform:scale(1.05);}100%{transform:scale(1);opacity:1;}}
+      @keyframes spin{to{transform:rotate(360deg);}}
+      @keyframes slideRight{from{transform:translateX(-110%);}to{transform:translateX(0);}}
+      .fu{animation:fadeUp .35s ease both;}
+      .fi{animation:fadeIn .25s ease both;}
+      .pp{animation:pop .38s cubic-bezier(.34,1.56,.64,1) both;}
+      .sr{animation:slideRight .3s cubic-bezier(.34,1.2,.64,1);}
     `;
     document.head.appendChild(el);
     return () => el.remove();
@@ -541,1354 +221,1985 @@ function Styles() {
   return null;
 }
 
-/* ── MODAL WRAPPER ── */
-function ModalSheet({ children, onClose }) {
+/* ══════════════════════════════════════════════════════════
+   SHARED COMPONENTS
+══════════════════════════════════════════════════════════ */
+function Btn({ children, onClick, color = '#111827', bg, outline, sm, full, disabled, style: s = {} }) {
   return (
-    <div
-      style={{ position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(10,5,30,.56)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="qg-su" style={{ background: 'white', borderRadius: '28px 28px 0 0', width: '100%', padding: '8px 24px 52px', maxHeight: '88vh', overflowY: 'auto' }}>
-        <div style={{ width: 44, height: 5, background: BD, borderRadius: 999, margin: '14px auto 22px' }} />
-        {children}
+    <button onClick={onClick} disabled={disabled} style={{
+      padding: sm ? '7px 14px' : '10px 20px',
+      fontSize: sm ? 12 : 14, fontWeight: 700, borderRadius: sm ? 8 : 11,
+      background: outline ? 'transparent' : (bg || color),
+      color: outline ? color : 'white',
+      border: outline ? `1.5px solid ${color}` : 'none',
+      width: full ? '100%' : 'auto',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+      opacity: disabled ? 0.45 : 1, cursor: disabled ? 'default' : 'pointer',
+      transition: 'opacity .15s, transform .1s',
+      ...s,
+    }}
+    onMouseDown={e => { if (!disabled) e.currentTarget.style.transform = 'scale(.97)'; }}
+    onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+    onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}>
+      {children}
+    </button>
+  );
+}
+
+function Field({ label, value, onChange, placeholder, type = 'text', rows, required, hint }) {
+  const [foc, setFoc] = useState(false);
+  const base = {
+    width: '100%', padding: rows ? '10px 13px' : '10px 13px',
+    fontSize: 14, fontWeight: 500, border: `1.5px solid ${foc ? '#6366F1' : '#E5E7EB'}`,
+    borderRadius: 10, background: 'white', color: '#1F2937',
+    transition: 'border-color .2s', boxShadow: foc ? '0 0 0 3px rgba(99,102,241,.1)' : 'none',
+  };
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {label && <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}{required && <span style={{ color: '#EF4444' }}> *</span>}</div>}
+      {rows
+        ? <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+            style={{ ...base, resize: 'none', lineHeight: 1.65 }}
+            onFocus={() => setFoc(true)} onBlur={() => setFoc(false)} />
+        : <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type}
+            style={base}
+            onFocus={() => setFoc(true)} onBlur={() => setFoc(false)} />}
+      {hint && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {label && <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>}
+      <select value={value} onChange={e => onChange(e.target.value)}
+        style={{ width: '100%', padding: '10px 13px', fontSize: 14, fontWeight: 500, border: '1.5px solid #E5E7EB', borderRadius: 10, background: 'white', color: '#1F2937' }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children, width = 460 }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="pp" style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,.18)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #F3F4F6' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#111827' }}>{title}</div>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#F9FAFB', color: '#6B7280', fontSize: 14, cursor: 'pointer' }}>✕</button>
+        </div>
+        <div style={{ padding: '20px 22px' }}>{children}</div>
       </div>
     </div>
   );
 }
 
-function MBtns({ onCancel, onConfirm, lbl = '완료' }) {
+function Empty({ icon, title, desc }) {
   return (
-    <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-      <button onClick={onCancel} style={{ flex: 1, padding: 14, borderRadius: 14, border: `2px solid ${BD}`, background: 'none', fontSize: 15, fontWeight: 700, color: '#6B7280' }}>취소</button>
-      <button onClick={onConfirm} style={{ flex: 2, padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 15, fontWeight: 800 }}>{lbl}</button>
+    <div style={{ textAlign: 'center', padding: '60px 24px' }}>
+      <div style={{ fontSize: 48, marginBottom: 12 }}>{icon}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: '#374151', marginBottom: 6 }}>{title}</div>
+      {desc && <p style={{ fontSize: 13, color: '#9CA3AF', lineHeight: 1.65 }}>{desc}</p>}
     </div>
   );
 }
 
-function FieldLabel({ children }) {
-  return <div style={{ fontSize: 12, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 7 }}>{children}</div>;
+function Badge({ children, color = '#6B7280', bg = '#F3F4F6' }) {
+  return <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>{children}</span>;
 }
 
-function FieldInput({ value, onChange, placeholder, type = 'text', mb = 14, rows }) {
-  const style = { width: '100%', padding: '11px 13px', border: `2px solid ${BD}`, borderRadius: 12, fontSize: 15, fontWeight: 600, color: '#1E1B4B', marginBottom: mb, background: '#F8F7FF' };
-  const handlers = {
-    onFocus: e => { e.target.style.border = `2px solid ${P}`; },
-    onBlur: e => { e.target.style.border = `2px solid ${BD}`; },
-  };
-  if (rows) return <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows} style={{ ...style, resize: 'none', lineHeight: 1.6 }} {...handlers} />;
-  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} style={style} {...handlers} />;
+/* ══════════════════════════════════════════════════════════
+   PRO GATE MODAL — 무료 유저가 협업 기능 클릭 시 표시
+══════════════════════════════════════════════════════════ */
+function ProGateModal({ onClose, onUpgrade }) {
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:950,background:'rgba(0,0,0,.5)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}
+      onClick={e => e.target===e.currentTarget&&onClose()}>
+      <div className="pp" style={{ background:'white',borderRadius:24,width:'100%',maxWidth:360,padding:'36px 28px',boxShadow:'0 24px 64px rgba(0,0,0,.2)',textAlign:'center' }}>
+        <div style={{ width:72,height:72,borderRadius:'50%',background:'linear-gradient(135deg,#FFF3E0,#FFFDE7)',border:'2px solid #FDE68A',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36,margin:'0 auto 20px' }}>⚡️</div>
+        <h2 style={{ fontSize:20,fontWeight:900,color:'#111827',marginBottom:10 }}>유료 기능이에요!</h2>
+        <p style={{ fontSize:14,color:'#6B7280',lineHeight:1.75,marginBottom:28 }}>
+          협업 워크스페이스는 Pro 플랜에서만<br/>사용할 수 있는 기능이에요.<br/>
+          <span style={{ color:'#2563EB',fontWeight:700 }}>유료로 가입하고 더 많은 기능을 사용해 보세요!</span>
+        </p>
+        <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
+          <button onClick={onUpgrade} style={{ padding:'13px',borderRadius:12,border:'none',background:'linear-gradient(135deg,#1E1B4B,#2563EB)',color:'white',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
+            ✨ Pro 시작하기
+          </button>
+          <button onClick={onClose} style={{ padding:'11px',borderRadius:12,border:'1.5px solid #E5E7EB',background:'white',color:'#9CA3AF',fontSize:13,fontWeight:600,cursor:'pointer' }}>
+            나중에
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-/* ── AUTH SCREEN ── */
-function AuthScreen({ onAuth, accounts, onRegister }) {
-  const [tab, setTab] = useState('login');
+/* ══════════════════════════════════════════════════════════
+   AUTH SCREEN
+══════════════════════════════════════════════════════════ */
+function AuthScreen({ accounts, onAuth, onRegister }) {
+  const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
-  const [uname, setUname] = useState('');
   const [pw, setPw] = useState('');
+  const [name, setName] = useState('');
   const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const submit = () => {
+  const [signupToast, setSignupToast] = useState(false);
+
+  const submit = async () => {
     setErr('');
-    if (!email.trim()) { setErr('이메일을 입력해주세요.'); return; }
-    if (!pw.trim()) { setErr('비밀번호를 입력해주세요.'); return; }
-    if (tab === 'login') {
+    if (!email.includes('@')) { setErr('올바른 이메일 주소를 입력해주세요.'); return; }
+    if (pw.length < 6) { setErr('비밀번호는 6자 이상이어야 해요.'); return; }
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 700));
+    setLoading(false);
+    if (mode === 'login') {
       const acct = accounts.find(a => a.email === email.trim());
       if (!acct) { setErr('등록되지 않은 이메일이에요.'); return; }
       if (acct.pw !== pw) { setErr('비밀번호가 올바르지 않아요.'); return; }
-      track('login', { method: 'email' });
-      onAuth({ name: acct.name, email: acct.email, nickname: acct.nickname || acct.name });
+      onAuth(acct);
     } else {
-      if (!uname.trim()) { setErr('사용자 이름을 입력해주세요.'); return; }
+      if (!name.trim()) { setErr('이름을 입력해주세요.'); return; }
       if (accounts.find(a => a.email === email.trim())) { setErr('이미 가입된 이메일이에요.'); return; }
-      const newAcct = { email: email.trim(), name: uname.trim(), nickname: uname.trim(), pw, avatar: null };
-      track('sign_up', { method: 'email' });
-      onRegister(newAcct);
-      onAuth({ name: uname.trim(), email: email.trim(), nickname: uname.trim() });
+      const acct = { id: uid(), email: email.trim(), pw, name: name.trim(), nickname: '', wsType: '', isPro: false, avatar: null, createdAt: new Date().toISOString() };
+      onRegister(acct);
+      // ── 가입 환영 메일 발송 ──
+      // EmailJS 연동: https://www.emailjs.com 에서 계정 생성 후 아래 값을 교체하세요
+      // public/index.html의 <head>에 아래 스크립트 추가 필요:
+      // <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+      // <script>emailjs.init("YOUR_PUBLIC_KEY")</script>
+      try {
+        if (window.emailjs) {
+          await window.emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', {
+            to_email: email.trim(),
+            to_name: name.trim(),
+            message: `안녕하세요 ${name.trim()}님, Workly에 가입해주셔서 감사해요! 🌿`,
+          });
+        }
+      } catch(e) { /* EmailJS 미설정 시 무시 */ }
+      setSignupToast(true);
+      await new Promise(r => setTimeout(r, 2000));
+      setSignupToast(false);
+      onAuth(acct);
     }
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `radial-gradient(ellipse 130% 82% at 50% -8%,${PL} 0%,#F5F3FF 60%)`, position: 'relative', overflow: 'hidden', padding: '2rem 1.5rem' }}>
-      <div style={{ width: '100%', maxWidth: 420 }}>
-        <div className="qg-fu" style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div className="qg-bi" style={{ fontSize: 66, marginBottom: 8 }}>🌱</div>
-          <div style={{ fontWeight: 900, fontSize: 28, background: `linear-gradient(135deg,${PD},${GD})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Quest Garden</div>
-          <p style={{ fontSize: 14, color: '#6B7280', marginTop: 5, fontWeight: 600 }}>퀘스트를 완료하고 나만의 정원을 꾸며요</p>
-        </div>
-        <div className="qg-fu" style={{ background: 'white', borderRadius: 24, padding: 26, boxShadow: '0 8px 40px rgba(124,58,237,.13)', border: `1px solid ${BD}`, animationDelay: '.1s' }}>
-          <div style={{ display: 'flex', background: PP, borderRadius: 13, padding: 4, marginBottom: 22 }}>
-            {[['login','로그인'],['signup','가입하기']].map(([t, lbl]) => (
-              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: tab === t ? 'white' : 'transparent', color: tab === t ? P : '#9CA3AF', fontWeight: 800, fontSize: 14, boxShadow: tab === t ? '0 2px 8px rgba(124,58,237,.12)' : 'none', transition: 'all .2s' }}>{lbl}</button>
+    <div style={{ minHeight: '100vh', display: 'flex', background: '#FAFAFA' }}>
+      {/* Left panel */}
+      <div style={{ width: '45%', background: 'linear-gradient(160deg, #1E1B4B 0%, #312E81 50%, #1E40AF 100%)', padding: '48px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(99,102,241,.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(59,130,246,.2) 0%, transparent 50%)' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 64 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,.15)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🌿</div>
+            <div style={{ fontWeight: 900, fontSize: 22, color: 'white', letterSpacing: '-.5px' }}>Workly</div>
+          </div>
+          <h2 style={{ fontSize: 36, fontWeight: 900, color: 'white', lineHeight: 1.25, marginBottom: 20, letterSpacing: '-.5px' }}>
+            모두를 위한<br />스마트한<br />워크스페이스
+          </h2>
+          <p style={{ fontSize: 15, color: 'rgba(255,255,255,.7)', lineHeight: 1.7, marginBottom: 40 }}>
+            학교, 회사, 개인 — 어떤 용도에도<br />최적화된 협업 공간을 경험하세요.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {['📚 학교 — 과제, 노트, 일정 관리', '💼 회사 — 업무, 회의, 프로젝트', '✨ 개인 — 목표, 습관, 일기'].map(f => (
+              <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'rgba(255,255,255,.85)', fontSize: 14, fontWeight: 600 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#60A5FA', flexShrink: 0 }} />
+                {f}
+              </div>
             ))}
           </div>
-          <div style={{ position: 'relative', marginBottom: 12 }}>
-            <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>✉️</span>
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일 주소" type="email"
-              style={{ width: '100%', padding: '12px 13px 12px 40px', border: `2px solid ${BD}`, borderRadius: 12, fontSize: 15, fontWeight: 600, color: '#1E1B4B', background: '#F8F7FF' }}
-              onFocus={e => { e.target.style.border = `2px solid ${P}`; }} onBlur={e => { e.target.style.border = `2px solid ${BD}`; }} />
-          </div>
-          {tab === 'signup' && (
-            <div style={{ position: 'relative', marginBottom: 12 }}>
-              <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>👤</span>
-              <input value={uname} onChange={e => setUname(e.target.value)} placeholder="사용자 이름"
-                style={{ width: '100%', padding: '12px 13px 12px 40px', border: `2px solid ${BD}`, borderRadius: 12, fontSize: 15, fontWeight: 600, color: '#1E1B4B', background: '#F8F7FF' }}
-                onFocus={e => { e.target.style.border = `2px solid ${P}`; }} onBlur={e => { e.target.style.border = `2px solid ${BD}`; }} />
+        </div>
+      </div>
+
+      {/* Right panel */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+        <div style={{ width: '100%', maxWidth: 400 }}>
+          {signupToast && (
+            <div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:14,padding:'14px 18px',marginBottom:20,display:'flex',alignItems:'center',gap:12 }}>
+              <span style={{ fontSize:22 }}>📧</span>
+              <div>
+                <div style={{ fontSize:14,fontWeight:800,color:'#059669' }}>가입을 환영해요!</div>
+                <div style={{ fontSize:12,color:'#6B7280',marginTop:2 }}>{email}로 가입 확인 메일이 전송되었어요.</div>
+              </div>
             </div>
           )}
-          <div style={{ position: 'relative', marginBottom: 16 }}>
-            <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>🔑</span>
-            <input value={pw} onChange={e => setPw(e.target.value)} placeholder="비밀번호" type="password"
-              onKeyDown={e => e.key === 'Enter' && submit()}
-              style={{ width: '100%', padding: '12px 13px 12px 40px', border: `2px solid ${BD}`, borderRadius: 12, fontSize: 15, fontWeight: 600, color: '#1E1B4B', background: '#F8F7FF' }}
-              onFocus={e => { e.target.style.border = `2px solid ${P}`; }} onBlur={e => { e.target.style.border = `2px solid ${BD}`; }} />
+          <div className="fu" style={{ marginBottom: 32 }}>
+            <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111827', marginBottom: 6 }}>
+              {mode === 'login' ? '다시 오셨군요! 👋' : '시작해볼까요! 🚀'}
+            </h1>
+            <p style={{ fontSize: 14, color: '#6B7280' }}>
+              {mode === 'login' ? '워크스페이스로 돌아가세요.' : '무료로 나만의 워크스페이스를 만들어요.'}
+            </p>
           </div>
-          {err && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: '#DC2626', fontWeight: 700, marginBottom: 10, textAlign: 'center' }}>{err}</div>}
-          <button onClick={submit} style={{ width: '100%', padding: 14, border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 15, fontWeight: 800 }}>
-            {tab === 'login' ? '로그인하기 →' : '가입하기 →'}
-          </button>
+
+          <div className="fu" style={{ animationDelay: '.05s' }}>
+            {/* Social login (decorative) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+              {[{ label: 'Google', color: '#EA4335', icon: 'G' }, { label: 'Naver', color: '#03C75A', icon: 'N' }].map(({ label, color, icon }) => (
+                <button key={label} title="준비 중" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 10, border: '1.5px solid #E5E7EB', background: 'white', fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'not-allowed', opacity: 0.55 }}>
+                  <span style={{ width: 18, height: 18, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: 'white' }}>{icon}</span>
+                  {label}로 계속
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <div style={{ flex: 1, height: 1, background: '#F3F4F6' }} />
+              <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600 }}>이메일로 계속</span>
+              <div style={{ flex: 1, height: 1, background: '#F3F4F6' }} />
+            </div>
+
+            {mode === 'signup' && <Field value={name} onChange={setName} label="이름" placeholder="홍길동" required />}
+            <Field value={email} onChange={setEmail} label="이메일" placeholder="name@gmail.com" type="email" required />
+            <Field value={pw} onChange={setPw} label="비밀번호" placeholder={mode === 'signup' ? '6자 이상 입력' : '비밀번호 입력'} type="password" required
+              hint={mode === 'signup' ? '영문, 숫자를 조합하면 더 안전해요' : undefined} />
+
+            {err && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '9px 12px', fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 12, textAlign: 'center' }}>{err}</div>}
+
+            <button onClick={submit} disabled={loading} style={{
+              width: '100%', padding: '13px', borderRadius: 12, border: 'none',
+              background: 'linear-gradient(135deg, #1E1B4B, #2563EB)', color: 'white',
+              fontSize: 15, fontWeight: 700, cursor: loading ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              opacity: loading ? 0.75 : 1,
+            }}>
+              {loading ? <><div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} /> 잠시만요...</> : (mode === 'login' ? '로그인' : '무료로 시작하기 →')}
+            </button>
+
+            <div style={{ textAlign: 'center', marginTop: 18 }}>
+              <span style={{ fontSize: 13, color: '#6B7280' }}>{mode === 'login' ? '처음이신가요? ' : '이미 계정이 있으신가요? '}</span>
+              <button onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setErr(''); }} style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: '#2563EB', textDecoration: 'underline', cursor: 'pointer' }}>
+                {mode === 'login' ? '가입하기' : '로그인'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ── CREATE PAGE MODAL ── */
-function CreatePageModal({ onConfirm, onCancel, isProUser, onNeedPro }) {
-  const [title, setTitle] = useState('');
-  const [theme, setTheme] = useState('city');
-  const [isDark, setIsDark] = useState(false);
-  const th = THEMES[theme];
+/* ══════════════════════════════════════════════════════════
+   ONBOARDING
+══════════════════════════════════════════════════════════ */
+function OnboardingScreen({ user, onDone }) {
+  const [step, setStep] = useState(0);
+  const [nick, setNick] = useState(user.name || '');
+  const [wsType, setWsType] = useState('');
 
   return (
-    <ModalSheet onClose={onCancel}>
-      <div style={{ fontWeight: 900, fontSize: 20, marginBottom: 3 }}>새 정원 만들기 🌱</div>
-      <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginBottom: 18 }}>나만의 공간을 꾸며보세요</div>
-      <FieldLabel>페이지 제목</FieldLabel>
-      <FieldInput value={title} onChange={setTitle} placeholder="예: 나의 도시 정원" />
-      <FieldLabel>테마 선택</FieldLabel>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, marginBottom: 16 }}>
-        {Object.entries(THEMES).map(([k, v]) => (
-          <button key={k} onClick={() => setTheme(k)} style={{ border: `2px solid ${theme === k ? P : BD}`, borderRadius: 11, padding: '7px 3px', background: theme === k ? PL : '#F8F7FF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-            <span style={{ fontSize: 17 }}>{v.e}</span>
-            <span style={{ fontSize: 9, fontWeight: 800, color: theme === k ? PD : '#9CA3AF', textAlign: 'center', lineHeight: 1.2 }}>{v.n}</span>
-          </button>
-        ))}
-      </div>
-      {th && th.hasDN && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', background: PL, borderRadius: 12, marginBottom: 14 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: PD, flex: 1 }}>시간대</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {[['☀️','낮',false],['🌙','밤',true]].map(([em, lbl, v]) => (
-              <button key={lbl} onClick={() => setIsDark(v)} style={{ padding: '7px 14px', borderRadius: 10, border: `2px solid ${isDark === v ? P : BD}`, background: isDark === v ? P : 'white', color: isDark === v ? 'white' : '#6B7280', fontWeight: 700, fontSize: 13 }}>{em} {lbl}</button>
-            ))}
-          </div>
-        </div>
-      )}
-      <div style={{ borderRadius: 14, overflow: 'hidden', height: 130, position: 'relative', marginBottom: 18 }}>
-        <ThemeBg themeId={theme} isDark={isDark} />
-        <div style={{ position: 'absolute', bottom: 8, left: 10, background: 'rgba(0,0,0,.35)', borderRadius: 8, padding: '4px 10px', color: 'white', fontSize: 13, fontWeight: 700, backdropFilter: 'blur(4px)' }}>
-          {th && th.e} {title || (th && th.n)} 미리보기
-        </div>
-      </div>
-      <MBtns onCancel={onCancel} onConfirm={() => { if (title.trim()) onConfirm({ title: title.trim(), theme, isDark, elements: [] }); }} />
-    </ModalSheet>
-  );
-}
-
-/* ── CREATE QUEST MODAL ── */
-function CreateQuestModal({ onConfirm, onCancel, isProUser, routines, onSaveRoutine }) {
-  const [todos, setTodos] = useState(['']);
-  const [rewards, setRewards] = useState([rndRewardFull()]);
-  const [editIdx, setEditIdx] = useState(null);
-  const [catFil, setCatFil] = useState(null);
-  const [showRoutines, setShowRoutines] = useState(false);
-  const [routineName, setRoutineName] = useState('');
-  const [savingRoutine, setSavingRoutine] = useState(false);
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-
-  const add = () => { if (todos.length >= 10) return; setTodos([...todos, '']); setRewards([...rewards, rndRewardFull()]); };
-  const del = (i) => { if (todos.length === 1) return; setTodos(todos.filter((_, j) => j !== i)); setRewards(rewards.filter((_, j) => j !== i)); };
-  const confirm = () => {
-    const pairs = todos.map((t, i) => ({ t: t.trim(), r: rewards[i] })).filter(p => p.t);
-    if (!pairs.length) return;
-    if (isProUser) {
-      onConfirm(pairs.map(p => ({ id: uid(), title: p.t, rewardId: p.r.id, rewardCat: p.r.catKey, completed: false, date: today() })));
-    } else {
-      onConfirm(pairs.map(p => ({ id: uid(), title: p.t, rewardId: null, rewardCat: null, completed: false, date: today() })));
-    }
-  };
-  const loadRoutine = (r) => {
-    setTodos(r.todos);
-    setRewards(r.rewards ? r.rewards.map(rw => rw || rndRewardFull()) : r.todos.map(() => rndRewardFull()));
-    setShowRoutines(false);
-  };
-  const saveAsRoutine = () => {
-    const validTodos = todos.filter(t => t.trim());
-    if (!validTodos.length || !routineName.trim()) return;
-    onSaveRoutine({ id: uid(), name: routineName.trim(), todos: validTodos, rewards });
-    setRoutineName(''); setSavingRoutine(false);
-  };
-  const deleteRoutine = (id) => {
-    onSaveRoutine({ __delete: true, id });
-    setDeleteConfirmId(null);
-  };
-
-  const allIt = getAllItems();
-  const filtered = catFil ? allIt.filter(it => it.catKey === catFil) : allIt;
-  const hasRoutines = (routines || []).length > 0;
-
-  return (
-    <ModalSheet onClose={onCancel}>
-      {/* 헤더 영역 — 제목 + 내 루틴 버튼 나란히 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={{ fontWeight: 900, fontSize: 20 }}>오늘의 할일 ⚔️</div>
-        {hasRoutines && (
-          <button
-            onClick={() => { setShowRoutines(s => !s); setSavingRoutine(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              padding: '6px 13px', borderRadius: 20,
-              border: `2px solid ${showRoutines ? P : BD}`,
-              background: showRoutines ? P : 'white',
-              color: showRoutines ? 'white' : PD,
-              fontSize: 12, fontWeight: 800, cursor: 'pointer',
-              transition: 'all .18s',
-              boxShadow: showRoutines ? '0 2px 10px rgba(124,58,237,.25)' : 'none',
-            }}>
-            📋 내 루틴
-            <span style={{
-              background: showRoutines ? 'rgba(255,255,255,.28)' : PL,
-              color: showRoutines ? 'white' : PD,
-              borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 900,
-            }}>{(routines||[]).length}</span>
-          </button>
-        )}
-      </div>
-      <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginBottom: 14 }}>
-        {isProUser ? '완료하면 정원 요소를 획득해요! (최대 10개)' : '오늘 할일을 입력하세요 (최대 10개)'}
-      </div>
-
-      {/* 내 루틴 드롭다운 */}
-      {showRoutines && hasRoutines && (
-        <div style={{ background: PP, border: `1.5px solid ${BD}`, borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '10px 14px 6px', fontSize: 10, fontWeight: 900, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em' }}>저장된 루틴</div>
-          {(routines||[]).map((r, idx) => (
-            <div key={r.id} style={{ padding: '10px 14px', background: 'white', borderTop: idx === 0 ? 'none' : `1px solid ${BD}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              {/* 루틴 아이콘 */}
-              <div style={{ width: 36, height: 36, borderRadius: 11, background: PL, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📋</div>
-              {/* 루틴 정보 */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#1E1B4B', marginBottom: 2 }}>{r.name}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {r.todos.slice(0,3).join(' · ')}{r.todos.length > 3 ? ` 외 ${r.todos.length - 3}개` : ''}
-                </div>
-              </div>
-              {/* 할일 개수 뱃지 */}
-              <span style={{ fontSize: 10, fontWeight: 900, background: PL, color: PD, borderRadius: 20, padding: '3px 8px', flexShrink: 0 }}>{r.todos.length}개</span>
-              {/* 불러오기 버튼 */}
-              <button onClick={() => loadRoutine(r)}
-                style={{ padding: '6px 13px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${P},${PM})`, color: 'white', fontSize: 12, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
-                불러오기
-              </button>
-              {/* 삭제 버튼 */}
-              {deleteConfirmId === r.id ? (
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button onClick={() => deleteRoutine(r.id)} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', background: '#EF4444', color: 'white', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>삭제</button>
-                  <button onClick={() => setDeleteConfirmId(null)} style={{ padding: '5px 8px', borderRadius: 8, border: `1px solid ${BD}`, background: 'none', color: '#6B7280', fontSize: 11, cursor: 'pointer' }}>취소</button>
-                </div>
-              ) : (
-                <button onClick={() => setDeleteConfirmId(r.id)} style={{ background: 'none', border: 'none', color: '#D1D5DB', fontSize: 15, cursor: 'pointer', padding: '2px 4px', flexShrink: 0 }} title="삭제">🗑️</button>
-              )}
-            </div>
+    <div style={{ minHeight: '100vh', background: '#FAFAFA', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 540 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 40, justifyContent: 'center' }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ height: 4, width: step >= i ? 56 : 28, borderRadius: 2, background: step >= i ? '#2563EB' : '#E5E7EB', transition: 'all .35s' }} />
           ))}
         </div>
-      )}
 
-      {/* 루틴 저장 토글 버튼 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <button onClick={() => { setSavingRoutine(s => !s); setShowRoutines(false); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 20, border: `1.5px solid ${savingRoutine ? G : BD}`, background: savingRoutine ? GL : 'white', color: savingRoutine ? GD : '#9CA3AF', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
-          💾 루틴으로 저장
-        </button>
-      </div>
-
-      {savingRoutine && (
-        <div style={{ background: '#F0FDF4', border: `1.5px solid ${G}`, borderRadius: 12, padding: 12, marginBottom: 14, display: 'flex', gap: 8 }}>
-          <input value={routineName} onChange={e => setRoutineName(e.target.value)} placeholder="루틴 이름 (예: 수능 루틴)"
-            style={{ flex: 1, padding: '8px 11px', border: `1.5px solid ${G}`, borderRadius: 9, fontSize: 13, fontWeight: 600, color: '#1E1B4B' }}
-            onKeyDown={e => e.key === 'Enter' && saveAsRoutine()}/>
-          <button onClick={saveAsRoutine} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: G, color: 'white', fontSize: 13, fontWeight: 800 }}>저장</button>
-          <button onClick={() => setSavingRoutine(false)} style={{ padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${BD}`, background: 'none', fontSize: 13, color: '#6B7280' }}>✕</button>
-        </div>
-      )}
-      {todos.map((t, i) => (
-        <div key={i}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div style={{ width: 22, height: 22, borderRadius: '50%', background: PL, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: PM, flexShrink: 0 }}>{i + 1}</div>
-            <input value={t} onChange={e => setTodos(todos.map((x, j) => j === i ? e.target.value : x))} placeholder={`할일 ${i + 1}`}
-              style={{ flex: 1, padding: '9px 11px', border: `2px solid ${BD}`, borderRadius: 10, fontSize: 14, fontWeight: 600, color: '#1E1B4B' }}
-              onFocus={e => { e.target.style.border = `2px solid ${P}`; }} onBlur={e => { e.target.style.border = `2px solid ${BD}`; }} />
-            {isProUser && (
-              <button onClick={() => setEditIdx(editIdx === i ? null : i)} style={{ background: 'none', border: 'none', fontSize: 19, padding: 4, borderRadius: 8 }}>{rewards[i] ? rewards[i].e : '🎁'}</button>
-            )}
-            {todos.length > 1 && <button onClick={() => del(i)} style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 15, padding: 4 }}>✕</button>}
-          </div>
-          {isProUser && editIdx === i && (
-            <div style={{ background: PL, borderRadius: 13, padding: 12, marginBottom: 10 }}>
-              <div style={{ display: 'flex', gap: 5, overflowX: 'auto', marginBottom: 10, paddingBottom: 3 }}>
-                <button onClick={() => setCatFil(null)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${!catFil ? P : BD}`, background: !catFil ? P : 'white', color: !catFil ? 'white' : '#6B7280', fontSize: 11, fontWeight: 800 }}>전체</button>
-                {Object.entries(RCATS).map(([k, v]) => (
-                  <button key={k} onClick={() => setCatFil(catFil === k ? null : k)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${catFil === k ? v.c : BD}`, background: catFil === k ? v.c : 'white', color: catFil === k ? 'white' : v.c, fontSize: 11, fontWeight: 800 }}>{v.e} {v.n}</button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                {filtered.map(el => {
-                  const sel = rewards[i] && rewards[i].id === el.id;
-                  return (
-                    <button key={el.id} onClick={() => { setRewards(rewards.map((r, j) => j === i ? el : r)); setEditIdx(null); }}
-                      style={{ fontSize: 21, padding: 7, borderRadius: 9, border: `2px solid ${sel ? G : BD}`, background: sel ? GL : 'white' }} title={el.n}>
-                      {el.e}
-                    </button>
-                  );
-                })}
-              </div>
+        {step === 0 && (
+          <div className="fu">
+            <div style={{ textAlign: 'center', marginBottom: 36 }}>
+              <div style={{ fontSize: 56, marginBottom: 14 }}>👋</div>
+              <h2 style={{ fontSize: 28, fontWeight: 900, color: '#111827', marginBottom: 8 }}>반가워요, {user.name}님!</h2>
+              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6 }}>워크스페이스에서 사용할 닉네임을 설정해주세요.<br />다른 멤버들에게 이 이름으로 표시됩니다.</p>
             </div>
-          )}
-        </div>
-      ))}
-      {todos.length < 10 && (
-        <button onClick={add}
-          style={{ width: '100%', padding: 10, border: `2px dashed ${BD}`, borderRadius: 11, background: 'none', color: '#9CA3AF', fontSize: 14, fontWeight: 700, marginBottom: 16 }}>
-          + 할일 추가 ({todos.length}/10)
-        </button>
-      )}
-      <MBtns onCancel={onCancel} onConfirm={confirm} lbl="퀘스트 시작!" />
-    </ModalSheet>
-  );
-}
-
-/* ── EDIT REWARD MODAL ── */
-function EditRewardModal({ quest, onSave, onCancel }) {
-  const [sel, setSel] = useState(quest.rewardId);
-  const [cat, setCat] = useState(null);
-  const items = cat ? getAllItems().filter(it => it.catKey === cat) : getAllItems();
-  return (
-    <ModalSheet onClose={onCancel}>
-      <div style={{ fontWeight: 900, fontSize: 20, marginBottom: 3 }}>보상 요소 변경 ✏️</div>
-      <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginBottom: 14 }}>'{quest.title}'의 보상을 선택하세요</div>
-      <div style={{ display: 'flex', gap: 5, overflowX: 'auto', marginBottom: 12, paddingBottom: 3 }}>
-        <button onClick={() => setCat(null)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${!cat ? P : BD}`, background: !cat ? P : 'white', color: !cat ? 'white' : '#6B7280', fontSize: 11, fontWeight: 800 }}>전체</button>
-        {Object.entries(RCATS).map(([k, v]) => (
-          <button key={k} onClick={() => setCat(cat === k ? null : k)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${cat === k ? v.c : BD}`, background: cat === k ? v.c : 'white', color: cat === k ? 'white' : v.c, fontSize: 11, fontWeight: 800 }}>{v.e} {v.n}</button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 22 }}>
-        {items.map(el => (
-          <button key={el.id} onClick={() => setSel(el.id)} style={{ fontSize: 21, padding: 7, borderRadius: 9, border: `2px solid ${sel === el.id ? G : BD}`, background: sel === el.id ? GL : '#F8F7FF' }} title={el.n}>{el.e}</button>
-        ))}
-      </div>
-      <MBtns onCancel={onCancel} onConfirm={() => { const found = getAllItems().find(it => it.id === sel); onSave(sel, found ? found.catKey : null); }} />
-    </ModalSheet>
-  );
-}
-
-/* ── GARDEN DETAIL ── */
-function GardenDetail({ page, owned, customCategories, onClose, onUpdate, onDelete }) {
-  const [edit, setEdit] = useState(false);
-  const [els, setEls] = useState(page.elements || []);
-  const [selId, setSelId] = useState(null);
-  const [catFil, setCatFil] = useState(null);
-  const [isDark, setIsDark] = useState(page.isDark || false);
-  const [ctxMenu, setCtxMenu] = useState(null);
-  const [sizePickerEl, setSizePickerEl] = useState(null);
-  const [pickerSize, setPickerSize] = useState(42);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const cvRef = useRef(null);
-  const drg = useRef(null);
-  const th = THEMES[page.theme] || THEMES.nature;
-
-  const save = (newEls, newDark) => {
-    onUpdate({ ...page, elements: newEls !== undefined ? newEls : els, isDark: newDark !== undefined ? newDark : isDark });
-  };
-
-  const addEl = (el) => { setPickerSize(42); setSizePickerEl(el); };
-
-  const confirmAddEl = () => {
-    const c = cvRef.current, w = c ? c.offsetWidth : 900, h = c ? c.offsetHeight : 500;
-    const el = sizePickerEl;
-    const ne = { id: uid(), emoji: el.e || el.emoji, name: el.n || el.name, catKey: el.catKey, x: 20 + Math.random() * (w - 120), y: 20 + Math.random() * (h - 120), size: pickerSize };
-    const u = [...els, ne];
-    setEls(u); save(u); setSizePickerEl(null);
-  };
-
-  const onMD = (e, id) => {
-    e.preventDefault(); e.stopPropagation(); setSelId(id); setCtxMenu(null);
-    const el = els.find(x => x.id === id);
-    drg.current = { id, ox: e.clientX - el.x, oy: e.clientY - el.y };
-  };
-  const onMM = (e) => {
-    if (!drg.current) return;
-    const { id, ox, oy } = drg.current;
-    setEls(prev => prev.map(el => el.id === id ? { ...el, x: e.clientX - ox, y: e.clientY - oy } : el));
-  };
-  const onMU = () => { if (drg.current) { save(els); drg.current = null; } };
-  const onTS = (e, id) => { const t = e.touches[0]; onMD({ clientX: t.clientX, clientY: t.clientY, preventDefault: () => e.preventDefault(), stopPropagation: () => {} }, id); };
-  const onTM = (e) => { const t = e.touches[0]; onMM({ clientX: t.clientX, clientY: t.clientY }); };
-  const rsz = (id, d) => { const u = els.map(el => el.id === id ? { ...el, size: Math.max(18, Math.min(120, el.size + d)) } : el); setEls(u); save(u); setCtxMenu(null); };
-  const delEl = (id) => { const u = els.filter(el => el.id !== id); setEls(u); setSelId(null); setCtxMenu(null); save(u); };
-  const toggleDark = () => { const nd = !isDark; setIsDark(nd); save(els, nd); };
-  const onRightClick = (e, id) => { e.preventDefault(); e.stopPropagation(); setCtxMenu({ id, x: e.clientX, y: e.clientY }); setSelId(id); };
-
-  const enriched = owned.map(el => {
-    const cat = Object.entries(RCATS).find(([, v]) => v.items.find(it => it.id === el.id));
-    return { ...el, catKey: cat ? cat[0] : null };
-  });
-  const customCats = (customCategories || []);
-  const filtOwned = catFil
-    ? (catFil.startsWith('__custom__')
-        ? (customCats.find(c => c.key === catFil.replace('__custom__',''))?.items || []).map(it => ({ ...it, emoji: it.e, name: it.n, catKey: catFil }))
-        : enriched.filter(el => el.catKey === catFil))
-    : [...enriched, ...customCats.flatMap(c => c.items.map(it => ({ ...it, emoji: it.e, name: it.n, catKey: '__custom__' + c.key })))];
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ height: 54, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', background: 'rgba(0,0,0,.28)', backdropFilter: 'blur(12px)', color: 'white', gap: 8 }}>
-        <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 11, background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>←</button>
-        <span style={{ fontWeight: 800, fontSize: 15, flex: 1, textAlign: 'center' }}>{th.e} {page.title}</span>
-        {th.hasDN && <button onClick={toggleDark} style={{ padding: '5px 11px', borderRadius: 9, background: 'rgba(255,255,255,.18)', border: 'none', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{isDark ? '🌙 밤' : '☀️ 낮'}</button>}
-        <button onClick={() => { setEdit(!edit); setSelId(null); }} style={{ padding: '6px 13px', borderRadius: 10, background: edit ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.2)', border: 'none', color: edit ? PD : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{edit ? '완료' : '✏️ 수정'}</button>
-        <button onClick={() => setShowDeleteConfirm(true)} style={{ width: 34, height: 34, borderRadius: 11, background: 'rgba(239,68,68,.25)', border: '1px solid rgba(239,68,68,.4)', color: 'white', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🗑️</button>
-      </div>
-      <div ref={cvRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none' }}
-        onMouseMove={onMM} onMouseUp={onMU} onTouchMove={onTM} onTouchEnd={onMU}
-        onClick={() => { setSelId(null); setCtxMenu(null); }}
-        onContextMenu={e => e.preventDefault()}>
-        <div style={{ position: 'absolute', inset: 0 }}><ThemeBg themeId={page.theme} isDark={isDark} /></div>
-        {els.map(el => (
-          <div key={el.id}
-            style={{ position: 'absolute', left: el.x, top: el.y, fontSize: el.size, userSelect: 'none', cursor: 'grab', lineHeight: 1, touchAction: 'none', filter: selId === el.id ? 'drop-shadow(0 0 10px rgba(255,255,255,0.9))' : 'none', zIndex: selId === el.id ? 10 : 1 }}
-            onMouseDown={e => onMD(e, el.id)}
-            onTouchStart={e => onTS(e, el.id)}
-            onContextMenu={e => onRightClick(e, el.id)}>
-            {el.emoji}
-          </div>
-        ))}
-        {els.length === 0 && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.72)', pointerEvents: 'none' }}>
-            <span style={{ fontSize: 48 }}>🌱</span>
-            <p style={{ fontSize: 14, fontWeight: 700, marginTop: 8 }}>{edit ? '아래 요소를 탭해 추가하세요' : '수정 버튼을 눌러 꾸며보세요'}</p>
+            <div style={{ background: 'white', borderRadius: 20, padding: 28, boxShadow: '0 4px 24px rgba(0,0,0,.06)', border: '1px solid #F3F4F6' }}>
+              <Field value={nick} onChange={setNick} label="닉네임" placeholder="예: 개발자 길동, 디자이너 수현" hint="나중에 프로필에서 변경할 수 있어요" />
+              <Btn onClick={() => { if (nick.trim()) setStep(1); }} disabled={!nick.trim()} full bg="#2563EB" style={{ padding: '13px', borderRadius: 12, fontSize: 15 }}>다음 →</Btn>
+            </div>
           </div>
         )}
-        {ctxMenu && (
-          <div style={{ position: 'absolute', left: Math.min(ctxMenu.x - (cvRef.current?.getBoundingClientRect().left || 0), (cvRef.current?.offsetWidth || 400) - 160), top: Math.max(ctxMenu.y - (cvRef.current?.getBoundingClientRect().top || 0) - 10, 10), background: 'rgba(15,10,30,0.92)', backdropFilter: 'blur(12px)', borderRadius: 14, padding: '6px', zIndex: 100, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.12)', minWidth: 150 }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '4px 10px 8px', fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>요소 편집</div>
-            {[{ icon: '🔍+', label: '크게', action: () => rsz(ctxMenu.id, 12) }, { icon: '🔍−', label: '작게', action: () => rsz(ctxMenu.id, -12) }, { icon: '🗑️', label: '삭제', action: () => delEl(ctxMenu.id), danger: true }].map(item => (
-              <button key={item.label} onClick={item.action} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: 'none', border: 'none', color: item.danger ? '#FF6B6B' : 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', borderRadius: 9, textAlign: 'left' }}
-                onMouseEnter={e => { e.currentTarget.style.background = item.danger ? 'rgba(255,70,70,0.18)' : 'rgba(255,255,255,0.12)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
-                <span style={{ fontSize: 15 }}>{item.icon}</span>{item.label}
+
+        {step === 1 && (
+          <div className="fu">
+            <div style={{ textAlign: 'center', marginBottom: 32 }}>
+              <h2 style={{ fontSize: 26, fontWeight: 900, color: '#111827', marginBottom: 8 }}>어떤 용도로 사용하실 건가요?</h2>
+              <p style={{ fontSize: 14, color: '#6B7280' }}>선택에 따라 최적화된 기능을 제공해드려요</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+              {Object.entries(WS).map(([k, v]) => (
+                <button key={k} onClick={() => setWsType(k)} style={{
+                  display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderRadius: 16, textAlign: 'left',
+                  border: `2px solid ${wsType === k ? v.c : '#E5E7EB'}`,
+                  background: wsType === k ? v.l : 'white', cursor: 'pointer', transition: 'all .15s',
+                }}>
+                  <div style={{ width: 50, height: 50, borderRadius: 14, background: wsType === k ? v.c : v.l, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{v.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 3 }}>{v.label}용</div>
+                    <div style={{ fontSize: 12, color: '#6B7280' }}>{v.tagline}</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      {v.perks.slice(0, 2).map(p => <Badge key={p} color={v.d} bg={v.l}>{p}</Badge>)}
+                    </div>
+                  </div>
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${wsType === k ? v.c : '#D1D5DB'}`, background: wsType === k ? v.c : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {wsType === k && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white' }} />}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Btn onClick={() => setStep(0)} outline color="#6B7280" style={{ flex: 1, padding: '12px', borderRadius: 12 }}>← 이전</Btn>
+              <button onClick={() => { if (wsType) onDone({ nickname: nick.trim(), wsType }); }} disabled={!wsType}
+                style={{ flex: 2, padding: '13px', borderRadius: 12, border: 'none', background: wsType ? WS[wsType]?.c : '#9CA3AF', color: 'white', fontSize: 15, fontWeight: 700, cursor: wsType ? 'pointer' : 'default', opacity: wsType ? 1 : 0.5 }}>
+                시작하기 🚀
               </button>
-            ))}
+            </div>
           </div>
         )}
       </div>
-      {edit && (
-        <div style={{ flexShrink: 0, background: 'rgba(10,5,36,.82)', backdropFilter: 'blur(16px)', padding: '11px 16px 18px' }}>
-          <div style={{ display: 'flex', gap: 5, overflowX: 'auto', marginBottom: 10, paddingBottom: 3 }}>
-            <button onClick={() => setCatFil(null)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${!catFil ? 'white' : BD}`, background: !catFil ? 'white' : 'rgba(255,255,255,.1)', color: !catFil ? PD : 'rgba(255,255,255,.7)', fontSize: 11, fontWeight: 800 }}>전체</button>
-            {Object.entries(RCATS).map(([k, v]) => (
-              <button key={k} onClick={() => setCatFil(catFil === k ? null : k)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${catFil === k ? v.c : 'rgba(255,255,255,.2)'}`, background: catFil === k ? v.c : 'rgba(255,255,255,.08)', color: catFil === k ? 'white' : 'rgba(255,255,255,.65)', fontSize: 11, fontWeight: 800 }}>{v.e} {v.n}</button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 2 }}>
-            {filtOwned.length === 0
-              ? <p style={{ color: 'rgba(255,255,255,.4)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>퀘스트를 완료하면 요소를 얻을 수 있어요</p>
-              : filtOwned.map((el, i) => (
-                <button key={i} onClick={() => addEl(el)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'rgba(255,255,255,.1)', border: '1.5px solid rgba(255,255,255,.15)', borderRadius: 13, padding: '9px 11px', flexShrink: 0 }}>
-                  <span style={{ fontSize: 24 }}>{el.emoji}</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,.65)', fontWeight: 700 }}>{el.name}</span>
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
-      {sizePickerEl && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(10,5,30,.65)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <div style={{ width: '100%', maxWidth: 480, background: 'white', borderRadius: '24px 24px 0 0', padding: '24px 24px 40px' }}>
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: '#E5E7EB', margin: '0 auto 20px' }} />
-            <div style={{ fontWeight: 900, fontSize: 17, color: '#1E1B4B', marginBottom: 4, textAlign: 'center' }}>크기 조정</div>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 96, marginBottom: 18 }}>
-              <span style={{ fontSize: pickerSize, lineHeight: 1, transition: 'font-size .18s' }}>{sizePickerEl.e || sizePickerEl.emoji}</span>
-            </div>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 18, justifyContent: 'center' }}>
-              {[{ label: 'S', size: 24 }, { label: 'M', size: 42 }, { label: 'L', size: 64 }, { label: 'XL', size: 90 }].map(({ label, size }) => (
-                <button key={label} onClick={() => setPickerSize(size)}
-                  style={{ width: 60, height: 60, borderRadius: 16, border: `2px solid ${pickerSize === size ? P : BD}`, background: pickerSize === size ? PL : 'white', color: pickerSize === size ? PD : '#6B7280', fontWeight: 900, fontSize: 15, cursor: 'pointer' }}>
-                  {label}<br/><span style={{ fontSize: 9 }}>{size}px</span>
-                </button>
-              ))}
-            </div>
-            <div style={{ marginBottom: 24, padding: '0 4px' }}>
-              <input type="range" min="18" max="120" value={pickerSize} onChange={e => setPickerSize(Number(e.target.value))} style={{ width: '100%', accentColor: P, cursor: 'pointer' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 4 }}>
-                <span>작게</span><span style={{ fontWeight: 900, color: PD }}>{pickerSize}px</span><span>크게</span>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setSizePickerEl(null)} style={{ flex: 1, padding: '13px', borderRadius: 14, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>취소</button>
-              <button onClick={confirmAddEl} style={{ flex: 2, padding: '13px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 14, fontWeight: 900, cursor: 'pointer' }}>✅ 이 크기로 배치하기</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showDeleteConfirm && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(10,5,30,.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'white', borderRadius: 22, padding: 28, width: '100%', maxWidth: 340 }}>
-            <div style={{ fontSize: 48, textAlign: 'center', marginBottom: 14 }}>🗑️</div>
-            <div style={{ fontWeight: 900, fontSize: 18, color: '#1E1B4B', textAlign: 'center', marginBottom: 10 }}>정원을 삭제할까요?</div>
-            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 14px', marginBottom: 22, fontSize: 12, color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>이 작업은 되돌릴 수 없어요.</div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: 13, borderRadius: 12, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>취소</button>
-              <button onClick={() => { setShowDeleteConfirm(false); onDelete(page.id); onClose(); }} style={{ flex: 1, padding: 13, borderRadius: 12, border: 'none', background: '#EF4444', color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>삭제하기</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-/* ── TIMER SCREEN ── */
-function TimerScreen({ quest, silentMode, isProUser, onComplete, onBack }) {
-  const [phase, setPhase] = useState('input');
-  const [mins, setMins] = useState('');
-  const [secs, setSecs] = useState('');
-  const [total, setTotal] = useState(0);
-  const [rem, setRem] = useState(0);
-  const [addM, setAddM] = useState('');
-  const [addS, setAddS] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
-  const [isFlash, setIsFlash] = useState(false);
-  const endTimeRef = useRef(null);
-  const iv = useRef(null);
-  const doneRef = useRef(false);
-
-  const tick = () => {
-    if (!endTimeRef.current) return;
-    const left = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
-    setRem(left);
-    if (left <= 0 && !doneRef.current) {
-      doneRef.current = true;
-      clearInterval(iv.current);
-      setPhase('done');
-      if (silentMode) beep();
-      else { setIsFlash(true); setTimeout(() => setIsFlash(false), 3200); }
-    }
-  };
-
-  const startCD = (seconds) => {
-    clearInterval(iv.current);
-    doneRef.current = false;
-    endTimeRef.current = Date.now() + seconds * 1000;
-    setRem(seconds);
-    iv.current = setInterval(tick, 300);
-  };
-
-  useEffect(() => {
-    const onVis = () => { if (!document.hidden && phase === 'running') tick(); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, [phase]);
-
-  const start = () => {
-    const m = parseInt(mins) || 0, s = parseInt(secs) || 0, tot = m * 60 + s;
-    if (tot <= 0) return;
-    track('timer_start', { duration_minutes: Math.round(tot / 60), quest_title: quest.title });
-    setTotal(tot); setPhase('running'); startCD(tot);
-  };
-
-  const addTime = () => {
-    const m = parseInt(addM) || 0, s = parseInt(addS) || 0, ex = m * 60 + s;
-    if (ex <= 0) return;
-    setTotal(t => t + ex);
-    const nr = rem + ex;
-    doneRef.current = false;
-    setPhase('running'); startCD(nr);
-    setShowAdd(false); setAddM(''); setAddS('');
-  };
-
-  useEffect(() => () => clearInterval(iv.current), []);
-
-  const mm = String(Math.floor(rem / 60)).padStart(2, '0');
-  const ss = String(rem % 60).padStart(2, '0');
-  const prog = total > 0 ? (1 - rem / total) : 0;
-  const R = 54, circ = 2 * Math.PI * R;
-  const el = getAllItems().find(it => it.id === quest.rewardId);
-
-  const numIn = (val, set, ph, max) => (
-    <input type="number" min="0" max={max} placeholder={ph} value={val} onChange={e => set(e.target.value)}
-      style={{ background: 'rgba(255,255,255,.15)', border: '2px solid rgba(255,255,255,.25)', borderRadius: 13, padding: '12px 0', fontFamily: 'monospace', fontSize: 26, fontWeight: 700, color: 'white', textAlign: 'center', width: 76 }}
-      onFocus={e => { e.target.style.border = '2px solid rgba(255,255,255,.72)'; }}
-      onBlur={e => { e.target.style.border = '2px solid rgba(255,255,255,.25)'; }} />
-  );
-
-  const tb = (label, fn, primary) => (
-    <button onClick={fn} style={{ flex: 1, padding: 14, borderRadius: 13, border: primary ? 'none' : '2px solid rgba(255,255,255,.2)', background: primary ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.12)', color: primary ? PD : 'white', fontSize: 15, fontWeight: 800 }}>{label}</button>
-  );
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: isFlash ? 'rgba(255,238,50,.94)' : 'linear-gradient(160deg,#2D1B69 0%,#0D4F3C 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '36px 28px', color: 'white', animation: isFlash ? 'qgFlash .65s ease 4' : undefined }}>
-      <p style={{ fontSize: 15, fontWeight: 700, opacity: 0.75, marginBottom: 6 }}>⚔️ {quest.title}</p>
-      {phase === 'input' && (
-        <>
-          <div style={{ fontFamily: 'monospace', fontSize: 72, fontWeight: 700, letterSpacing: 3, margin: '14px 0', lineHeight: 1 }}>00:00</div>
-          <p style={{ fontSize: 14, opacity: 0.65, fontWeight: 600, marginBottom: 18 }}>공부할 시간을 입력하세요</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-            {numIn(mins, setMins, '25', 180)}<span style={{ fontSize: 19, opacity: 0.7 }}>분</span>
-            {numIn(secs, setSecs, '00', 59)}<span style={{ fontSize: 19, opacity: 0.7 }}>초</span>
-          </div>
-          <button onClick={start} style={{ padding: '13px 46px', borderRadius: 15, border: '2px solid rgba(255,255,255,.25)', background: 'rgba(255,255,255,.18)', color: 'white', fontSize: 16, fontWeight: 800 }}>시작하기 ▶</button>
-          <button onClick={onBack} style={{ marginTop: 14, background: 'none', border: 'none', color: 'rgba(255,255,255,.5)', fontSize: 14, fontWeight: 700 }}>← 돌아가기</button>
-        </>
-      )}
-      {(phase === 'running' || phase === 'paused') && (
-        <>
-          <svg width="132" height="132" style={{ transform: 'rotate(-90deg)', marginBottom: 6 }}>
-            <defs>
-              <linearGradient id="rg3" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#A78BFA" /><stop offset="100%" stopColor="#34D399" />
-              </linearGradient>
-            </defs>
-            <circle cx="66" cy="66" r={R} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="8" />
-            <circle cx="66" cy="66" r={R} fill="none" stroke="url(#rg3)" strokeWidth="8" strokeLinecap="round"
-              strokeDasharray={circ} strokeDashoffset={circ * prog} style={{ transition: 'stroke-dashoffset 1s linear' }} />
-          </svg>
-          <div style={{ fontFamily: 'monospace', fontSize: 70, fontWeight: 700, letterSpacing: 3, margin: '6px 0 20px', lineHeight: 1 }}>{mm}:{ss}</div>
-          <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 310 }}>
-            {phase === 'running'
-              ? tb('⏸ 일시정지', () => { clearInterval(iv.current); setPhase('paused'); }, false)
-              : tb('▶ 재개', () => { setPhase('running'); startCD(rem); }, true)}
-          </div>
-        </>
-      )}
-      {phase === 'done' && (
-        <>
-          <div className="qg-pop" style={{ fontSize: 54, marginBottom: 8 }}>🎉</div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 4 }}>완료!</div>
-          <p style={{ fontSize: 14, opacity: 0.72, fontWeight: 600, marginBottom: 22, textAlign: 'center' }}>{quest.title} 퀘스트가 끝났어요</p>
-          {isProUser ? (
-            <>
-              <div style={{ background: 'rgba(255,255,255,.13)', borderRadius: 20, padding: '18px 28px', marginBottom: 22, textAlign: 'center', border: '2px solid rgba(255,255,255,.22)', width: '100%', maxWidth: 320 }}>
-                <p style={{ fontSize: 13, opacity: 0.72, fontWeight: 700, marginBottom: 10 }}>보상을 획득하시겠습니까?</p>
-                <div style={{ fontSize: 46, marginBottom: 6 }}>{el ? el.e : '🎁'}</div>
-                <p style={{ fontWeight: 900, fontSize: 16 }}>{el ? el.n : '보상 요소'}</p>
-              </div>
-              <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 310, marginBottom: 14 }}>
-                {tb('건너뛰기', () => onBack(), false)}
-                {tb('획득하기 🎁', () => { track('timer_complete', { quest_title: quest.title, minutes: Math.floor(total/60), reward_obtained: true }); onComplete(Math.max(0, Math.floor(total / 60))); }, true)}
-              </div>
-            </>
-          ) : (
-            <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 310, marginBottom: 14 }}>
-              {tb('완료! ✓', () => { track('timer_complete', { quest_title: quest.title, minutes: Math.floor(total/60), reward_obtained: false }); onComplete(Math.max(0, Math.floor(total / 60))); }, true)}
-            </div>
-          )}
-          <button onClick={() => setShowAdd(s => !s)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.5)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 시간 더 추가하기</button>
-          {showAdd && (
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {numIn(addM, setAddM, '10', 180)}<span style={{ fontSize: 19, opacity: 0.7 }}>분</span>
-                {numIn(addS, setAddS, '00', 59)}<span style={{ fontSize: 19, opacity: 0.7 }}>초</span>
-              </div>
-              <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 310 }}>
-                {tb('취소', () => setShowAdd(false), false)}
-                {tb('추가', addTime, true)}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── STATS SCREEN ── */
-function StatsScreen({ quests }) {
-  const [view, setView] = useState('month');
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [browseYr, setBrowseYr] = useState(new Date().getFullYear());
-  const [browseMo, setBrowseMo] = useState(new Date().getMonth());
+/* ══════════════════════════════════════════════════════════
+   HOME SCREEN
+══════════════════════════════════════════════════════════ */
+function HomeScreen({ user, todos, events, setScreen }) {
+  const cfg = WS[user.wsType] || WS.personal;
+  const todayTodos = todos.filter(t => t.dueDate === tod() && t.status !== 'done');
+  const todayEvents = events.filter(e => e.date === tod());
+  const done = todos.filter(t => t.status === 'done').length;
+  const total = todos.length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const now = new Date();
-  const yr = browseYr, mo = browseMo;
-  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
-  const moNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}시간 ${m%60}분` : `${m}분`;
-
-  const parseDate = d => { if (!d) return new Date(0); const p = new Date(d); return isNaN(p.getTime()) ? new Date(0) : p; };
-  const allCompleted = quests.filter(q => q.completed);
-  const moCompleted = allCompleted.filter(q => { const d = parseDate(q.date); return d.getFullYear() === yr && d.getMonth() === mo; });
-  const dayCounts = {}, dayMins = {}, dayQuests = {};
-  moCompleted.forEach(q => { const day = parseDate(q.date).getDate(); dayCounts[day] = (dayCounts[day] || 0) + 1; dayMins[day] = (dayMins[day] || 0) + (q.studyMinutes || 0); if (!dayQuests[day]) dayQuests[day] = []; dayQuests[day].push(q); });
-  const yrCompleted = allCompleted.filter(q => parseDate(q.date).getFullYear() === yr);
-  const moCounts = Array(12).fill(0), moMins = Array(12).fill(0), moQuestMap = {};
-  yrCompleted.forEach(q => { const m = parseDate(q.date).getMonth(); moCounts[m]++; moMins[m] += (q.studyMinutes || 0); if (!moQuestMap[m]) moQuestMap[m] = []; moQuestMap[m].push(q); });
-
-  const totalMoQ = moCompleted.length, totalMoMin = moCompleted.reduce((s, q) => s + (q.studyMinutes || 0), 0);
-  const totalYrQ = yrCompleted.length, totalYrMin = yrCompleted.reduce((s, q) => s + (q.studyMinutes || 0), 0);
-
-  function BarChart({ data, labels, height = 110 }) {
-    const max = Math.max(...data, 1), n = data.length, w = 560, pad = 3;
-    const bw = Math.max(5, (w - pad * (n + 1)) / n);
-    const isNowIdx = view === 'month' ? (yr === now.getFullYear() && mo === now.getMonth() ? now.getDate() - 1 : -1) : (yr === now.getFullYear() ? now.getMonth() : -1);
-    return (
-      <svg viewBox={`0 0 ${w} ${height + 28}`} width="100%" style={{ display: 'block', cursor: 'pointer' }}>
-        {data.map((v, i) => {
-          const bh = v > 0 ? Math.max(8, (v / max) * (height - 10)) : 3;
-          const x = pad + i * (bw + pad);
-          const y = height - bh;
-          const isNow = i === isNowIdx;
-          const hasSel = selectedDay && (view === 'month' ? selectedDay.key === `d-${yr}-${mo}-${i + 1}` : selectedDay.key === `m-${yr}-${i}`);
-          return (
-            <g key={i} style={{ cursor: v > 0 ? 'pointer' : 'default' }}
-              onClick={() => {
-                if (v === 0) return;
-                if (view === 'month') { const day = i + 1; setSelectedDay({ key: `d-${yr}-${mo}-${day}`, label: `${yr}년 ${moNames[mo]} ${day}일`, quests: dayQuests[day] || [], minutes: dayMins[day] || 0 }); }
-                else { setSelectedDay({ key: `m-${yr}-${i}`, label: `${yr}년 ${moNames[i]}`, quests: moQuestMap[i] || [], minutes: moMins[i] || 0 }); }
-              }}>
-              <rect x={x} y={y} width={bw} height={bh} rx="3" fill={hasSel ? P : v > 0 ? (isNow ? P : PL) : '#F3F4F6'} stroke={hasSel ? PD : isNow && !hasSel ? P : 'none'} strokeWidth="1.5" />
-              {v > 0 && bh > 18 && <text x={x + bw / 2} y={y + bh / 2 + 4} textAnchor="middle" fontSize="8" fill={hasSel || isNow ? 'white' : '#9CA3AF'} fontFamily="Nunito,sans-serif" fontWeight="800">{v}</text>}
-              {labels && labels[i] && <text x={x + bw / 2} y={height + 18} textAnchor="middle" fontSize="8.5" fill={hasSel ? P : isNow ? P : '#9CA3AF'} fontFamily="Nunito,sans-serif" fontWeight={hasSel || isNow ? '800' : '400'}>{labels[i]}</text>}
-            </g>
-          );
-        })}
-      </svg>
-    );
-  }
-
-  const statCard = (icon, label, value) => (
-    <div style={{ flex: 1, background: 'white', borderRadius: 16, padding: '14px 12px', border: `1.5px solid ${BD}`, textAlign: 'center' }}>
-      <div style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
-      <div style={{ fontSize: 18, fontWeight: 900, color: P, marginBottom: 2 }}>{value}</div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280' }}>{label}</div>
-    </div>
-  );
-
-  const prevMo = () => { if (mo === 0) { setBrowseYr(y => y - 1); setBrowseMo(11); } else setBrowseMo(m => m - 1); setSelectedDay(null); };
-  const nextMo = () => { const maxMo = yr === now.getFullYear() ? now.getMonth() : 11; if (mo >= maxMo && yr >= now.getFullYear()) return; if (mo === 11) { setBrowseYr(y => y + 1); setBrowseMo(0); } else setBrowseMo(m => m + 1); setSelectedDay(null); };
-  const prevYr = () => { setBrowseYr(y => y - 1); setSelectedDay(null); };
-  const nextYr = () => { if (yr < now.getFullYear()) { setBrowseYr(y => y + 1); setSelectedDay(null); } };
-  const canNextMo = !(mo >= now.getMonth() && yr >= now.getFullYear()), canNextYr = yr < now.getFullYear();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? '좋은 아침이에요' : hour < 18 ? '안녕하세요' : '수고하셨어요';
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 18, background: PP, borderRadius: 12, padding: 3 }}>
-        {[['month', '월간'], ['year', '연간']].map(([v, l]) => (
-          <button key={v} onClick={() => { setView(v); setSelectedDay(null); }}
-            style={{ flex: 1, padding: '8px', borderRadius: 9, border: 'none', background: view === v ? 'white' : 'transparent', color: view === v ? P : '#9CA3AF', fontWeight: 800, fontSize: 13, boxShadow: view === v ? '0 2px 6px rgba(124,58,237,.1)' : 'none', transition: 'all .2s', cursor: 'pointer' }}>{l}</button>
+    <div style={{ padding: '28px', overflowY: 'auto', height: '100%' }}>
+      {/* Header */}
+      <div className="fu" style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', marginBottom: 4 }}>{greeting}, {user.nickname || user.name}님! {cfg.icon}</div>
+        <div style={{ fontSize: 14, color: '#6B7280' }}>{fmtFull(tod())} · {cfg.label}용 워크스페이스</div>
+      </div>
+
+      {/* Stats cards */}
+      <div className="fu" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 24, animationDelay: '.05s' }}>
+        {[
+          { label: '전체 할일', value: total + '개', icon: '📋', color: cfg.c },
+          { label: '완료', value: done + '개', icon: '✅', color: '#059669' },
+          { label: '완료율', value: pct + '%', icon: '📈', color: '#D97706' },
+        ].map(({ label, value, icon, color }) => (
+          <div key={label} style={{ background: 'white', borderRadius: 16, padding: '18px 16px', border: '1px solid #F3F4F6', boxShadow: '0 2px 8px rgba(0,0,0,.04)' }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>{icon}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color, marginBottom: 2 }}>{value}</div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600 }}>{label}</div>
+          </div>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 16 }}>
-        <button onClick={view === 'month' ? prevMo : prevYr} style={{ width: 32, height: 32, borderRadius: '50%', border: `1.5px solid ${BD}`, background: 'white', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}>‹</button>
-        <span style={{ fontWeight: 900, fontSize: 15, color: '#1E1B4B', minWidth: 110, textAlign: 'center' }}>{view === 'month' ? `${yr}년 ${moNames[mo]}` : `${yr}년`}</span>
-        <button onClick={view === 'month' ? nextMo : nextYr} style={{ width: 32, height: 32, borderRadius: '50%', border: `1.5px solid ${BD}`, background: 'white', fontSize: 16, cursor: (view === 'month' ? canNextMo : canNextYr) ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', color: (view === 'month' ? canNextMo : canNextYr) ? '#6B7280' : '#D1D5DB' }}>›</button>
+
+      {/* Progress bar */}
+      <div className="fu" style={{ background: 'white', borderRadius: 16, padding: '18px 20px', border: '1px solid #F3F4F6', marginBottom: 20, animationDelay: '.1s' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>전체 진행률</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: cfg.c }}>{pct}%</div>
+        </div>
+        <div style={{ height: 8, background: '#F3F4F6', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, ${cfg.c}, ${cfg.d})`, borderRadius: 99, transition: 'width 1s ease' }} />
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-        {view === 'month'
-          ? <>{statCard('✅', '퀘스트 완료', totalMoQ + '개')}{statCard('⏱', '총 공부 시간', fmtMin(totalMoMin))}{statCard('📅', '완료한 날', Object.keys(dayCounts).length + '일')}</>
-          : <>{statCard('✅', '올해 완료', totalYrQ + '개')}{statCard('⏱', '올해 공부', fmtMin(totalYrMin))}{statCard('🔥', '활동 월수', moCounts.filter(c => c > 0).length + '개월')}</>}
-      </div>
-      <div style={{ background: 'white', borderRadius: 18, padding: '16px 14px', border: `1.5px solid ${BD}`, marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#1E1B4B', marginBottom: 4 }}>📊 {view === 'month' ? `${yr}년 ${moNames[mo]} 퀘스트 완료` : `${yr}년 월별 퀘스트 완료`}</div>
-        <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginBottom: 10 }}>막대를 클릭하면 완료한 할일 목록을 볼 수 있어요</div>
-        {view === 'month'
-          ? <BarChart data={Array.from({ length: daysInMonth }, (_, i) => dayCounts[i + 1] || 0)} labels={Array.from({ length: daysInMonth }, (_, i) => i + 1)} />
-          : <BarChart data={moCounts} labels={moNames} />}
-      </div>
-      <div style={{ background: 'white', borderRadius: 18, padding: '16px 14px', border: `1.5px solid ${BD}`, marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#1E1B4B', marginBottom: 10 }}>⏱ {view === 'month' ? '일별 공부 시간 (분)' : '월별 공부 시간 (분)'}</div>
-        {view === 'month'
-          ? <BarChart data={Array.from({ length: daysInMonth }, (_, i) => dayMins[i + 1] || 0)} labels={Array.from({ length: daysInMonth }, (_, i) => i + 1)} />
-          : <BarChart data={moMins} labels={moNames} />}
-      </div>
-      {selectedDay && (
-        <div style={{ background: 'white', borderRadius: 18, border: `2px solid ${P}`, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ background: `linear-gradient(135deg,${PL},${GL})`, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 14, color: PD }}>{selectedDay.label}</div>
-              <div style={{ fontSize: 12, color: PM, fontWeight: 600, marginTop: 2 }}>완료 {selectedDay.quests.length}개 · {fmtMin(selectedDay.minutes)}</div>
-            </div>
-            <button onClick={() => setSelectedDay(null)} style={{ background: 'rgba(124,58,237,.15)', border: 'none', borderRadius: 8, width: 28, height: 28, fontSize: 14, color: PD, cursor: 'pointer' }}>✕</button>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Today's todos */}
+        <div className="fu" style={{ background: 'white', borderRadius: 16, padding: '18px', border: '1px solid #F3F4F6', animationDelay: '.12s' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>오늘 할일</div>
+            <button onClick={() => setScreen('todo')} style={{ fontSize: 11, color: cfg.c, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}>전체 →</button>
           </div>
-          <div style={{ padding: '10px 16px 14px' }}>
-            {selectedDay.quests.map((q, i) => (
-              <div key={q.id || i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < selectedDay.quests.length - 1 ? `1px solid ${BD}` : 'none' }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: G, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12, flexShrink: 0 }}>✓</div>
+          {todayTodos.length === 0
+            ? <div style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '16px 0' }}>오늘 할일이 없어요 🎉</div>
+            : todayTodos.slice(0, 4).map(t => (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F9FAFB' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: PRIO[t.priority]?.c || '#6B7280', flexShrink: 0 }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+              </div>
+            ))
+          }
+        </div>
+
+        {/* Today's events */}
+        <div className="fu" style={{ background: 'white', borderRadius: 16, padding: '18px', border: '1px solid #F3F4F6', animationDelay: '.15s' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>오늘 일정</div>
+            <button onClick={() => setScreen('cal')} style={{ fontSize: 11, color: cfg.c, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}>캘린더 →</button>
+          </div>
+          {todayEvents.length === 0
+            ? <div style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '16px 0' }}>오늘 일정이 없어요</div>
+            : todayEvents.slice(0, 4).map(e => (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F9FAFB' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: e.color || cfg.c, flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1E1B4B' }}>{q.title}</div>
-                  {q.studyMinutes > 0 && <div style={{ fontSize: 11, color: GD, fontWeight: 600, marginTop: 1 }}>⏱ {fmtMin(q.studyMinutes)}</div>}
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{e.title}</div>
+                  {e.time && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{e.time}</div>}
                 </div>
               </div>
-            ))}
-          </div>
+            ))
+          }
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   TODO SCREEN
+══════════════════════════════════════════════════════════ */
+function TodoScreen({ todos, setTodos, wsType }) {
+  const cfg = WS[wsType] || WS.personal;
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ title: '', priority: 'medium', dueDate: '', category: '', notes: '' });
+  const [filter, setFilter] = useState('all');
+
+  const add = () => {
+    if (!form.title.trim()) return;
+    setTodos(p => [...p, { id: uid(), ...form, title: form.title.trim(), status: 'todo', createdAt: new Date().toISOString() }]);
+    setForm({ title: '', priority: 'medium', dueDate: '', category: '', notes: '' });
+    setShowModal(false);
+  };
+
+  const cycle = (id) => {
+    setTodos(p => p.map(t => {
+      if (t.id !== id) return t;
+      const order = ['todo', 'progress', 'done'];
+      const next = order[(order.indexOf(t.status) + 1) % order.length];
+      return { ...t, status: next };
+    }));
+  };
+
+  const del = (id) => setTodos(p => p.filter(t => t.id !== id));
+
+  const filtered = filter === 'all' ? todos : todos.filter(t => t.status === filter);
+  const cols = ['todo', 'progress', 'done'];
+
+  return (
+    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>
+            {wsType === 'company' ? '업무 관리' : '할일 관리'} ✅
+          </div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>{todos.length}개 항목 · {todos.filter(t => t.status === 'done').length}개 완료</div>
+        </div>
+        <Btn onClick={() => setShowModal(true)} bg={cfg.c} style={{ padding: '10px 18px', borderRadius: 11 }}>+ 추가</Btn>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="fu" style={{ display: 'flex', gap: 6, marginBottom: 20, background: '#F9FAFB', borderRadius: 11, padding: 4, animationDelay: '.05s' }}>
+        {[{ k: 'all', l: '전체' }, ...cols.map(k => ({ k, l: STAT[k].l }))].map(({ k, l }) => (
+          <button key={k} onClick={() => setFilter(k)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: filter === k ? 'white' : 'transparent', color: filter === k ? cfg.c : '#6B7280', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: filter === k ? '0 1px 4px rgba(0,0,0,.08)' : 'none', transition: 'all .15s' }}>{l}</button>
+        ))}
+      </div>
+
+      {/* Kanban columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, flex: 1, overflow: 'auto', minHeight: 0 }}>
+        {cols.map(col => {
+          const items = filtered.filter(t => t.status === col);
+          const s = STAT[col];
+          return (
+            <div key={col} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 12px', background: s.bg, borderRadius: 10 }}>
+                <span style={{ fontSize: 14 }}>{s.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: s.c }}>{s.l}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: s.c, background: 'white', borderRadius: 99, padding: '1px 8px' }}>{items.length}</span>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {items.length === 0
+                  ? <div style={{ textAlign: 'center', padding: '32px 12px', color: '#D1D5DB', fontSize: 13, fontWeight: 600 }}>없음</div>
+                  : items.map(t => (
+                    <div key={t.id} style={{ background: 'white', borderRadius: 13, padding: '14px', border: '1px solid #F3F4F6', boxShadow: '0 2px 6px rgba(0,0,0,.04)', cursor: 'pointer' }}
+                      onClick={() => cycle(t.id)}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', lineHeight: 1.4, textDecoration: t.status === 'done' ? 'line-through' : 'none', opacity: t.status === 'done' ? 0.55 : 1 }}>{t.title}</div>
+                        <button onClick={e => { e.stopPropagation(); del(t.id); }} style={{ background: 'none', border: 'none', color: '#D1D5DB', fontSize: 13, flexShrink: 0, cursor: 'pointer' }}>✕</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <Badge color={PRIO[t.priority]?.c} bg={PRIO[t.priority]?.bg}>{PRIO[t.priority]?.l}</Badge>
+                        {t.dueDate && <Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(t.dueDate)}</Badge>}
+                        {t.category && <Badge color={cfg.d} bg={cfg.l}>{t.category}</Badge>}
+                      </div>
+                      {t.notes && <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8, lineHeight: 1.5 }}>{t.notes}</div>}
+                      <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 8, fontWeight: 600 }}>탭해서 상태 변경</div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {showModal && (
+        <Modal title={wsType === 'company' ? '업무 추가' : '할일 추가'} onClose={() => setShowModal(false)}>
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="제목" placeholder="할일을 입력하세요" required />
+          <Select label="우선순위" value={form.priority} onChange={v => setForm(p => ({ ...p, priority: v }))}
+            options={Object.entries(PRIO).map(([k, v]) => ({ value: k, label: v.l }))} />
+          <Field value={form.dueDate} onChange={v => setForm(p => ({ ...p, dueDate: v }))} label="마감일" type="date" />
+          <Field value={form.category} onChange={v => setForm(p => ({ ...p, category: v }))} label={wsType === 'school' ? '과목' : wsType === 'company' ? '프로젝트' : '카테고리'} placeholder="선택 사항" />
+          <Field value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} label="메모" placeholder="추가 설명 (선택)" rows={3} />
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>추가하기</Btn>
+          </div>
+        </Modal>
       )}
     </div>
   );
 }
 
-/* ── GARDEN SCREEN ── */
-function GardenScreen({ isProUser, pages, owned, customCategories, onNewPage, onOpenPage, onShowProUpgrade }) {
-  if (!isProUser) {
-    return (
-      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'36px 28px',textAlign:'center'}}>
-        <div style={{fontSize:64,marginBottom:16}}>🌱</div>
-        <h2 style={{fontSize:22,fontWeight:900,color:'#1E1B4B',marginBottom:10}}>나만의 정원을 꾸며보세요</h2>
-        <p style={{fontSize:14,color:'#6B7280',fontWeight:600,lineHeight:1.75,marginBottom:28}}>퀘스트를 완료해서 보상 요소를 획득하고<br/>테마 배경 위에 자유롭게 배치하는<br/>나만의 특별한 공간을 만들 수 있어요.</p>
-        <button onClick={onShowProUpgrade} style={{width:'100%',maxWidth:340,padding:'15px',borderRadius:16,border:'none',background:`linear-gradient(135deg,${P},${G})`,color:'white',fontSize:16,fontWeight:900,boxShadow:'0 6px 24px rgba(124,58,237,.35)'}}>✨ Pro로 업그레이드</button>
-        <p style={{fontSize:11,color:'#9CA3AF',marginTop:12,fontWeight:600}}>월 ₩9,900 · 언제든 해지 가능</p>
-      </div>
-    );
-  }
+/* ══════════════════════════════════════════════════════════
+   CALENDAR SCREEN
+══════════════════════════════════════════════════════════ */
+function CalendarScreen({ events, setEvents, wsType }) {
+  const cfg = WS[wsType] || WS.personal;
+  const now = new Date();
+  const [yr, setYr] = useState(now.getFullYear());
+  const [mo, setMo] = useState(now.getMonth());
+  const [selDay, setSelDay] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ title: '', time: '', color: cfg.c, notes: '' });
+
+  const days = dimMo(yr, mo);
+  const first = firstDay(yr, mo);
+  const todayDate = tod();
+  const COLORS = ['#2563EB', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0891B2', '#BE185D'];
+
+  const eventsForDay = (d) => {
+    const ds = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    return events.filter(e => e.date === ds);
+  };
+
+  const addEvent = () => {
+    if (!form.title.trim() || !selDay) return;
+    const ds = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}`;
+    setEvents(p => [...p, { id: uid(), ...form, title: form.title.trim(), date: ds }]);
+    setForm({ title: '', time: '', color: cfg.c, notes: '' });
+    setShowModal(false);
+  };
+
+  const del = (id) => setEvents(p => p.filter(e => e.id !== id));
+
+  const selDate = selDay ? `${yr}-${String(mo + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}` : null;
+  const selEvents = selDay ? eventsForDay(selDay) : [];
+
   return (
-    <div style={{flex:1,overflowY:'auto',padding:'18px 18px 90px'}}>
-      {pages.length===0 ? (
-        <div style={{textAlign:'center',padding:'72px 24px'}}>
-          <div style={{fontSize:56,marginBottom:14}}>🌱</div>
-          <p style={{fontSize:15,color:'#6B7280',lineHeight:1.75,fontWeight:600}}>아직 정원이 없어요.<br/>우하단 <strong style={{color:P}}>+</strong> 버튼으로 첫 정원을 만들어요!</p>
+    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>📅 {moNames[mo]} {yr}</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => { if (mo === 0) { setYr(y => y - 1); setMo(11); } else setMo(m => m - 1); }} style={{ width: 34, height: 34, borderRadius: 9, border: '1.5px solid #E5E7EB', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+          <button onClick={() => { if (mo === 11) { setYr(y => y + 1); setMo(0); } else setMo(m => m + 1); }} style={{ width: 34, height: 34, borderRadius: 9, border: '1.5px solid #E5E7EB', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
         </div>
-      ) : (
-        <>
-          <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',textTransform:'uppercase',color:'#9CA3AF',marginBottom:12}}>나의 정원 ({pages.length})</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:14,marginBottom:28}}>
-            {pages.map((p,i)=>{
-              const th=THEMES[p.theme]||THEMES.nature;
-              return(
-                <div key={p.id} style={{borderRadius:20,overflow:'hidden',aspectRatio:'16/9',cursor:'pointer',position:'relative',boxShadow:'0 4px 18px rgba(124,58,237,.1)',border:'2px solid rgba(255,255,255,.5)'}} onClick={()=>onOpenPage(p.id)}>
-                  <div style={{position:'absolute',inset:0}}><ThemeBg themeId={p.theme} isDark={p.isDark}/></div>
-                  {(p.elements||[]).slice(0,10).map(el=>(<div key={el.id} style={{position:'absolute',left:`${Math.max(4,Math.min(80,(el.x||0)/12))}%`,top:`${Math.max(4,Math.min(68,(el.y||0)/7))}%`,fontSize:Math.max(13,Math.min(22,(el.size||36)*.48)),pointerEvents:'none',userSelect:'none',lineHeight:1}}>{el.emoji}</div>))}
-                  <div style={{position:'absolute',bottom:0,left:0,right:0,background:'linear-gradient(to top,rgba(0,0,0,.56),transparent)',padding:'22px 10px 10px',color:'white',fontSize:13,fontWeight:800,textShadow:'0 1px 4px rgba(0,0,0,.3)'}}>{th.e} {p.title}{p.isDark&&th.hasDN?' 🌙':''}</div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, flex: 1, minHeight: 0 }}>
+        {/* Calendar grid */}
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 8 }}>
+            {dayNames.map((d, i) => <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: i === 0 ? '#EF4444' : i === 6 ? '#2563EB' : '#9CA3AF', padding: '6px 0' }}>{d}</div>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
+            {Array(first).fill(null).map((_, i) => <div key={`e${i}`} />)}
+            {Array.from({ length: days }, (_, i) => {
+              const d = i + 1;
+              const ds = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+              const isToday = ds === todayDate;
+              const isSel = d === selDay;
+              const dayEvts = eventsForDay(d);
+              return (
+                <div key={d} onClick={() => setSelDay(d)} style={{
+                  minHeight: 72, borderRadius: 11, padding: '8px 6px', cursor: 'pointer',
+                  background: isSel ? cfg.l : isToday ? '#F0F4FF' : 'white',
+                  border: `1.5px solid ${isSel ? cfg.c : isToday ? cfg.m : '#F3F4F6'}`,
+                  transition: 'all .15s',
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: isSel || isToday ? 800 : 500, color: isSel ? cfg.c : isToday ? cfg.d : '#374151', marginBottom: 4 }}>{d}</div>
+                  {dayEvts.slice(0, 3).map(e => (
+                    <div key={e.id} style={{ fontSize: 10, fontWeight: 600, color: 'white', background: e.color || cfg.c, borderRadius: 4, padding: '1px 5px', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
+                  ))}
+                  {dayEvts.length > 3 && <div style={{ fontSize: 10, color: '#9CA3AF' }}>+{dayEvts.length - 3}개</div>}
                 </div>
               );
             })}
           </div>
-        </>
-      )}
-      {owned.length>0&&(
-        <>
-          <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',textTransform:'uppercase',color:'#9CA3AF',marginBottom:12}}>획득한 요소 컬렉션 ({owned.length}개)</div>
-          {Object.entries(RCATS).map(([k,v])=>{
-            const its=owned.filter(el=>el.catKey===k);
-            if(!its.length)return null;
-            return(
-              <div key={k} style={{marginBottom:16}}>
-                <div style={{fontSize:12,fontWeight:800,color:v.c,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>{v.e} {v.n}<span style={{background:v.c,color:'white',borderRadius:20,padding:'1px 8px',fontSize:10,fontWeight:900}}>{its.length}</span></div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                  {its.map((el,i)=>(<div key={i} title={el.name} style={{fontSize:22,background:'white',borderRadius:10,padding:6,border:`1.5px solid ${BD}`,lineHeight:1}}>{el.emoji}</div>))}
-                </div>
+        </div>
+
+        {/* Side panel */}
+        <div style={{ background: 'white', borderRadius: 16, padding: '18px', border: '1px solid #F3F4F6', overflowY: 'auto' }}>
+          {selDay ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>{fmtFull(selDate!)}</div>
+                <Btn onClick={() => setShowModal(true)} bg={cfg.c} sm>+ 추가</Btn>
               </div>
-            );
-          })}
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── QUEST SCREEN ── */
-function QuestScreen({ quests, silent, isProUser, onToggleSilent, onOpenTimer, onEditReward }) {
-  const tQ = quests.filter(q => q.date === today());
-  const done = tQ.filter(q => q.completed).length;
-  const allDone = tQ.length > 0 && done === tQ.length;
-  const [catFil, setCatFil] = useState(null);
-  const filtered = catFil ? tQ.filter(q => q.rewardCat === catFil) : tQ;
-  const usedCats = [...new Set(tQ.map(q => q.rewardCat).filter(Boolean))];
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px 90px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 900 }}>오늘의 퀘스트 ⚔️</h2>
-          <p style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginTop: 2 }}>{done}/{tQ.length} 완료{tQ.length === 0 ? ' · 할일을 추가해요' : ''}</p>
-        </div>
-        <button onClick={onToggleSilent} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 999, border: `1.5px solid ${silent ? P : G}`, background: silent ? PL : GL, color: silent ? PD : GD, fontSize: 12, fontWeight: 800 }}>{silent ? '🔔 알람' : '🔕 무음'}</button>
-      </div>
-      {tQ.length > 0 && (
-        <>
-          <div style={{ background: '#EDE9FE', borderRadius: 999, height: 6, marginBottom: 14, overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 999, background: `linear-gradient(90deg,${P},${G})`, width: `${tQ.length > 0 ? (done / tQ.length) * 100 : 0}%`, transition: 'width .5s ease' }} />
-          </div>
-          {isProUser && usedCats.length > 1 && (
-            <div style={{ display: 'flex', gap: 5, overflowX: 'auto', marginBottom: 14, paddingBottom: 2 }}>
-              <button onClick={() => setCatFil(null)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${!catFil ? P : BD}`, background: !catFil ? P : 'white', color: !catFil ? 'white' : '#6B7280', fontSize: 11, fontWeight: 800 }}>전체</button>
-              {usedCats.map(k => { const v = RCATS[k]; return v ? (<button key={k} onClick={() => setCatFil(catFil === k ? null : k)} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 20, border: `1.5px solid ${catFil === k ? v.c : BD}`, background: catFil === k ? v.c : 'white', color: catFil === k ? 'white' : v.c, fontSize: 11, fontWeight: 800 }}>{v.e} {v.n}</button>) : null; })}
-            </div>
-          )}
-        </>
-      )}
-      {tQ.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '72px 24px' }}>
-          <div style={{ fontSize: 52, marginBottom: 12 }}>⚔️</div>
-          <p style={{ fontSize: 15, color: '#6B7280', lineHeight: 1.75, fontWeight: 600 }}>오늘의 퀘스트가 없어요.<br />우하단 <strong style={{ color: P }}>+</strong> 버튼으로 시작하세요!</p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {filtered.map((q, i) => {
-            const el = getAllItems().find(it => it.id === q.rewardId);
-            const cat = q.rewardCat ? RCATS[q.rewardCat] : null;
-            return (
-              <div key={q.id}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'white', border: `1.5px solid ${BD}`, borderRadius: 16, padding: '13px 12px', cursor: q.completed ? 'default' : 'pointer', opacity: q.completed ? 0.62 : 1 }}>
-                  <div onClick={() => !q.completed && onOpenTimer(q)} style={{ width: 30, height: 30, borderRadius: '50%', border: `2.5px solid ${q.completed ? G : P}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: q.completed ? 'white' : P, background: q.completed ? G : PL, transition: 'all .3s' }}>
-                    {q.completed ? '✓' : i + 1}
+              {selEvents.length === 0
+                ? <Empty icon="📅" title="일정 없음" desc="+ 추가 버튼으로 일정을 추가하세요" />
+                : selEvents.map(e => (
+                  <div key={e.id} style={{ borderLeft: `3px solid ${e.color || cfg.c}`, padding: '10px 12px', background: '#FAFAFA', borderRadius: '0 10px 10px 0', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{e.title}</div>
+                      <button onClick={() => del(e.id)} style={{ background: 'none', border: 'none', color: '#D1D5DB', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                    </div>
+                    {e.time && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 3 }}>🕐 {e.time}</div>}
+                    {e.notes && <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 5 }}>{e.notes}</div>}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }} onClick={() => !q.completed && onOpenTimer(q)}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: q.completed ? 'line-through' : 'none' }}>{q.title}</div>
-                    {isProUser && el && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 3, background: cat ? `${cat.c}18` : GL, borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: cat ? cat.c : GD }}>{el.e} {el.n}</div>}
-                    {!isProUser && q.completed && q.studyMinutes > 0 && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 3, background: GL, borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: GD }}>⏱ {q.studyMinutes}분 공부</div>}
-                  </div>
-                  {isProUser && !q.completed && <button onClick={() => onEditReward(q)} style={{ background: 'none', border: 'none', fontSize: 15, padding: 6, borderRadius: 8, color: '#9CA3AF' }}>✏️</button>}
-                </div>
-                {i < filtered.length - 1 && <div style={{ width: 2, height: 11, background: BD, marginLeft: 21 }} />}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {allDone && (
-        <div style={{ marginTop: 20, background: `linear-gradient(135deg,${PL},${GL})`, borderRadius: 20, padding: 24, textAlign: 'center', border: `2px solid rgba(124,58,237,.15)` }}>
-          <div style={{ fontSize: 46, marginBottom: 8 }}>🏆</div>
-          <h3 style={{ fontSize: 17, fontWeight: 900, color: PD }}>모든 퀘스트 완료!</h3>
-          <p style={{ fontSize: 13, color: '#6B7280', marginTop: 4, fontWeight: 600 }}>{isProUser ? '획득한 요소로 정원을 꾸며보세요 🌸' : '오늘도 수고했어요! 내일도 파이팅 💪'}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── PROFILE PAGE ── */
-function ProfilePage({ user, isProUser, quests, onBack, onUpdate, onLogout, onShowProUpgrade, onDeleteAccount }) {
-  const [editNick, setEditNick] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [nick, setNick] = useState(user.nickname || user.name);
-  const fileRef = useRef(null);
-
-  const totalMin = quests.filter(q => q.completed).reduce((s, q) => s + (q.studyMinutes || 0), 0);
-  const totalQ = quests.filter(q => q.completed).length;
-  const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}시간 ${m%60}분` : `${m}분`;
-
-  const handleAvatar = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => onUpdate({ avatar: ev.target.result });
-    reader.readAsDataURL(file);
-  };
-
-  const saveNick = () => { if (nick.trim()) onUpdate({ nickname: nick.trim() }); setEditNick(false); };
-
-  const row = (label, value) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: `1px solid ${BD}` }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: '#6B7280' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>{value}</span>
-    </div>
-  );
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 300, background: '#F5F3FF', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 16px', background: 'white', borderBottom: `1.5px solid ${BD}`, gap: 12 }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: 18, color: '#6B7280', cursor: 'pointer', padding: '4px 6px' }}>←</button>
-        <span style={{ fontWeight: 900, fontSize: 15, color: '#1E1B4B', flex: 1 }}>프로필</span>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 48px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
-          <div style={{ position: 'relative', marginBottom: 12 }}>
-            <div style={{ width: 88, height: 88, borderRadius: '50%', background: `linear-gradient(135deg,${PL},${GL})`, border: `3px solid ${P}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              {user.avatar ? <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="프로필"/> : <span style={{ fontSize: 40 }}>👤</span>}
-            </div>
-            <button onClick={() => fileRef.current?.click()} style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%', background: P, border: '2px solid white', color: 'white', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>📷</button>
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleAvatar} style={{ display: 'none' }}/>
-          </div>
-          {editNick ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input value={nick} onChange={e => setNick(e.target.value)} autoFocus style={{ padding: '7px 12px', border: `2px solid ${P}`, borderRadius: 10, fontSize: 15, fontWeight: 700, color: '#1E1B4B', textAlign: 'center' }} onKeyDown={e => e.key === 'Enter' && saveNick()}/>
-              <button onClick={saveNick} style={{ padding: '7px 14px', borderRadius: 10, border: 'none', background: P, color: 'white', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>저장</button>
-              <button onClick={() => setEditNick(false)} style={{ padding: '7px 12px', borderRadius: 10, border: `1.5px solid ${BD}`, background: 'none', fontWeight: 700, fontSize: 13, color: '#6B7280', cursor: 'pointer' }}>취소</button>
-            </div>
+                ))
+              }
+            </>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 20, fontWeight: 900, color: '#1E1B4B' }}>{user.nickname || user.name}</span>
-              <button onClick={() => setEditNick(true)} style={{ background: PL, border: 'none', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 800, color: PD, cursor: 'pointer' }}>수정</button>
-            </div>
+            <Empty icon="👆" title="날짜를 선택하세요" desc="날짜를 클릭해서 일정을 확인하고 추가하세요" />
           )}
-          {isProUser && <span style={{ marginTop: 6, fontSize: 10, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '2px 8px', borderRadius: 6 }}>PRO</span>}
         </div>
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-          {[['✅', '완료 퀘스트', totalQ + '개'], ['⏱', '총 공부 시간', fmtMin(totalMin)]].map(([ic, lb, val]) => (
-            <div key={lb} style={{ flex: 1, background: 'white', borderRadius: 14, padding: '12px', border: `1.5px solid ${BD}`, textAlign: 'center' }}>
-              <div style={{ fontSize: 20, marginBottom: 4 }}>{ic}</div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: P }}>{val}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280' }}>{lb}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ background: 'white', borderRadius: 16, border: `1.5px solid ${BD}`, padding: '0 16px', marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '12px 0 4px' }}>계정 정보</div>
-          {row('이름', user.name)}
-          {row('닉네임', user.nickname || user.name)}
-          {row('이메일', user.email)}
-          {row('플랜', isProUser ? '✨ Pro' : '무료')}
-        </div>
-        {!isProUser && <button onClick={onShowProUpgrade} style={{ width: '100%', padding: '13px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', fontSize: 14, fontWeight: 900, marginBottom: 12, cursor: 'pointer' }}>✨ Pro로 업그레이드</button>}
-        <button onClick={onLogout} style={{ width: '100%', padding: '13px', borderRadius: 14, border: `1.5px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 10 }}>로그아웃</button>
-        <button onClick={() => setShowDeleteConfirm(true)} style={{ width: '100%', padding: '13px', borderRadius: 14, border: `1.5px solid #FECACA`, background: 'white', color: '#9CA3AF', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>회원 탈퇴</button>
-        {showDeleteConfirm && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 500, background: 'rgba(10,5,30,.62)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <div style={{ background: 'white', borderRadius: 20, padding: 24, width: '100%', maxWidth: 320 }}>
-              <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 12 }}>⚠️</div>
-              <div style={{ fontWeight: 900, fontSize: 16, color: '#1E1B4B', textAlign: 'center', marginBottom: 8 }}>정말 탈퇴하시겠어요?</div>
-              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 12px', marginBottom: 18, fontSize: 12, color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>모든 데이터가 영구 삭제됩니다.</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>취소</button>
-                <button onClick={() => { onDeleteAccount(); }} style={{ flex: 1, padding: 12, borderRadius: 12, border: 'none', background: '#EF4444', color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>탈퇴하기</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
 
-/* ── ONBOARDING MODAL ── */
-function OnboardingModal({ onDone }) {
-  const [step, setStep] = useState(0);
-  const steps = [
-    { icon: '👋', title: 'Quest Garden에 오신 걸 환영해요!', desc: '매일 할일을 퀘스트로 등록하고 완료하면서 나만의 공부 루틴을 만들어요.', color: PL, textColor: PD },
-    { icon: '⚔️', title: '퀘스트로 할일 관리', desc: '퀘스트 탭에서 + 버튼을 눌러 오늘 할일을 입력하세요. 자주 쓰는 루틴은 저장해두면 다음날 바로 불러올 수 있어요!', color: '#EDE9FE', textColor: PD },
-    { icon: '⏱', title: '타이머로 집중 공부', desc: '퀘스트를 탭하면 타이머가 시작돼요. 탭을 바꿔도 타이머는 계속 돌아가요. 공부 시간이 자동으로 기록됩니다.', color: GL, textColor: GD },
-    { icon: '📊', title: '홈에서 성장 확인', desc: '홈 화면에서 월별·연간 공부 그래프를 볼 수 있어요. 막대를 클릭하면 그날 완료한 할일 목록도 확인할 수 있어요!', color: '#FEF9C3', textColor: '#713F12' },
-    { icon: '🌿', title: '정원으로 성취감을 (Pro)', desc: 'Pro 가입 후 퀘스트를 완료하면 보상 요소를 획득해요. 14가지 테마 배경 위에 자유롭게 배치해 나만의 정원을 꾸며보세요.', color: PL, textColor: PD },
-  ];
-  const s = steps[step], isLast = step === steps.length - 1;
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 500, background: 'rgba(10,5,30,.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ background: 'white', borderRadius: 24, width: '100%', maxWidth: 400, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,.25)' }}>
-        <div style={{ background: s.color, padding: '36px 24px 28px', textAlign: 'center' }}>
-          <div style={{ fontSize: 56, marginBottom: 12 }}>{s.icon}</div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: s.textColor, lineHeight: 1.3 }}>{s.title}</div>
-        </div>
-        <div style={{ padding: '20px 24px 24px' }}>
-          <p style={{ fontSize: 14, color: '#374151', fontWeight: 600, lineHeight: 1.7, marginBottom: 24, textAlign: 'center' }}>{s.desc}</p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 20 }}>
-            {steps.map((_, i) => (<div key={i} style={{ width: i === step ? 20 : 8, height: 8, borderRadius: 4, background: i === step ? P : '#E5E7EB', transition: 'all .3s' }} />))}
+      {showModal && (
+        <Modal title="일정 추가" onClose={() => setShowModal(false)}>
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="제목" placeholder="일정 제목 입력" required />
+          <Field value={form.time} onChange={v => setForm(p => ({ ...p, time: v }))} label="시간" placeholder="예: 14:00" />
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>색상</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {COLORS.map(c => <button key={c} onClick={() => setForm(p => ({ ...p, color: c }))} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: form.color === c ? '3px solid #111827' : '3px solid transparent', cursor: 'pointer' }} />)}
+            </div>
           </div>
+          <Field value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} label="메모" placeholder="선택 사항" rows={2} />
           <div style={{ display: 'flex', gap: 10 }}>
-            {step > 0 && <button onClick={() => setStep(s => s - 1)} style={{ flex: 1, padding: '12px', borderRadius: 12, border: `1.5px solid ${BD}`, background: 'none', fontSize: 14, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>이전</button>}
-            <button onClick={() => isLast ? onDone() : setStep(s => s + 1)} style={{ flex: 2, padding: '12px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 14, fontWeight: 900, cursor: 'pointer' }}>
-              {isLast ? '시작하기 🚀' : '다음 →'}
-            </button>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={addEvent} bg={cfg.c} style={{ flex: 2 }}>추가하기</Btn>
           </div>
-          {!isLast && <button onClick={onDone} style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: '#9CA3AF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>건너뛰기</button>}
-        </div>
-      </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-/* ── NOTIFICATION PANEL ── */
-function NotifPanel({ notifEnabled, setNotifEnabled, notifTime, setNotifTime, onClose }) {
-  const reqPermission = async () => {
-    if (!('Notification' in window)) { alert('이 브라우저는 알림을 지원하지 않아요.'); return; }
-    const perm = await Notification.requestPermission();
-    if (perm === 'granted') { setNotifEnabled(true); new Notification('🌱 Quest Garden', { body: '알림이 설정됐어요!' }); }
-    else alert('알림 권한이 거부됐어요.');
-  };
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 400, background: 'rgba(10,5,30,.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'white', borderRadius: 20, padding: 24, width: '100%', maxWidth: 340 }}>
-        <div style={{ fontWeight: 900, fontSize: 17, color: '#1E1B4B', marginBottom: 6 }}>🔔 퀘스트 리마인더</div>
-        <p style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, lineHeight: 1.65, marginBottom: 20 }}>설정한 시간에 오늘 퀘스트 진행 상황을 알려드려요.</p>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${BD}`, marginBottom: 16 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1E1B4B' }}>알림 켜기</span>
-          <button onClick={() => { if (!notifEnabled) reqPermission(); else setNotifEnabled(false); }}
-            style={{ width: 48, height: 26, borderRadius: 13, border: 'none', background: notifEnabled ? P : '#D1D5DB', cursor: 'pointer', position: 'relative', transition: 'background .2s' }}>
-            <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: notifEnabled ? 25 : 3, transition: 'left .2s', boxShadow: '0 1px 4px rgba(0,0,0,.2)' }} />
-          </button>
-        </div>
-        {notifEnabled && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 8 }}>알림 시간</div>
-            <input type="time" value={notifTime} onChange={e => setNotifTime(e.target.value)} style={{ width: '100%', padding: '10px 14px', border: `2px solid ${P}`, borderRadius: 12, fontSize: 16, fontWeight: 700, color: PD, background: PL }} />
-          </div>
-        )}
-        <button onClick={onClose} style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>확인</button>
-      </div>
-    </div>
-  );
-}
+/* ══════════════════════════════════════════════════════════
+   ASSIGNMENTS SCREEN (School)
+══════════════════════════════════════════════════════════ */
+function AssignmentsScreen({ assigns, setAssigns }) {
+  const cfg = WS.school;
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ subject: '', title: '', dueDate: '', status: 'not_started', description: '', priority: 'medium' });
 
-/* ── PRO UPGRADE PAGE ── */
-function ProUpgradePage({ onBack, onUpgrade, userName }) {
-  const [sel, setSel] = useState('annual');
-  const [paying, setPaying] = useState(false);
-  const [done, setDone] = useState(false);
-  const plans = { monthly: { label: '월간', price: '₩9,900', sub: '/월', badge: null }, annual: { label: '연간', price: '₩79,900', sub: '/년', badge: '17% 절약' } };
-  const perks = [
-    { icon: '🌿', title: '정원 만들기', desc: '테마 배경 위에 보상 요소를 자유롭게 배치' },
-    { icon: '🏆', title: '퀘스트 보상 요소', desc: '완료 시 정원에 배치할 요소 획득' },
-    { icon: '🎨', title: '14가지 테마', desc: '낮/밤 전환이 가능한 다양한 배경' },
-    { icon: '⭐', title: '희귀 요소', desc: 'Pro 전용 희귀 꾸미기 요소 해금' },
-  ];
-
-  const handlePay = async () => {
-    setPaying(true);
-    await new Promise(r => setTimeout(r, 2200));
-    setPaying(false); setDone(true);
-    await new Promise(r => setTimeout(r, 1200));
-    track('pro_upgrade_completed', { plan: sel });
-    onUpgrade();
+  const ASTATS = {
+    not_started: { l: '미시작', c: '#6B7280', bg: '#F9FAFB' },
+    in_progress: { l: '진행중', c: '#2563EB', bg: '#EFF6FF' },
+    submitted: { l: '제출완료', c: '#059669', bg: '#ECFDF5' },
+    graded: { l: '채점완료', c: '#7C3AED', bg: '#F5F3FF' },
   };
 
-  if (done) return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 300, background: `linear-gradient(160deg,${PD},${GD})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-      <div style={{ fontSize: 72, marginBottom: 16, animation: 'qgPop .5s ease' }}>🎉</div>
-      <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 8 }}>Pro 가입 완료!</div>
-      <p style={{ fontSize: 15, opacity: 0.8, fontWeight: 600 }}>이제 정원을 만들어보세요 🌿</p>
-    </div>
-  );
+  const add = () => {
+    if (!form.title.trim()) return;
+    setAssigns(p => [...p, { id: uid(), ...form, title: form.title.trim() }]);
+    setForm({ subject: '', title: '', dueDate: '', status: 'not_started', description: '', priority: 'medium' });
+    setShowModal(false);
+  };
+
+  const del = (id) => setAssigns(p => p.filter(a => a.id !== id));
+  const upd = (id, key, val) => setAssigns(p => p.map(a => a.id === id ? { ...a, [key]: val } : a));
+
+  const subjects = [...new Set(assigns.map(a => a.subject).filter(Boolean))];
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 300, background: '#F5F3FF', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 18px', background: 'white', borderBottom: `1.5px solid ${BD}`, gap: 12 }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: 18, color: '#6B7280', padding: '4px 6px', cursor: 'pointer' }}>←</button>
-        <div style={{ fontWeight: 900, fontSize: 15, background: `linear-gradient(135deg,${PD},${GD})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Quest Garden Pro</div>
-        <span style={{ fontSize: 9, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '2px 6px', borderRadius: 5 }}>PRO</span>
+    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>📚 과제 관리</div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>{assigns.length}개 과제</div>
+        </div>
+        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 과제 추가</Btn>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 48px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 48, marginBottom: 10 }}>✨</div>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: '#1E1B4B', marginBottom: 6 }}>Quest Garden Pro</h1>
-          <p style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, lineHeight: 1.7 }}>{userName}님만의 정원을 만드는<br/>가장 특별한 경험</p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-          {Object.entries(plans).map(([k, v]) => (
-            <button key={k} onClick={() => setSel(k)} style={{ flex: 1, padding: '14px 10px', borderRadius: 16, border: `2px solid ${sel===k?P:BD}`, background: sel===k?PL:'white', position: 'relative', cursor: 'pointer' }}>
-              {v.badge && <span style={{ position: 'absolute', top: -9, right: 8, background: G, color: 'white', fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 20 }}>{v.badge}</span>}
-              <div style={{ fontWeight: 800, fontSize: 13, color: sel===k?PD:'#6B7280', marginBottom: 4 }}>{v.label}</div>
-              <div style={{ fontWeight: 900, fontSize: 19, color: sel===k?P:'#1E1B4B' }}>{v.price}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600 }}>{v.sub}</div>
-            </button>
-          ))}
-        </div>
-        <div style={{ background: 'white', borderRadius: 16, border: `1.5px solid ${BD}`, padding: '6px 0', marginBottom: 20 }}>
-          {perks.map((pk, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: i < perks.length-1 ? `1px solid ${BD}` : 'none' }}>
-              <span style={{ fontSize: 20, flexShrink: 0 }}>{pk.icon}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, color: '#1E1B4B', marginBottom: 1 }}>{pk.title}</div>
-                <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600 }}>{pk.desc}</div>
+
+      {assigns.length === 0
+        ? <Empty icon="📚" title="과제가 없어요" desc="+ 과제 추가 버튼으로 과제를 등록하세요" />
+        : assigns.map(a => (
+          <div key={a.id} className="fu" style={{ background: 'white', borderRadius: 14, padding: '16px', border: '1px solid #F3F4F6', marginBottom: 12, boxShadow: '0 2px 6px rgba(0,0,0,.04)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div>
+                {a.subject && <div style={{ fontSize: 11, fontWeight: 800, color: cfg.c, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{a.subject}</div>}
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', textDecoration: a.status === 'graded' ? 'line-through' : 'none', opacity: a.status === 'graded' ? 0.6 : 1 }}>{a.title}</div>
+                {a.description && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 5, lineHeight: 1.5 }}>{a.description}</div>}
               </div>
-              <span style={{ color: G, fontSize: 14 }}>✓</span>
+              <button onClick={() => del(a.id)} style={{ background: 'none', border: 'none', color: '#D1D5DB', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {a.dueDate && <Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(a.dueDate)}</Badge>}
+              <Badge color={PRIO[a.priority]?.c} bg={PRIO[a.priority]?.bg}>{PRIO[a.priority]?.l}</Badge>
+              <select value={a.status} onChange={e => upd(a.id, 'status', e.target.value)}
+                style={{ fontSize: 11, fontWeight: 700, color: ASTATS[a.status]?.c, background: ASTATS[a.status]?.bg, border: 'none', borderRadius: 99, padding: '2px 8px', cursor: 'pointer' }}>
+                {Object.entries(ASTATS).map(([k, v]) => <option key={k} value={k}>{v.l}</option>)}
+              </select>
+            </div>
+          </div>
+        ))
+      }
+
+      {showModal && (
+        <Modal title="과제 추가" onClose={() => setShowModal(false)}>
+          <Field value={form.subject} onChange={v => setForm(p => ({ ...p, subject: v }))} label="과목" placeholder="예: 수학, 영어, 국어" />
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="과제명" placeholder="과제 제목 입력" required />
+          <Field value={form.dueDate} onChange={v => setForm(p => ({ ...p, dueDate: v }))} label="마감일" type="date" />
+          <Select label="우선순위" value={form.priority} onChange={v => setForm(p => ({ ...p, priority: v }))}
+            options={Object.entries(PRIO).map(([k, v]) => ({ value: k, label: v.l }))} />
+          <Field value={form.description} onChange={v => setForm(p => ({ ...p, description: v }))} label="설명" placeholder="과제 설명, 제출 방법 등" rows={3} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>추가하기</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   NOTES SCREEN (School)
+══════════════════════════════════════════════════════════ */
+function NotesScreen({ notes, setNotes }) {
+  const cfg = WS.school;
+  const [showModal, setShowModal] = useState(false);
+  const [selNote, setSelNote] = useState(null);
+  const [form, setForm] = useState({ subject: '', title: '', content: '' });
+  const [filter, setFilter] = useState('전체');
+
+  const add = () => {
+    if (!form.title.trim()) return;
+    setNotes(p => [...p, { id: uid(), ...form, date: tod() }]);
+    setForm({ subject: '', title: '', content: '' });
+    setShowModal(false);
+  };
+
+  const del = (id) => { setNotes(p => p.filter(n => n.id !== id)); if (selNote?.id === id) setSelNote(null); };
+
+  const subjects = ['전체', ...new Set(notes.map(n => n.subject).filter(Boolean))];
+  const filtered = filter === '전체' ? notes : notes.filter(n => n.subject === filter);
+
+  return (
+    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>📝 수업 노트</div>
+        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 노트 추가</Btn>
+      </div>
+      {/* Subject filter */}
+      <div className="fu" style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 2, animationDelay: '.05s' }}>
+        {subjects.map(s => (
+          <button key={s} onClick={() => setFilter(s)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 99, border: `1.5px solid ${filter === s ? cfg.c : '#E5E7EB'}`, background: filter === s ? cfg.l : 'white', color: filter === s ? cfg.d : '#6B7280', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{s}</button>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, flex: 1, minHeight: 0 }}>
+        {/* Note list */}
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtered.length === 0
+            ? <Empty icon="📝" title="노트가 없어요" desc="노트를 추가해보세요" />
+            : filtered.map(n => (
+              <div key={n.id} onClick={() => setSelNote(n)} style={{
+                background: selNote?.id === n.id ? cfg.l : 'white', border: `1.5px solid ${selNote?.id === n.id ? cfg.c : '#F3F4F6'}`,
+                borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s',
+              }}>
+                {n.subject && <div style={{ fontSize: 10, fontWeight: 800, color: cfg.c, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>{n.subject}</div>}
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 3 }}>{n.title}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{fmtFull(n.date)}</div>
+              </div>
+            ))
+          }
+        </div>
+        {/* Note content */}
+        <div style={{ background: 'white', borderRadius: 16, padding: '20px', border: '1px solid #F3F4F6', overflowY: 'auto' }}>
+          {selNote ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                  {selNote.subject && <div style={{ fontSize: 11, fontWeight: 800, color: cfg.c, textTransform: 'uppercase', marginBottom: 6 }}>{selNote.subject}</div>}
+                  <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{selNote.title}</div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>{fmtFull(selNote.date)}</div>
+                </div>
+                <button onClick={() => del(selNote.id)} style={{ background: '#FEF2F2', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: '#EF4444', fontWeight: 700, cursor: 'pointer' }}>삭제</button>
+              </div>
+              <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{selNote.content || '(내용 없음)'}</div>
+            </>
+          ) : <Empty icon="📖" title="노트를 선택하세요" desc="왼쪽에서 노트를 선택하면 내용이 표시됩니다" />}
+        </div>
+      </div>
+      {showModal && (
+        <Modal title="노트 추가" onClose={() => setShowModal(false)}>
+          <Field value={form.subject} onChange={v => setForm(p => ({ ...p, subject: v }))} label="과목" placeholder="예: 수학, 영어" />
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="제목" placeholder="노트 제목" required />
+          <Field value={form.content} onChange={v => setForm(p => ({ ...p, content: v }))} label="내용" placeholder="수업 내용을 입력하세요..." rows={8} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>저장하기</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   MEETINGS SCREEN (Company)
+══════════════════════════════════════════════════════════ */
+function MeetingsScreen({ meetings, setMeetings }) {
+  const cfg = WS.company;
+  const [showModal, setShowModal] = useState(false);
+  const [sel, setSel] = useState(null);
+  const [form, setForm] = useState({ title: '', date: tod(), time: '', attendees: '', agenda: '', actionItems: '' });
+
+  const add = () => {
+    if (!form.title.trim()) return;
+    setMeetings(p => [...p, { id: uid(), ...form, title: form.title.trim(), attendees: form.attendees.split(',').map(s => s.trim()).filter(Boolean) }]);
+    setForm({ title: '', date: tod(), time: '', attendees: '', agenda: '', actionItems: '' });
+    setShowModal(false);
+  };
+
+  const del = (id) => { setMeetings(p => p.filter(m => m.id !== id)); if (sel?.id === id) setSel(null); };
+
+  return (
+    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>🎙️ 회의록</div>
+        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 회의 추가</Btn>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, flex: 1, minHeight: 0 }}>
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {meetings.length === 0
+            ? <Empty icon="🎙️" title="회의록이 없어요" desc="회의를 추가해보세요" />
+            : meetings.map(m => (
+              <div key={m.id} onClick={() => setSel(m)} style={{ background: sel?.id === m.id ? cfg.l : 'white', border: `1.5px solid ${sel?.id === m.id ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 4 }}>{m.title}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>📅 {fmtD(m.date)} {m.time && `· ${m.time}`}</div>
+                {m.attendees?.length > 0 && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }}>👥 {m.attendees.join(', ')}</div>}
+              </div>
+            ))
+          }
+        </div>
+        <div style={{ background: 'white', borderRadius: 16, padding: '20px', border: '1px solid #F3F4F6', overflowY: 'auto' }}>
+          {sel ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 6 }}>{sel.title}</div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>📅 {fmtFull(sel.date)} {sel.time && `· ${sel.time}`}</div>
+                  {sel.attendees?.length > 0 && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>👥 {sel.attendees.join(' · ')}</div>}
+                </div>
+                <button onClick={() => del(sel.id)} style={{ background: '#FEF2F2', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: '#EF4444', fontWeight: 700, cursor: 'pointer' }}>삭제</button>
+              </div>
+              {sel.agenda && <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: cfg.c, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>안건</div>
+                <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-wrap', background: '#F9FAFB', borderRadius: 10, padding: '12px' }}>{sel.agenda}</div>
+              </div>}
+              {sel.actionItems && <div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>액션 아이템</div>
+                <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-wrap', background: '#ECFDF5', borderRadius: 10, padding: '12px' }}>{sel.actionItems}</div>
+              </div>}
+            </>
+          ) : <Empty icon="📋" title="회의를 선택하세요" desc="왼쪽에서 회의를 선택하세요" />}
+        </div>
+      </div>
+      {showModal && (
+        <Modal title="회의 추가" onClose={() => setShowModal(false)}>
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="회의 제목" placeholder="회의 제목 입력" required />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))} label="날짜" type="date" />
+            <Field value={form.time} onChange={v => setForm(p => ({ ...p, time: v }))} label="시간" placeholder="14:00" />
+          </div>
+          <Field value={form.attendees} onChange={v => setForm(p => ({ ...p, attendees: v }))} label="참석자" placeholder="쉼표로 구분 (예: 김철수, 이영희)" />
+          <Field value={form.agenda} onChange={v => setForm(p => ({ ...p, agenda: v }))} label="안건" placeholder="회의 안건을 입력하세요" rows={3} />
+          <Field value={form.actionItems} onChange={v => setForm(p => ({ ...p, actionItems: v }))} label="액션 아이템" placeholder="결정된 실행 항목" rows={3} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>저장하기</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PROJECTS SCREEN (Company)
+══════════════════════════════════════════════════════════ */
+function ProjectsScreen({ projects, setProjects }) {
+  const cfg = WS.company;
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ title: '', description: '', status: 'planning', dueDate: '' });
+
+  const PSTATS = {
+    planning:   { l: '기획중', c: '#6B7280', bg: '#F9FAFB' },
+    in_progress:{ l: '진행중', c: '#2563EB', bg: '#EFF6FF' },
+    review:     { l: '검토중', c: '#D97706', bg: '#FFFBEB' },
+    done:       { l: '완료',   c: '#059669', bg: '#ECFDF5' },
+  };
+
+  const add = () => {
+    if (!form.title.trim()) return;
+    setProjects(p => [...p, { id: uid(), ...form, title: form.title.trim(), tasks: [] }]);
+    setForm({ title: '', description: '', status: 'planning', dueDate: '' });
+    setShowModal(false);
+  };
+
+  const del = (id) => setProjects(p => p.filter(pr => pr.id !== id));
+  const updStatus = (id, status) => setProjects(p => p.map(pr => pr.id === id ? { ...pr, status } : pr));
+
+  return (
+    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>📊 프로젝트</div>
+        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 프로젝트</Btn>
+      </div>
+      {projects.length === 0
+        ? <Empty icon="📊" title="프로젝트가 없어요" desc="새 프로젝트를 시작해보세요" />
+        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {projects.map(pr => (
+            <div key={pr.id} style={{ background: 'white', borderRadius: 16, padding: '18px', border: '1px solid #F3F4F6', boxShadow: '0 2px 8px rgba(0,0,0,.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#111827' }}>{pr.title}</div>
+                <button onClick={() => del(pr.id)} style={{ background: 'none', border: 'none', color: '#D1D5DB', cursor: 'pointer', fontSize: 13 }}>✕</button>
+              </div>
+              {pr.description && <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 12, lineHeight: 1.5 }}>{pr.description}</div>}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {pr.dueDate && <Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(pr.dueDate)}</Badge>}
+                <select value={pr.status} onChange={e => updStatus(pr.id, e.target.value)}
+                  style={{ fontSize: 11, fontWeight: 700, color: PSTATS[pr.status]?.c, background: PSTATS[pr.status]?.bg, border: 'none', borderRadius: 99, padding: '3px 10px', cursor: 'pointer' }}>
+                  {Object.entries(PSTATS).map(([k, v]) => <option key={k} value={k}>{v.l}</option>)}
+                </select>
+              </div>
             </div>
           ))}
         </div>
-        <button onClick={handlePay} disabled={paying} style={{ width: '100%', padding: '15px', borderRadius: 16, border: 'none', background: paying ? '#9CA3AF' : `linear-gradient(135deg,${P},${G})`, color: 'white', fontSize: 15, fontWeight: 900, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: paying ? 'default' : 'pointer' }}>
-          {paying ? <><div style={{ width: 18, height: 18, border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'qgSpin .7s linear infinite' }} />결제 처리 중...</> : `💳 ${plans[sel].price} 결제하기`}
-        </button>
-        <p style={{ textAlign: 'center', fontSize: 11, color: '#9CA3AF', fontWeight: 600 }}>언제든 해지 가능 · 자동 갱신 · 부가세 포함</p>
-      </div>
+      }
+      {showModal && (
+        <Modal title="프로젝트 추가" onClose={() => setShowModal(false)}>
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="프로젝트명" placeholder="프로젝트 이름 입력" required />
+          <Field value={form.description} onChange={v => setForm(p => ({ ...p, description: v }))} label="설명" placeholder="프로젝트 설명" rows={3} />
+          <Field value={form.dueDate} onChange={v => setForm(p => ({ ...p, dueDate: v }))} label="마감일" type="date" />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>추가하기</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-const G_COLOR = '#10B981';
+/* ══════════════════════════════════════════════════════════
+   GOALS SCREEN (Personal)
+══════════════════════════════════════════════════════════ */
+function GoalsScreen({ goals, setGoals }) {
+  const cfg = WS.personal;
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ title: '', category: '', targetDate: '', description: '' });
 
-/* ══════════════════════════════════════════
-   APP ROOT
-══════════════════════════════════════════ */
-export default function App() {
-  const [accounts, setAccounts] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_accounts') || '[]'); } catch { return []; } });
-  const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_user') || 'null'); } catch { return null; } });
-  const [isProUser, setIsProUser] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_pro') || 'false'); } catch { return false; } });
-  const [tab, setTab] = useState('home');
-  const [pages, setPages] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_pages') || '[]'); } catch { return []; } });
-  const [quests, setQuests] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_quests') || '[]'); } catch { return []; } });
-  const [owned, setOwned] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_owned') || '[]'); } catch { return []; } });
-  const [silent, setSilent] = useState(true);
-  const [routines, setRoutines] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_routines') || '[]'); } catch { return []; } });
-  const [notifTime, setNotifTime] = useState(() => { try { return localStorage.getItem('qg_notif_time') || '20:00'; } catch { return '20:00'; } });
-  const [notifEnabled, setNotifEnabled] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_notif_on') || 'false'); } catch { return false; } });
-  const [onboarded, setOnboarded] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_onboarded') || 'false'); } catch { return false; } });
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showNotif, setShowNotif] = useState(false);
-  const [showBanner, setShowBanner] = useState(() => { try { return JSON.parse(localStorage.getItem('qg_banner') || 'true'); } catch { return true; } });
-  const [demoMode, setDemoMode] = useState(false);
-  const [createPage, setCreatePage] = useState(false);
-  const [createQuest, setCreateQuest] = useState(false);
-  const [activeGarden, setActiveGarden] = useState(null);
-  const [activeTimer, setActiveTimer] = useState(null);
-  const [editReward, setEditReward] = useState(null);
-  const [confetti, setConfetti] = useState(false);
-  const [showProUpgrade, setShowProUpgrade] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [customCategories, setCustomCategories] = useState([]);
-  const prevDone = useRef(false);
-
-  useEffect(() => { try { localStorage.setItem('qg_accounts', JSON.stringify(accounts)); } catch {} }, [accounts]);
-  useEffect(() => { try { localStorage.setItem('qg_user', JSON.stringify(user)); } catch {} }, [user]);
-  useEffect(() => { try { localStorage.setItem('qg_pro', JSON.stringify(isProUser)); } catch {} }, [isProUser]);
-  useEffect(() => { try { localStorage.setItem('qg_pages', JSON.stringify(pages)); } catch {} }, [pages]);
-  useEffect(() => { try { localStorage.setItem('qg_quests', JSON.stringify(quests)); } catch {} }, [quests]);
-  useEffect(() => { try { localStorage.setItem('qg_owned', JSON.stringify(owned)); } catch {} }, [owned]);
-  useEffect(() => { try { localStorage.setItem('qg_routines', JSON.stringify(routines)); } catch {} }, [routines]);
-  useEffect(() => { try { localStorage.setItem('qg_notif_time', notifTime); } catch {} }, [notifTime]);
-  useEffect(() => { try { localStorage.setItem('qg_notif_on', JSON.stringify(notifEnabled)); } catch {} }, [notifEnabled]);
-  useEffect(() => { if (user && !onboarded) setShowOnboarding(true); }, [user]);
-
-  const todayQ = quests.filter(q => q.date === today());
-  const allDone = todayQ.length > 0 && todayQ.every(q => q.completed);
-  useEffect(() => { if (allDone && !prevDone.current) setConfetti(true); prevDone.current = allDone; }, [allDone]);
-
-  const completeQuest = (id, studyMinutes = 0) => {
-    const q = quests.find(q => q.id === id);
-    if (!q || q.completed) return;
-    if (isProUser) { const el = getAllItems().find(it => it.id === q.rewardId); if (el) setOwned(p => [...p, { ...el, emoji: el.e, name: el.n, catKey: q.rewardCat || el.catKey }]); }
-    setQuests(p => p.map(qItem => qItem.id === id ? { ...qItem, completed: true, studyMinutes } : qItem));
+  const add = () => {
+    if (!form.title.trim()) return;
+    setGoals(p => [...p, { id: uid(), ...form, title: form.title.trim(), progress: 0 }]);
+    setForm({ title: '', category: '', targetDate: '', description: '' });
+    setShowModal(false);
   };
 
-  const updateUserProfile = (patch) => {
-    const updated = { ...user, ...patch };
-    setUser(updated);
-    setAccounts(prev => prev.map(a => a.email === user.email ? { ...a, ...patch } : a));
+  const del = (id) => setGoals(p => p.filter(g => g.id !== id));
+  const updProg = (id, v) => setGoals(p => p.map(g => g.id === id ? { ...g, progress: Math.max(0, Math.min(100, v)) } : g));
+
+  return (
+    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>🎯 목표 관리</div>
+        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 목표 추가</Btn>
+      </div>
+      {goals.length === 0
+        ? <Empty icon="🎯" title="목표가 없어요" desc="이루고 싶은 목표를 추가해보세요" />
+        : goals.map(g => (
+          <div key={g.id} className="fu" style={{ background: 'white', borderRadius: 14, padding: '18px', border: '1px solid #F3F4F6', marginBottom: 14, boxShadow: '0 2px 6px rgba(0,0,0,.04)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div>
+                {g.category && <div style={{ fontSize: 11, fontWeight: 800, color: cfg.c, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{g.category}</div>}
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#111827' }}>{g.title}</div>
+                {g.description && <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>{g.description}</div>}
+              </div>
+              <button onClick={() => del(g.id)} style={{ background: 'none', border: 'none', color: '#D1D5DB', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <div style={{ flex: 1, height: 8, background: '#F3F4F6', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${g.progress}%`, background: `linear-gradient(90deg, ${cfg.c}, ${cfg.d})`, borderRadius: 99, transition: 'width .3s' }} />
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 800, color: cfg.c, minWidth: 40 }}>{g.progress}%</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {g.targetDate && <Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(g.targetDate)}</Badge>}
+              <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+                {[-10, -5, +5, +10].map(d => (
+                  <button key={d} onClick={() => updProg(g.id, g.progress + d)} style={{ padding: '4px 8px', borderRadius: 6, border: `1.5px solid ${d < 0 ? '#E5E7EB' : cfg.m}`, background: d < 0 ? 'white' : cfg.l, color: d < 0 ? '#6B7280' : cfg.d, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    {d > 0 ? `+${d}` : d}%
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))
+      }
+      {showModal && (
+        <Modal title="목표 추가" onClose={() => setShowModal(false)}>
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="목표" placeholder="이루고 싶은 목표를 입력하세요" required />
+          <Field value={form.category} onChange={v => setForm(p => ({ ...p, category: v }))} label="카테고리" placeholder="예: 건강, 공부, 취미" />
+          <Field value={form.targetDate} onChange={v => setForm(p => ({ ...p, targetDate: v }))} label="목표 날짜" type="date" />
+          <Field value={form.description} onChange={v => setForm(p => ({ ...p, description: v }))} label="설명" placeholder="목표에 대한 설명" rows={3} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>추가하기</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   JOURNAL SCREEN (Personal)
+══════════════════════════════════════════════════════════ */
+function JournalScreen({ journals, setJournals }) {
+  const cfg = WS.personal;
+  const [showModal, setShowModal] = useState(false);
+  const [sel, setSel] = useState(null);
+  const [form, setForm] = useState({ title: '', content: '', mood: 3, date: tod() });
+
+  const add = () => {
+    if (!form.content.trim()) return;
+    const entry = { id: uid(), ...form, title: form.title || `${fmtFull(form.date)} 일기`, date: form.date };
+    setJournals(p => [entry, ...p]);
+    setForm({ title: '', content: '', mood: 3, date: tod() });
+    setShowModal(false);
+    setSel(entry);
   };
 
-  const undoneQ = todayQ.filter(q => !q.completed).length;
-  const pageObj = pages.find(p => p.id === activeGarden);
+  const del = (id) => { setJournals(p => p.filter(j => j.id !== id)); if (sel?.id === id) setSel(null); };
 
-  if (!user) {
+  return (
+    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>📖 개인 일기</div>
+        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 일기 쓰기</Btn>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, flex: 1, minHeight: 0 }}>
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {journals.length === 0
+            ? <Empty icon="📖" title="일기가 없어요" desc="오늘의 일기를 써보세요" />
+            : journals.map(j => (
+              <div key={j.id} onClick={() => setSel(j)} style={{ background: sel?.id === j.id ? cfg.l : 'white', border: `1.5px solid ${sel?.id === j.id ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{j.title}</div>
+                  <span style={{ fontSize: 16 }}>{MOOD[j.mood - 1]}</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{fmtFull(j.date)}</div>
+              </div>
+            ))
+          }
+        </div>
+        <div style={{ background: 'white', borderRadius: 16, padding: '20px', border: '1px solid #F3F4F6', overflowY: 'auto' }}>
+          {sel ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                    <span style={{ fontSize: 28 }}>{MOOD[sel.mood - 1]}</span>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{sel.title}</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>{fmtFull(sel.date)}</div>
+                </div>
+                <button onClick={() => del(sel.id)} style={{ background: '#FEF2F2', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: '#EF4444', fontWeight: 700, cursor: 'pointer' }}>삭제</button>
+              </div>
+              <div style={{ fontSize: 15, color: '#374151', lineHeight: 1.9, whiteSpace: 'pre-wrap' }}>{sel.content}</div>
+            </>
+          ) : <Empty icon="📝" title="일기를 선택하세요" desc="왼쪽에서 일기를 선택하면 내용이 표시됩니다" />}
+        </div>
+      </div>
+      {showModal && (
+        <Modal title="일기 쓰기" onClose={() => setShowModal(false)}>
+          <Field value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))} label="날짜" type="date" />
+          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="제목" placeholder="제목 (비우면 날짜로 자동 설정)" />
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>오늘의 기분</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {MOOD.map((m, i) => (
+                <button key={i} onClick={() => setForm(p => ({ ...p, mood: i + 1 }))} style={{ fontSize: 26, background: form.mood === i + 1 ? cfg.l : 'white', border: `2px solid ${form.mood === i + 1 ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '8px', cursor: 'pointer', transition: 'all .15s' }}>{m}</button>
+              ))}
+            </div>
+          </div>
+          <Field value={form.content} onChange={v => setForm(p => ({ ...p, content: v }))} label="내용" placeholder="오늘 어땠나요?" rows={7} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>저장하기</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   NOTIF SCREEN — 알림함 (워크스페이스 초대 수락/거절)
+══════════════════════════════════════════════════════════ */
+function NotifScreen({ user, spaces, setSpaces, notifs, setNotifs }) {
+  const acceptInvite = (notif) => {
+    const updated = spaces.map(s => {
+      if (s.id !== notif.spaceId) return s;
+      if (s.members.find(m => m.id === user.id)) return s;
+      return { ...s, members: [...s.members, { id: user.id, name: user.nickname || user.name, role: 'member' }] };
+    });
+    setSpaces(updated);
+    sv('wl_spaces', updated);
+    const upd = notifs.map(n => n.id === notif.id ? { ...n, status: 'accepted', read: true } : n);
+    setNotifs(upd);
+    sv(`wl_notifs_${user.id}`, upd);
+  };
+
+  const declineInvite = (notif) => {
+    const upd = notifs.map(n => n.id === notif.id ? { ...n, status: 'declined', read: true } : n);
+    setNotifs(upd);
+    sv(`wl_notifs_${user.id}`, upd);
+  };
+
+  const pending = notifs.filter(n => n.status === 'pending');
+  const handled = notifs.filter(n => n.status !== 'pending');
+
+  return (
+    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
+      <div className="fu" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>🔔 알림함</div>
+        <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>워크스페이스 초대 알림이 여기 표시돼요</div>
+      </div>
+
+      {notifs.length === 0 && <Empty icon="🔔" title="아직 알림이 없어요" desc="누군가 워크스페이스에 초대하면 여기서 확인할 수 있어요" />}
+
+      {pending.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>새 초대 {pending.length}건</div>
+          {pending.map(n => (
+            <div key={n.id} className="fu" style={{ background: 'white', borderRadius: 18, padding: '20px', border: '1.5px solid #E0E7FF', marginBottom: 14, boxShadow: '0 4px 16px rgba(99,102,241,.1)' }}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 16 }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg,#6366F1,#2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
+                  {(n.fromName || '?')[0]}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 5 }}>
+                    <span style={{ color: '#4F46E5', fontWeight: 900 }}>{n.fromName}</span>님이 워크스페이스로 초대했어요
+                  </div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0F4FF', borderRadius: 8, padding: '4px 10px', marginBottom: 8 }}>
+                    <span style={{ fontSize: 15 }}>{WS[n.spaceType]?.icon || '📁'}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#3730A3' }}>{n.spaceName}</span>
+                  </div>
+                  {n.message && (
+                    <div style={{ fontSize: 13, color: '#6B7280', background: '#F9FAFB', borderRadius: 10, padding: '10px 14px', lineHeight: 1.6, borderLeft: '3px solid #C7D2FE' }}>
+                      "{n.message}"
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>{timeAgo(n.createdAt)}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => declineInvite(n)} style={{ flex: 1, padding: '11px', borderRadius: 11, border: '1.5px solid #E5E7EB', background: 'white', color: '#6B7280', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>거절하기</button>
+                <button onClick={() => acceptInvite(n)} style={{ flex: 2, padding: '11px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#4F46E5,#2563EB)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  ✓ 수락하고 참여하기
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {handled.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>지난 알림</div>
+          {handled.map(n => (
+            <div key={n.id} style={{ background: '#F9FAFB', borderRadius: 14, padding: '14px 16px', border: '1px solid #F3F4F6', marginBottom: 10 }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#9CA3AF', flexShrink: 0 }}>{(n.fromName||'?')[0]}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#9CA3AF' }}>
+                    <span style={{ color:'#6B7280',fontWeight:700 }}>{n.fromName}</span>님의 <span style={{ color:'#6B7280',fontWeight:700 }}>{n.spaceName}</span> 초대
+                  </div>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: n.status==='accepted'?'#059669':'#EF4444', background: n.status==='accepted'?'#ECFDF5':'#FEF2F2', padding: '3px 10px', borderRadius: 99, flexShrink: 0 }}>
+                  {n.status === 'accepted' ? '✓ 수락됨' : '✕ 거절됨'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   WORKSPACE SCREEN (Pro — 이메일 초대 방식, 초대코드 없음)
+══════════════════════════════════════════════════════════ */
+function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
+  const cfg = WS[user.wsType] || WS.personal;
+  const [view, setView] = useState('list');
+  const [selSpace, setSelSpace] = useState(null);
+  const [form, setForm] = useState({ name: '', description: '', type: user.wsType });
+
+  // 이메일 초대 상태
+  const [invEmail, setInvEmail] = useState('');
+  const [invResult, setInvResult] = useState(null); // null | 'not_found' | 'already_member' | userObject
+  const [showMsgInput, setShowMsgInput] = useState(false);
+  const [invMsg, setInvMsg] = useState('');
+  const [invSent, setInvSent] = useState(false);
+  const [searching, setSearching] = useState(false);
+
+  const createSpace = () => {
+    if (!form.name.trim()) return;
+    const space = {
+      id: uid(), name: form.name.trim(), description: form.description,
+      type: form.type, ownerId: user.id,
+      members: [{ id: user.id, name: user.nickname || user.name, role: 'owner' }],
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...spaces, space];
+    setSpaces(updated);
+    sv('wl_spaces', updated);
+    setForm({ name: '', description: '', type: user.wsType });
+    setSelSpace(space);
+    setView('detail');
+  };
+
+  const searchEmail = async () => {
+    if (!invEmail.trim()) return;
+    setSearching(true);
+    setInvResult(null);
+    setShowMsgInput(false);
+    setInvMsg('');
+    await new Promise(r => setTimeout(r, 450));
+    setSearching(false);
+    const found = accounts.find(a => a.email.toLowerCase() === invEmail.trim().toLowerCase() && a.id !== user.id);
+    const space = spaces.find(s => s.id === selSpace?.id);
+    if (found && space?.members.find(m => m.id === found.id)) {
+      setInvResult('already_member');
+    } else {
+      setInvResult(found || 'not_found');
+    }
+  };
+
+  const sendInvite = () => {
+    if (!invResult || invResult === 'not_found' || invResult === 'already_member') return;
+    const space = spaces.find(s => s.id === selSpace.id) || selSpace;
+    const notif = {
+      id: uid(), type: 'invite',
+      fromId: user.id, fromName: user.nickname || user.name,
+      spaceId: space.id, spaceName: space.name, spaceType: space.type,
+      message: invMsg.trim(),
+      status: 'pending', read: false,
+      createdAt: new Date().toISOString(),
+    };
+    // 수신자의 알림함에 저장 (같은 기기/localStorage 활용)
+    const recipientNotifs = ld(`wl_notifs_${invResult.id}`, []);
+    sv(`wl_notifs_${invResult.id}`, [...recipientNotifs, notif]);
+    // 초기화
+    setInvSent(true);
+    setInvEmail(''); setInvResult(null); setShowMsgInput(false); setInvMsg('');
+    setTimeout(() => setInvSent(false), 3500);
+  };
+
+  const mySpaces = spaces.filter(s => s.members.find(m => m.id === user.id));
+
+  // ── 워크스페이스 상세 뷰 ──
+  if (view === 'detail' && selSpace) {
+    const space = spaces.find(s => s.id === selSpace.id) || selSpace;
+    const wCfg = WS[space.type] || WS.personal;
+    const isOwner = space.ownerId === user.id;
+
     return (
-      <div className="qg">
-        <Styles />
-        <AuthScreen accounts={accounts} onRegister={acct => setAccounts(prev => [...prev, acct])} onAuth={u => setUser(u)} />
+      <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
+        <div className="fu" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+          <button onClick={() => { setView('list'); setInvResult(null); setInvEmail(''); setInvSent(false); }}
+            style={{ width:36,height:36,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>←</button>
+          <div>
+            <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>{space.name}</div>
+            <div style={{ fontSize:12,color:'#9CA3AF' }}>{wCfg.icon} {wCfg.label}용 · {space.members.length}명 참여 중</div>
+          </div>
+        </div>
+
+        {/* 멤버 목록 */}
+        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
+          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>👥 멤버 ({space.members.length}명)</div>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:10 }}>
+            {space.members.map(m => (
+              <div key={m.id} style={{ display:'flex',alignItems:'center',gap:8,background:'#F9FAFB',borderRadius:99,padding:'7px 14px',border:'1px solid #F3F4F6' }}>
+                <div style={{ width:28,height:28,borderRadius:'50%',background:`linear-gradient(135deg,${wCfg.c},${wCfg.d})`,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:12,fontWeight:800 }}>{(m.name||'?')[0]}</div>
+                <span style={{ fontSize:13,fontWeight:600,color:'#374151' }}>{m.name}</span>
+                {m.role==='owner'&&<Badge color={wCfg.d} bg={wCfg.l}>관리자</Badge>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 이메일 초대 패널 (관리자만) */}
+        {isOwner && (
+          <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
+            <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:4 }}>📧 이메일로 초대하기</div>
+            <div style={{ fontSize:12,color:'#9CA3AF',marginBottom:16 }}>Workly에 가입된 이메일로만 초대할 수 있어요</div>
+
+            {invSent && (
+              <div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:12,padding:'12px 16px',fontSize:13,fontWeight:700,color:'#059669',display:'flex',alignItems:'center',gap:10,marginBottom:16 }}>
+                <span style={{ fontSize:18 }}>✉️</span> 초대가 성공적으로 전송되었어요!
+              </div>
+            )}
+
+            <div style={{ display:'flex',gap:8,marginBottom:12 }}>
+              <input value={invEmail} onChange={e => { setInvEmail(e.target.value); setInvResult(null); }}
+                placeholder="친구의 이메일 주소 입력"
+                onKeyDown={e => e.key==='Enter'&&searchEmail()}
+                style={{ flex:1,padding:'11px 14px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:11,fontFamily:'inherit',color:'#1F2937',fontWeight:500 }}/>
+              <button onClick={searchEmail} disabled={!invEmail.trim()||searching}
+                style={{ padding:'11px 18px',borderRadius:11,border:'none',background:invEmail.trim()&&!searching?wCfg.c:'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:invEmail.trim()?'pointer':'default',display:'flex',alignItems:'center',gap:6,minWidth:72,justifyContent:'center' }}>
+                {searching?<div style={{ width:14,height:14,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .6s linear infinite' }}/>:'검색'}
+              </button>
+            </div>
+
+            {invResult==='not_found' && (
+              <div className="fu" style={{ background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:11,padding:'12px 16px',display:'flex',alignItems:'center',gap:10 }}>
+                <span style={{ fontSize:18 }}>❌</span>
+                <span style={{ fontSize:13,fontWeight:700,color:'#DC2626' }}>등록된 이메일이 없습니다.</span>
+              </div>
+            )}
+            {invResult==='already_member' && (
+              <div className="fu" style={{ background:'#FFFBEB',border:'1.5px solid #FDE68A',borderRadius:11,padding:'12px 16px',display:'flex',alignItems:'center',gap:10 }}>
+                <span style={{ fontSize:18 }}>ℹ️</span>
+                <span style={{ fontSize:13,fontWeight:700,color:'#D97706' }}>이미 이 워크스페이스의 멤버예요.</span>
+              </div>
+            )}
+            {invResult&&invResult!=='not_found'&&invResult!=='already_member'&&(
+              <div className="fu" style={{ background:'#F9FAFB',border:'1.5px solid #E5E7EB',borderRadius:14,overflow:'hidden' }}>
+                <div style={{ padding:'16px',display:'flex',alignItems:'center',gap:14 }}>
+                  <div style={{ width:50,height:50,borderRadius:'50%',background:`linear-gradient(135deg,${wCfg.c},${wCfg.d})`,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:22,fontWeight:900,flexShrink:0,overflow:'hidden' }}>
+                    {invResult.avatar?<img src={invResult.avatar} style={{ width:'100%',height:'100%',objectFit:'cover' }} alt=""/>:(invResult.nickname||invResult.name||'?')[0]}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:16,fontWeight:800,color:'#111827' }}>{invResult.nickname||invResult.name}</div>
+                    <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>{invResult.email}</div>
+                    {invResult.wsType&&<div style={{ marginTop:6 }}><Badge color={WS[invResult.wsType]?.d} bg={WS[invResult.wsType]?.l}>{WS[invResult.wsType]?.icon} {WS[invResult.wsType]?.label}</Badge></div>}
+                  </div>
+                  {!showMsgInput&&(
+                    <button onClick={() => setShowMsgInput(true)} style={{ padding:'9px 18px',borderRadius:99,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap' }}>초대하기</button>
+                  )}
+                </div>
+                {showMsgInput&&(
+                  <div style={{ padding:'0 16px 16px',borderTop:'1px solid #F3F4F6' }}>
+                    <div style={{ paddingTop:14,marginBottom:10 }}>
+                      <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>초대 메시지 (선택)</div>
+                      <textarea value={invMsg} onChange={e => setInvMsg(e.target.value)}
+                        placeholder='예: 안녕! 우리 같이 이 워크스페이스 써보자 😊'
+                        rows={3}
+                        style={{ width:'100%',padding:'10px 12px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,resize:'none',fontFamily:'inherit',lineHeight:1.55 }}/>
+                    </div>
+                    <div style={{ display:'flex',gap:8 }}>
+                      <button onClick={() => setShowMsgInput(false)} style={{ flex:1,padding:'10px',borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer' }}>취소</button>
+                      <button onClick={sendInvite} style={{ flex:2,padding:'10px',borderRadius:10,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6 }}>
+                        ✉️ 초대 보내기
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {space.description&&(
+          <div style={{ background:'white',borderRadius:14,padding:'16px',border:'1px solid #F3F4F6' }}>
+            <div style={{ fontSize:13,fontWeight:800,color:'#111827',marginBottom:6 }}>설명</div>
+            <div style={{ fontSize:14,color:'#6B7280',lineHeight:1.6 }}>{space.description}</div>
+          </div>
+        )}
       </div>
     );
   }
 
-  const tabs = [{ id: 'home', icon: '📊', label: '홈' }, { id: 'quest', icon: '⚔️', label: '퀘스트' }, { id: 'garden', icon: '🌿', label: '정원' }];
+  // ── 워크스페이스 목록 ──
+  return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ marginBottom:24 }}>
+        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>👥 협업 워크스페이스</div>
+        <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>팀원들과 함께 작업하는 공간이에요</div>
+      </div>
+
+      {view!=='create'&&(
+        <button onClick={() => setView('create')} style={{ width:'100%',padding:'20px',borderRadius:16,border:`2px dashed ${cfg.c}`,background:cfg.l,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',gap:14,textAlign:'left' }}>
+          <div style={{ width:48,height:48,borderRadius:14,background:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,.08)' }}>＋</div>
+          <div>
+            <div style={{ fontSize:15,fontWeight:800,color:cfg.c }}>새 워크스페이스 만들기</div>
+            <div style={{ fontSize:12,color:cfg.d,marginTop:3 }}>팀을 만들고 이메일로 멤버를 초대해요</div>
+          </div>
+        </button>
+      )}
+
+      {view==='create'&&(
+        <div className="fu" style={{ background:'white',borderRadius:16,padding:'20px',border:'1px solid #F3F4F6',marginBottom:20 }}>
+          <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:16 }}>새 워크스페이스 만들기</div>
+          <Field value={form.name} onChange={v => setForm(p=>({...p,name:v}))} label="이름" placeholder="예: 3학년 2반, 마케팅팀" required/>
+          <Field value={form.description} onChange={v => setForm(p=>({...p,description:v}))} label="설명" placeholder="워크스페이스 설명 (선택)" rows={2}/>
+          <Select label="유형" value={form.type} onChange={v => setForm(p=>({...p,type:v}))} options={Object.entries(WS).map(([k,v])=>({value:k,label:`${v.icon} ${v.label}용`}))}/>
+          <div style={{ display:'flex',gap:10 }}>
+            <Btn onClick={() => setView('list')} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={createSpace} bg={cfg.c} disabled={!form.name.trim()} style={{ flex:2 }}>만들기</Btn>
+          </div>
+        </div>
+      )}
+
+      {mySpaces.length>0&&(
+        <>
+          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:12 }}>내 워크스페이스</div>
+          {mySpaces.map(s => {
+            const wCfg=WS[s.type]||WS.personal;
+            return (
+              <div key={s.id} onClick={() => { setSelSpace(s); setView('detail'); setInvResult(null); setInvEmail(''); }}
+                style={{ background:'white',borderRadius:14,padding:'16px 18px',border:'1px solid #F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',gap:14,marginBottom:10,boxShadow:'0 2px 8px rgba(0,0,0,.04)',transition:'all .15s' }}
+                onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)';e.currentTarget.style.transform='translateY(-1px)';}}
+                onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';e.currentTarget.style.transform='translateY(0)';}}>
+                <div style={{ width:46,height:46,borderRadius:13,background:wCfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0 }}>{wCfg.icon}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:2 }}>{s.name}</div>
+                  <div style={{ fontSize:12,color:'#9CA3AF' }}>{s.members.length}명 · {wCfg.label}용{s.ownerId===user.id?' · 관리자':''}</div>
+                </div>
+                <span style={{ fontSize:16,color:'#D1D5DB' }}>›</span>
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {mySpaces.length===0&&view!=='create'&&<Empty icon="👥" title="참여 중인 워크스페이스가 없어요" desc="새 워크스페이스를 만들거나 초대를 기다려보세요"/>}
+    </div>
+  );
+}
+/* ══════════════════════════════════════════════════════════
+   PRO UPGRADE SCREEN
+══════════════════════════════════════════════════════════ */
+function ProUpgradeScreen({ user, onUpgrade, onBack }) {
+  const cfg = WS[user.wsType] || WS.personal;
+  const [plan, setPlan] = useState('annual');
+  const [paying, setPaying] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const PLANS = {
+    monthly: { l: '월간', price: '₩9,900', sub: '/월', save: null },
+    annual:  { l: '연간', price: '₩79,900', sub: '/년', save: '17% 절약' },
+  };
+
+  const pay = async () => {
+    setPaying(true);
+    await new Promise(r => setTimeout(r, 2000));
+    setPaying(false); setDone(true);
+    await new Promise(r => setTimeout(r, 1200));
+    onUpgrade();
+  };
+
+  const PERKS = [
+    { icon: '👥', title: '협업 워크스페이스', desc: '팀원들과 함께 작업하는 공간 생성' },
+    { icon: '🔗', title: '초대 코드 발급', desc: '링크나 코드로 멤버를 초대' },
+    { icon: '📊', title: '공유 할일 & 캘린더', desc: '팀과 함께 할일과 일정 관리' },
+    { icon: '♾️', title: '무제한 워크스페이스', desc: '원하는 만큼 공간 생성 가능' },
+  ];
+
+  if (done) return (
+    <div style={{ minHeight: '100vh', background: `linear-gradient(135deg, ${cfg.c}, ${cfg.d})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+      <div style={{ fontSize: 72, marginBottom: 16, animation: 'pop .5s ease' }}>🎉</div>
+      <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>Pro 가입 완료!</div>
+      <p style={{ fontSize: 15, opacity: 0.85 }}>이제 팀과 함께 작업해보세요 👥</p>
+    </div>
+  );
 
   return (
-    <div className="qg">
-      <Styles />
-      <div style={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', background: 'white', borderBottom: `1.5px solid ${BD}`, zIndex: 10, position: 'relative', gap: 8 }}>
-        <div style={{ fontWeight: 900, fontSize: 14, background: `linear-gradient(135deg,${PD},${GD})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', flexShrink: 0 }}>🌱 Quest Garden</div>
-        <div style={{ display: 'flex', gap: 2, background: PP, borderRadius: 10, padding: '2px' }}>
-          {tabs.map(({ id, icon, label }) => (
-            <button key={id} onClick={() => { setTab(id); track('tab_switch', { tab_name: id }); }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 8, border: 'none', background: tab === id ? 'white' : 'transparent', color: tab === id ? P : '#9CA3AF', fontWeight: 800, fontSize: 11, boxShadow: tab === id ? '0 2px 6px rgba(124,58,237,.1)' : 'none', transition: 'all .2s', position: 'relative', whiteSpace: 'nowrap' }}>
-              <span style={{ fontSize: 12 }}>{icon}</span>{label}
-              {id === 'quest' && undoneQ > 0 && <div style={{ position: 'absolute', top: 3, right: 3, width: 6, height: 6, borderRadius: '50%', background: G, border: '2px solid white' }} />}
+    <div style={{ height: '100%', background: '#FAFAFA', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 20px', background: 'white', borderBottom: '1px solid #F3F4F6', gap: 12 }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: 18, color: '#6B7280', cursor: 'pointer' }}>←</button>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>Pro 업그레이드</div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 40px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 44, marginBottom: 10 }}>⚡️</div>
+          <h2 style={{ fontSize: 24, fontWeight: 900, color: '#111827', marginBottom: 6 }}>Workly Pro</h2>
+          <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6 }}>{user.nickname}님의 팀과 함께하는<br />스마트한 협업 경험</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+          {Object.entries(PLANS).map(([k, v]) => (
+            <button key={k} onClick={() => setPlan(k)} style={{ flex: 1, padding: '14px 10px', borderRadius: 14, border: `2px solid ${plan === k ? cfg.c : '#E5E7EB'}`, background: plan === k ? cfg.l : 'white', position: 'relative', cursor: 'pointer', textAlign: 'center' }}>
+              {v.save && <span style={{ position: 'absolute', top: -10, right: 8, background: '#059669', color: 'white', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 99 }}>{v.save}</span>}
+              <div style={{ fontSize: 13, fontWeight: 700, color: plan === k ? cfg.d : '#6B7280', marginBottom: 3 }}>{v.l}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: plan === k ? cfg.c : '#111827' }}>{v.price}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{v.sub}</div>
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => setShowNotif(true)} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${notifEnabled ? P : BD}`, background: notifEnabled ? PL : 'white', color: notifEnabled ? PD : '#9CA3AF', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🔔</button>
-          {!isProUser && <button onClick={() => { setDemoMode(true); setIsProUser(true); }} title="Pro 기능 테스트" style={{ width: 30, height: 30, borderRadius: 9, border: '1.5px solid #FDE047', background: '#FEF9C3', color: '#713F12', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>🧪</button>}
-          {isProUser
-            ? <span style={{ fontSize: 9, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '2px 6px', borderRadius: 5 }}>PRO</span>
-            : <button onClick={() => setShowProUpgrade(true)} style={{ fontSize: 10, fontWeight: 900, background: 'linear-gradient(135deg,#F59E0B,#EF4444)', color: 'white', padding: '4px 8px', borderRadius: 7, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>✨ PRO</button>}
-          <button onClick={() => setShowProfile(true)} style={{ fontSize: 12, fontWeight: 800, color: PM, background: PL, padding: '4px 10px', borderRadius: 999, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-            {user.avatar ? <img src={user.avatar} style={{width:20,height:20,borderRadius:'50%',objectFit:'cover'}} alt=''/> : <span style={{fontSize:16}}>👤</span>}
-            {user.nickname || user.name}
-          </button>
+        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #F3F4F6', overflow: 'hidden', marginBottom: 20 }}>
+          {PERKS.map((p, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderBottom: i < PERKS.length - 1 ? '1px solid #F9FAFB' : 'none' }}>
+              <span style={{ fontSize: 22, flexShrink: 0 }}>{p.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 1 }}>{p.title}</div>
+                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{p.desc}</div>
+              </div>
+              <span style={{ color: '#059669', fontSize: 14 }}>✓</span>
+            </div>
+          ))}
         </div>
-      </div>
-      {showBanner && (
-        <div style={{ flexShrink: 0, background: `linear-gradient(135deg,${P},${G})`, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16 }}>✨</span>
-          <div style={{ flex: 1 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: 'white' }}>Pro: 정원 기획 + 테마 14종 + 퀘스트 보상!</span>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', marginLeft: 8, fontWeight: 600 }}>월 ₩9,900</span>
-          </div>
-          {!isProUser && <button onClick={() => setShowProUpgrade(true)} style={{ padding: '5px 13px', borderRadius: 20, border: '1.5px solid white', background: 'rgba(255,255,255,.18)', color: 'white', fontSize: 11, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>시작하기</button>}
-          <button onClick={() => { setShowBanner(false); try { localStorage.setItem('qg_banner','false'); } catch {} }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.7)', fontSize: 18, cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>✕</button>
-        </div>
-      )}
-      {demoMode && (
-        <div style={{ flexShrink: 0, background: '#FEF9C3', borderBottom: '1.5px solid #FDE047', padding: '7px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13 }}>🧪</span>
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#713F12', flex: 1 }}>Pro 테스트 모드 — 실제 결제 없이 Pro 기능 체험 중</span>
-          <button onClick={() => { setDemoMode(false); setIsProUser(false); }} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #FDE047', background: 'white', color: '#713F12', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>종료</button>
-        </div>
-      )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-        {tab === 'home' && <StatsScreen quests={quests} />}
-        {tab === 'quest' && (
-          <QuestScreen quests={quests} silent={silent} isProUser={isProUser}
-            onToggleSilent={() => setSilent(s => !s)}
-            onOpenTimer={q => setActiveTimer(q)}
-            onEditReward={q => setEditReward(q)} />
-        )}
-        {tab === 'garden' && (
-          <GardenScreen isProUser={isProUser} pages={pages} owned={owned} customCategories={customCategories}
-            onNewPage={() => setCreatePage(true)}
-            onOpenPage={id => setActiveGarden(id)}
-            onShowProUpgrade={() => setShowProUpgrade(true)} />
-        )}
-        {tab === 'quest' && (
-          <button onClick={() => setCreateQuest(true)}
-            style={{ position: 'absolute', right: 24, bottom: 24, width: 56, height: 56, borderRadius: 18, background: `linear-gradient(145deg,${P},${G})`, border: 'none', color: 'white', fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 24px rgba(124,58,237,.45)', zIndex: 15, cursor: 'pointer' }}>+</button>
-        )}
-        {tab === 'garden' && isProUser && (
-          <button onClick={() => setCreatePage(true)}
-            style={{ position: 'absolute', right: 24, bottom: 24, width: 56, height: 56, borderRadius: 18, background: `linear-gradient(145deg,${P},${G})`, border: 'none', color: 'white', fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 24px rgba(124,58,237,.45)', zIndex: 15, cursor: 'pointer' }}>+</button>
-        )}
-        {createPage && (
-          <CreatePageModal isProUser={isProUser}
-            onNeedPro={() => { setCreatePage(false); setShowProUpgrade(true); }}
-            onConfirm={p => { track('garden_created', { theme: p.theme }); setPages(prev => [...prev, { id: uid(), ...p }]); setCreatePage(false); }}
-            onCancel={() => setCreatePage(false)} />
-        )}
-        {createQuest && (
-          <CreateQuestModal isProUser={isProUser} routines={routines}
-            onSaveRoutine={r => { if (r.__delete) { setRoutines(prev => prev.filter(x => x.id !== r.id)); return; } track('routine_saved', { todo_count: r.todos.length }); setRoutines(prev => [...prev.filter(x => x.id !== r.id), r]); }}
-            onConfirm={nQ => { track('quest_created', { quest_count: nQ.length }); setQuests(p => [...p.filter(q => !(q.date === today() && !q.completed)), ...nQ]); setCreateQuest(false); }}
-            onCancel={() => setCreateQuest(false)} />
-        )}
-        {editReward && isProUser && (
-          <EditRewardModal quest={editReward}
-            onSave={(id, catKey) => { setQuests(p => p.map(q => q.id === editReward.id ? { ...q, rewardId: id, rewardCat: catKey } : q)); setEditReward(null); }}
-            onCancel={() => setEditReward(null)} />
-        )}
-        {pageObj && (
-          <GardenDetail page={pageObj} owned={owned} customCategories={customCategories}
-            onClose={() => setActiveGarden(null)}
-            onUpdate={u => setPages(p => p.map(x => x.id === u.id ? u : x))}
-            onDelete={id => { setPages(p => p.filter(x => x.id !== id)); setActiveGarden(null); }} />
-        )}
-        {activeTimer && (
-          <TimerScreen quest={activeTimer} silentMode={silent} isProUser={isProUser}
-            onComplete={(mins) => { completeQuest(activeTimer.id, mins); setActiveTimer(null); }}
-            onBack={() => setActiveTimer(null)} />
-        )}
-        {confetti && <Confetti onDone={() => setConfetti(false)} />}
-        {showOnboarding && (
-          <OnboardingModal onDone={() => { track('onboarding_complete'); setShowOnboarding(false); setOnboarded(true); try { localStorage.setItem('qg_onboarded', 'true'); } catch {} }} />
-        )}
-        {showNotif && <NotifPanel notifEnabled={notifEnabled} setNotifEnabled={setNotifEnabled} notifTime={notifTime} setNotifTime={setNotifTime} onClose={() => setShowNotif(false)} />}
-        {showProfile && (
-          <ProfilePage user={user} isProUser={isProUser} quests={quests}
-            onBack={() => setShowProfile(false)}
-            onUpdate={updateUserProfile}
-            onLogout={() => { setUser(null); setShowProfile(false); }}
-            onShowProUpgrade={() => { setShowProfile(false); setShowProUpgrade(true); }}
-            onDeleteAccount={() => {
-              try { ['qg_accounts','qg_user','qg_pro','qg_pages','qg_quests','qg_owned','qg_routines','qg_notif_on','qg_notif_time','qg_onboarded'].forEach(k => localStorage.removeItem(k)); } catch {}
-              setUser(null); setAccounts([]); setQuests([]); setPages([]); setOwned([]); setIsProUser(false); setShowProfile(false);
-            }} />
-        )}
-        {showProUpgrade && (
-          <ProUpgradePage userName={user.name} onBack={() => setShowProUpgrade(false)} onUpgrade={() => { setIsProUser(true); setShowProUpgrade(false); }} />
-        )}
+        <button onClick={pay} disabled={paying} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: paying ? '#9CA3AF' : `linear-gradient(135deg, ${cfg.c}, ${cfg.d})`, color: 'white', fontSize: 15, fontWeight: 700, cursor: paying ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {paying ? <><div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} /> 처리 중...</> : `💳 ${PLANS[plan].price} 결제하기`}
+        </button>
+        <p style={{ textAlign: 'center', fontSize: 11, color: '#9CA3AF', marginTop: 10 }}>언제든 해지 가능 · 부가세 포함</p>
       </div>
     </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PROFILE SCREEN
+══════════════════════════════════════════════════════════ */
+function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, isProUser }) {
+  const cfg = WS[user.wsType] || WS.personal;
+  const [editNick, setEditNick] = useState(false);
+  const [nick, setNick] = useState(user.nickname || user.name);
+  const [showDel, setShowDel] = useState(false);
+  const fileRef = useRef(null);
+
+  const handleAvatar = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => onUpdate({ avatar: ev.target.result });
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
+      <div className="fu" style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 24 }}>프로필 설정</div>
+      {/* Avatar + name */}
+      <div className="fu" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28, animationDelay: '.05s' }}>
+        <div style={{ position: 'relative', marginBottom: 14 }}>
+          <div style={{ width: 88, height: 88, borderRadius: '50%', background: `linear-gradient(135deg, ${cfg.c}, ${cfg.d})`, border: `3px solid ${cfg.c}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            {user.avatar ? <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <span style={{ fontSize: 36, color: 'white', fontWeight: 900 }}>{(user.nickname || user.name || '?')[0]}</span>}
+          </div>
+          <button onClick={() => fileRef.current?.click()} style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%', background: '#111827', border: '2px solid white', color: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleAvatar} style={{ display: 'none' }} />
+        </div>
+        {editNick ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input value={nick} onChange={e => setNick(e.target.value)} autoFocus style={{ padding: '8px 12px', border: `2px solid ${cfg.c}`, borderRadius: 10, fontSize: 16, fontWeight: 700, textAlign: 'center' }} onKeyDown={e => e.key === 'Enter' && (() => { if (nick.trim()) onUpdate({ nickname: nick.trim() }); setEditNick(false); })()} />
+            <Btn onClick={() => { if (nick.trim()) onUpdate({ nickname: nick.trim() }); setEditNick(false); }} bg={cfg.c} sm>저장</Btn>
+            <Btn onClick={() => setEditNick(false)} outline color="#6B7280" sm>취소</Btn>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{user.nickname || user.name}</span>
+            <button onClick={() => setEditNick(true)} style={{ background: cfg.l, border: 'none', borderRadius: 7, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: cfg.d, cursor: 'pointer' }}>수정</button>
+          </div>
+        )}
+        {isProUser && <Badge color="#D97706" bg="#FFFBEB" style={{ marginTop: 6 }}>✨ Pro</Badge>}
+      </div>
+
+      {/* Info */}
+      <div className="fu" style={{ background: 'white', borderRadius: 16, border: '1px solid #F3F4F6', padding: '0 18px', marginBottom: 16, animationDelay: '.08s' }}>
+        {[['이름', user.name], ['이메일', user.email], ['닉네임', user.nickname || user.name], ['워크스페이스 유형', `${WS[user.wsType]?.icon} ${WS[user.wsType]?.label}용`], ['플랜', isProUser ? '✨ Pro' : '무료']].map(([l, v]) => (
+          <div key={l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: '1px solid #F9FAFB' }}>
+            <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 600 }}>{l}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{v}</span>
+          </div>
+        ))}
+      </div>
+
+      {!isProUser && (
+        <button onClick={onShowPro} style={{ width: '100%', padding: '13px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg, #D97706, #DC2626)', color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 12 }}>⚡️ Pro로 업그레이드</button>
+      )}
+      <button onClick={onLogout} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}>로그아웃</button>
+      <button onClick={() => setShowDel(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px solid #F3F4F6', background: 'white', color: '#9CA3AF', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>회원 탈퇴</button>
+
+      {showDel && (
+        <Modal title="정말 탈퇴하시겠어요?" onClose={() => setShowDel(false)} width={360}>
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 18, fontSize: 13, color: '#DC2626', fontWeight: 600, textAlign: 'center' }}>모든 데이터가 영구 삭제됩니다.</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn onClick={() => setShowDel(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
+            <Btn onClick={onDeleteAccount} bg="#EF4444" style={{ flex: 1 }}>탈퇴하기</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   TEMPLATE SCREEN — 테마 & 아이콘 스타일 설정
+   이미지의 뽀용한 파스텔 색감 기반
+══════════════════════════════════════════════════════════ */
+function TemplateScreen({ user, onUpdate }) {
+  const currentTheme = user.theme || 'default';
+  const currentIconSet = user.iconSet || 'default';
+  const [selTheme, setSelTheme] = useState(currentTheme);
+  const [selIcons, setSelIcons] = useState(currentIconSet);
+  const [saved, setSaved] = useState(false);
+
+  const apply = () => {
+    onUpdate({ theme: selTheme, iconSet: selIcons });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const themeObj = THEMES[selTheme] || THEMES.default;
+
+  return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ marginBottom:24 }}>
+        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>🎨 테마 설정</div>
+        <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>앱의 배경색과 아이콘 스타일을 바꿔보세요</div>
+      </div>
+
+      {/* 저장 완료 토스트 */}
+      {saved && (
+        <div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:12,padding:'12px 18px',marginBottom:20,display:'flex',alignItems:'center',gap:10 }}>
+          <span style={{ fontSize:18 }}>✨</span>
+          <span style={{ fontSize:13,fontWeight:700,color:'#059669' }}>테마가 적용되었어요!</span>
+        </div>
+      )}
+
+      {/* 미리보기 */}
+      <div style={{ background:'white',borderRadius:18,border:'1.5px solid #F3F4F6',overflow:'hidden',marginBottom:24,boxShadow:'0 4px 16px rgba(0,0,0,.06)' }}>
+        <div style={{ fontSize:12,fontWeight:700,color:'#9CA3AF',padding:'14px 18px 10px',textTransform:'uppercase',letterSpacing:'.05em' }}>미리보기</div>
+        <div style={{ display:'flex',height:140,borderTop:'1px solid #F3F4F6' }}>
+          {/* Mini sidebar */}
+          <div style={{ width:72,background:themeObj.sidebarBg,borderRight:`1px solid ${themeObj.sidebarBorder}`,display:'flex',flexDirection:'column',alignItems:'center',gap:8,paddingTop:12,flexShrink:0 }}>
+            {['home','todo','cal'].map(id => {
+              const iconSet = ICON_SETS[selIcons] || ICON_SETS.default;
+              return (
+                <div key={id} style={{ width:36,height:36,borderRadius:9,background:id==='home'?(themeObj.navActiveBg||'#EFF6FF'):'transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>
+                  {iconSet[id]}
+                </div>
+              );
+            })}
+          </div>
+          {/* Mini main */}
+          <div style={{ flex:1,background:themeObj.pageBg,padding:'14px 16px',display:'flex',flexDirection:'column',gap:8 }}>
+            <div style={{ height:12,borderRadius:6,background:'rgba(0,0,0,.08)',width:'40%' }}/>
+            {[1,2,3].map(i=>(
+              <div key={i} style={{ background:themeObj.cardBg,border:`1px solid ${themeObj.cardBorder}`,borderRadius:8,padding:'8px 10px',display:'flex',gap:8,alignItems:'center' }}>
+                <div style={{ width:8,height:8,borderRadius:'50%',background:themeObj.preview?.[2]||'#E5E7EB',flexShrink:0 }}/>
+                <div style={{ height:8,borderRadius:4,background:'rgba(0,0,0,.08)',flex:1 }}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 테마 색상 선택 */}
+      <div style={{ marginBottom:24 }}>
+        <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>🌈 색상 테마</div>
+        <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12 }}>
+          {Object.values(THEMES).map(t => {
+            const active = selTheme === t.id;
+            return (
+              <button key={t.id} onClick={() => setSelTheme(t.id)} style={{ padding:'14px 10px',borderRadius:16,border:`2.5px solid ${active?t.preview?.[2]||'#2563EB':'transparent'}`,background:t.sidebarBg,cursor:'pointer',textAlign:'center',boxShadow:active?'0 4px 16px rgba(0,0,0,.12)':'0 2px 6px rgba(0,0,0,.06)',transition:'all .2s',position:'relative' }}>
+                {active&&<div style={{ position:'absolute',top:-6,right:-6,width:18,height:18,borderRadius:'50%',background:'#111827',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:9,fontWeight:900 }}>✓</div>}
+                {/* 색상 팔레트 미리보기 */}
+                <div style={{ display:'flex',gap:4,justifyContent:'center',marginBottom:8 }}>
+                  {t.preview.map((c,i)=><div key={i} style={{ width:14,height:14,borderRadius:'50%',background:c,border:'1.5px solid rgba(0,0,0,.08)' }}/>)}
+                </div>
+                <div style={{ fontSize:14,fontWeight:active?900:700,color:'#111827' }}>{t.emoji}</div>
+                <div style={{ fontSize:11,fontWeight:700,color:'#374151',marginTop:3 }}>{t.name}</div>
+                <div style={{ fontSize:10,color:'#9CA3AF',marginTop:2,lineHeight:1.3 }}>{t.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 아이콘 스타일 선택 */}
+      <div style={{ marginBottom:28 }}>
+        <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>✨ 아이콘 스타일</div>
+        <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12 }}>
+          {Object.values(ICON_SETS).map(s => {
+            const active = selIcons === s.id;
+            return (
+              <button key={s.id} onClick={() => setSelIcons(s.id)} style={{ padding:'16px 10px',borderRadius:16,border:`2.5px solid ${active?'#2563EB':'#F3F4F6'}`,background:active?'#EFF6FF':'white',cursor:'pointer',textAlign:'center',transition:'all .2s',boxShadow:active?'0 4px 12px rgba(37,99,235,.15)':'none' }}>
+                <div style={{ fontSize:26,marginBottom:6 }}>{s.preview}</div>
+                <div style={{ fontSize:13,fontWeight:700,color:active?'#2563EB':'#374151' }}>{s.name}</div>
+                {/* 아이콘 샘플 */}
+                <div style={{ display:'flex',gap:4,justifyContent:'center',marginTop:8 }}>
+                  {['home','todo','cal'].map(id=><span key={id} style={{ fontSize:14 }}>{s[id]}</span>)}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 적용 버튼 */}
+      <button onClick={apply} style={{ width:'100%',padding:'14px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#1E1B4B,#2563EB)',color:'white',fontSize:15,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
+        🎨 이 테마로 적용하기
+      </button>
+      <p style={{ textAlign:'center',fontSize:12,color:'#9CA3AF',marginTop:10 }}>언제든지 다시 변경할 수 있어요</p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   MAIN APP LAYOUT
+══════════════════════════════════════════════════════════ */
+function MainApp({ user, setUser, accounts, setAccounts }) {
+  const cfg = WS[user.wsType] || WS.personal;
+  const [screen, setScreen] = useState('home');
+  const [showPro, setShowPro] = useState(false);
+  const [showProGate, setShowProGate] = useState(false); // 무료 유저가 협업 클릭 시
+  const [isProUser, setIsProUser] = useState(user.isPro || false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Data
+  const [todos, setTodosRaw] = useState(() => ld(`wl_todos_${user.id}`, []));
+  const [events, setEventsRaw] = useState(() => ld(`wl_events_${user.id}`, []));
+  const [assigns, setAssignsRaw] = useState(() => ld(`wl_assigns_${user.id}`, []));
+  const [notes, setNotesRaw] = useState(() => ld(`wl_notes_${user.id}`, []));
+  const [meetings, setMeetingsRaw] = useState(() => ld(`wl_meetings_${user.id}`, []));
+  const [projects, setProjectsRaw] = useState(() => ld(`wl_projects_${user.id}`, []));
+  const [goals, setGoalsRaw] = useState(() => ld(`wl_goals_${user.id}`, []));
+  const [journals, setJournalsRaw] = useState(() => ld(`wl_journals_${user.id}`, []));
+  const [spaces, setSpacesRaw] = useState(() => ld('wl_spaces', []));
+  // 이 유저에게 온 알림 (초대 등)
+  const [notifs, setNotifsRaw] = useState(() => ld(`wl_notifs_${user.id}`, []));
+
+  const setTodos = (v) => { setTodosRaw(v); sv(`wl_todos_${user.id}`, typeof v==='function'?v(todos):v); };
+  const setEvents = (v) => { setEventsRaw(v); sv(`wl_events_${user.id}`, typeof v==='function'?v(events):v); };
+  const setAssigns = (v) => { setAssignsRaw(v); sv(`wl_assigns_${user.id}`, typeof v==='function'?v(assigns):v); };
+  const setNotes = (v) => { setNotesRaw(v); sv(`wl_notes_${user.id}`, typeof v==='function'?v(notes):v); };
+  const setMeetings = (v) => { setMeetingsRaw(v); sv(`wl_meetings_${user.id}`, typeof v==='function'?v(meetings):v); };
+  const setProjects = (v) => { setProjectsRaw(v); sv(`wl_projects_${user.id}`, typeof v==='function'?v(projects):v); };
+  const setGoals = (v) => { setGoalsRaw(v); sv(`wl_goals_${user.id}`, typeof v==='function'?v(goals):v); };
+  const setJournals = (v) => { setJournalsRaw(v); sv(`wl_journals_${user.id}`, typeof v==='function'?v(journals):v); };
+  const setSpaces = (v) => { setSpacesRaw(v); };
+  const setNotifs = (v) => { const val=typeof v==='function'?v(notifs):v; setNotifsRaw(val); sv(`wl_notifs_${user.id}`,val); };
+
+  // 알림 3초마다 새로고침 (같은 기기에서 다른 계정이 초대 보낸 경우 반영)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const fresh = ld(`wl_notifs_${user.id}`, []);
+      setNotifsRaw(fresh);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [user.id]);
+
+  // 미읽은 알림 수 (pending 상태이고 아직 안 읽은 것)
+  const unreadCount = notifs.filter(n => n.status === 'pending' && !n.read).length;
+
+  const updateUser = (patch) => {
+    const updated = { ...user, ...patch };
+    setUser(updated);
+    setAccounts(prev => prev.map(a => a.id === user.id ? { ...a, ...patch } : a));
+  };
+
+  const logout = () => { setUser(null); try { localStorage.removeItem('wl_user'); } catch {} };
+  const deleteAccount = () => {
+    ['todos','events','assigns','notes','meetings','projects','goals','journals'].forEach(k => { try { localStorage.removeItem(`wl_${k}_${user.id}`); } catch {} });
+    setAccounts(prev => prev.filter(a => a.id !== user.id));
+    setUser(null);
+  };
+
+  // 테마 & 아이콘셋 적용
+  const themeObj = THEMES[user.theme || 'default'] || THEMES.default;
+  const iconSet  = ICON_SETS[user.iconSet || 'default'] || ICON_SETS.default;
+
+  // 네비게이션 (아이콘셋 반영)
+  const navItems = [
+    ...cfg.nav.map(item => ({ ...item, e: iconSet[item.id] || item.e })),
+    { id:'workspace', e: iconSet.workspace || '👥', n:'협업' },
+    { id:'notif',     e: iconSet.notif || '🔔',    n:'알림' },
+    { id:'template',  e: iconSet.template || '🎨', n:'테마' },
+    { id:'profile',   e: iconSet.profile || '👤',  n:'프로필' },
+  ];
+
+  const handleNavClick = (id) => {
+    // 무료 유저가 협업 탭 클릭 → Pro 게이트 모달
+    if (id === 'workspace' && !isProUser) {
+      setShowProGate(true);
+      return;
+    }
+    // 알림 탭 진입 시 전부 읽음 처리
+    if (id === 'notif') {
+      const upd = notifs.map(n => ({ ...n, read: true }));
+      setNotifsRaw(upd);
+      sv(`wl_notifs_${user.id}`, upd);
+    }
+    setScreen(id);
+  };
+
+  const renderScreen = () => {
+    switch (screen) {
+      case 'home':     return <HomeScreen user={user} todos={todos} events={events} setScreen={setScreen} />;
+      case 'todo':     return <TodoScreen todos={todos} setTodos={setTodos} wsType={user.wsType} />;
+      case 'cal':      return <CalendarScreen events={events} setEvents={setEvents} wsType={user.wsType} />;
+      case 'assign':   return <AssignmentsScreen assigns={assigns} setAssigns={setAssigns} />;
+      case 'notes':    return <NotesScreen notes={notes} setNotes={setNotes} />;
+      case 'meetings': return <MeetingsScreen meetings={meetings} setMeetings={setMeetings} />;
+      case 'projects': return <ProjectsScreen projects={projects} setProjects={setProjects} />;
+      case 'goals':    return <GoalsScreen goals={goals} setGoals={setGoals} />;
+      case 'jour':     return <JournalScreen journals={journals} setJournals={setJournals} />;
+      case 'workspace':return <WorkspaceScreen user={user} accounts={accounts} spaces={spaces} setSpaces={setSpaces} />;
+      case 'notif':    return <NotifScreen user={user} spaces={spaces} setSpaces={setSpaces} notifs={notifs} setNotifs={setNotifs} />;
+      case 'template': return <TemplateScreen user={user} onUpdate={updateUser} />;
+      case 'profile':  return <ProfileScreen user={user} onUpdate={updateUser} onLogout={logout} onDeleteAccount={deleteAccount} onShowPro={() => setShowPro(true)} isProUser={isProUser} />;
+      default:         return <HomeScreen user={user} todos={todos} events={events} setScreen={setScreen} />;
+    }
+  };
+
+  if (showPro) return <ProUpgradeScreen user={user} onUpgrade={() => { setIsProUser(true); updateUser({isPro:true}); setShowPro(false); }} onBack={() => setShowPro(false)} />;
+
+  return (
+    <div style={{ display:'flex',height:'100vh',background:'#F8FAFC' }}>
+      {/* ── 사이드바 ── */}
+      <div className="sr" style={{ width:sidebarOpen?220:64,flexShrink:0,background:themeObj.sidebarBg,borderRight:`1px solid ${themeObj.sidebarBorder}`,display:'flex',flexDirection:'column',transition:'width .25s',overflow:'hidden' }}>
+        {/* 로고 */}
+        <div style={{ padding:'18px 16px',display:'flex',alignItems:'center',gap:10,borderBottom:'1px solid #F9FAFB',flexShrink:0 }}>
+          <div style={{ width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${cfg.c},${cfg.d})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0 }}>🌿</div>
+          {sidebarOpen&&<div style={{ fontWeight:900,fontSize:17,color:'#111827',whiteSpace:'nowrap' }}>Workly</div>}
+        </div>
+        {/* 워크스페이스 유형 뱃지 */}
+        {sidebarOpen&&(
+          <div style={{ padding:'10px 14px',background:themeObj.navActiveBg||cfg.l,margin:'12px 10px',borderRadius:10,border:`1px solid ${themeObj.sidebarBorder}` }}>
+            <div style={{ fontSize:10,fontWeight:800,color:themeObj.navTextActive||cfg.d,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:2 }}>{cfg.icon} {cfg.label}용 워크스페이스</div>
+            <div style={{ fontSize:12,fontWeight:600,color:themeObj.navTextColor||cfg.c,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user.nickname||user.name}</div>
+          </div>
+        )}
+        {/* 네비게이션 */}
+        <nav style={{ flex:1,padding:'8px 8px',display:'flex',flexDirection:'column',gap:2,overflowY:'auto' }}>
+          {navItems.map(({ id, e, n }) => {
+            const active = screen === id;
+            const isLocked = id === 'workspace' && !isProUser;
+            return (
+              <button key={id} onClick={() => handleNavClick(id)} title={n} style={{
+                display:'flex',alignItems:'center',gap:10,padding:sidebarOpen?'10px 12px':'10px',borderRadius:10,border:'none',
+                background:active?(themeObj.navActiveBg||cfg.l):'transparent',
+                color:active?(themeObj.navTextActive||cfg.c):isLocked?(themeObj.navTextColor||'#9CA3AF'):(themeObj.navTextColor||'#6B7280'),
+                fontWeight:active?800:600,fontSize:14,cursor:'pointer',transition:'all .12s',whiteSpace:'nowrap',
+                justifyContent:sidebarOpen?'flex-start':'center',position:'relative',
+              }}>
+                <span style={{ fontSize:17,flexShrink:0 }}>{e}</span>
+                {sidebarOpen&&n}
+                {/* 자물쇠 아이콘 (협업 - 비Pro 유저) */}
+                {sidebarOpen&&isLocked&&<span style={{ marginLeft:'auto',fontSize:12 }}>🔒</span>}
+                {/* 알림 미읽음 뱃지 */}
+                {id==='notif'&&unreadCount>0&&(
+                  <span style={{
+                    position:'absolute',top:6,
+                    left:sidebarOpen?undefined:4,right:sidebarOpen?10:undefined,
+                    minWidth:18,height:18,borderRadius:99,background:'#EF4444',color:'white',
+                    fontSize:10,fontWeight:900,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'
+                  }}>{unreadCount}</span>
+                )}
+              </button>
+            );
+          })}
+          {!isProUser&&sidebarOpen&&(
+            <button onClick={() => setShowPro(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:'none',background:'#FFFBEB',color:'#D97706',fontWeight:700,fontSize:13,cursor:'pointer',marginTop:8 }}>
+              <span style={{ fontSize:17 }}>⚡️</span>Pro 업그레이드
+            </button>
+          )}
+        </nav>
+        {/* 사이드바 접기 */}
+        <button onClick={() => setSidebarOpen(s=>!s)} style={{ padding:'14px',border:'none',background:'none',color:'#9CA3AF',cursor:'pointer',fontSize:16,borderTop:'1px solid #F9FAFB',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'flex-end':'center',gap:8 }}>
+          {sidebarOpen?'←':'→'}
+        </button>
+      </div>
+
+      {/* ── 메인 콘텐츠 ── */}
+      <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:themeObj.pageBg }}>
+        {/* 탑바 */}
+        <div style={{ height:52,flexShrink:0,background:themeObj.cardBg||'white',borderBottom:`1px solid ${themeObj.sidebarBorder||'#F3F4F6'}`,display:'flex',alignItems:'center',padding:'0 20px',justifyContent:'space-between' }}>
+          <div style={{ fontSize:13,fontWeight:600,color:'#9CA3AF' }}>
+            {navItems.find(n=>n.id===screen)?.n||'홈'}
+          </div>
+          <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+            {isProUser&&<Badge color={cfg.d} bg={cfg.l}>✨ Pro</Badge>}
+            {/* 알림 벨 버튼 */}
+            <button onClick={() => handleNavClick('notif')} title="알림함" style={{ position:'relative',width:36,height:36,borderRadius:10,border:`1.5px solid ${screen==='notif'?cfg.c:'#F3F4F6'}`,background:screen==='notif'?cfg.l:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17 }}>
+              🔔
+              {unreadCount>0&&(
+                <span style={{ position:'absolute',top:-5,right:-5,minWidth:18,height:18,borderRadius:99,background:'#EF4444',color:'white',fontSize:10,fontWeight:900,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px',boxShadow:'0 2px 4px rgba(0,0,0,.2)' }}>{unreadCount}</span>
+              )}
+            </button>
+            {/* 프로필 버튼 */}
+            <button onClick={() => setScreen('profile')} style={{ display:'flex',alignItems:'center',gap:8,background:'#F9FAFB',border:'none',borderRadius:99,padding:'6px 12px',cursor:'pointer' }}>
+              <div style={{ width:22,height:22,borderRadius:'50%',background:`linear-gradient(135deg,${cfg.c},${cfg.d})`,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:900,overflow:'hidden',flexShrink:0 }}>
+                {user.avatar?<img src={user.avatar} style={{ width:'100%',height:'100%',objectFit:'cover' }} alt=""/>:(user.nickname||user.name||'?')[0]}
+              </div>
+              <span style={{ fontSize:13,fontWeight:700,color:'#374151' }}>{user.nickname||user.name}</span>
+            </button>
+          </div>
+        </div>
+        {/* 페이지 콘텐츠 */}
+        <div style={{ flex:1,overflow:'hidden' }}>
+          {renderScreen()}
+        </div>
+      </div>
+
+      {/* ── Pro 게이트 모달 (무료 유저가 협업 탭 클릭 시) ── */}
+      {showProGate&&(
+        <ProGateModal
+          onClose={() => setShowProGate(false)}
+          onUpgrade={() => { setShowProGate(false); setShowPro(true); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   APP ROOT
+══════════════════════════════════════════════════════════ */
+export default function App() {
+  const [accounts, setAccountsRaw] = useState(() => ld('wl_accounts', []));
+  const [user, setUserRaw] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('wl_user') || 'null');
+      if (!saved) return null;
+      const acct = ld('wl_accounts', []).find(a => a.id === saved.id);
+      return acct || null;
+    } catch { return null; }
+  });
+
+  const setAccounts = (v) => {
+    const val = typeof v === 'function' ? v(accounts) : v;
+    setAccountsRaw(val);
+    sv('wl_accounts', val);
+  };
+
+  const setUser = (v) => {
+    setUserRaw(v);
+    try { if (v) localStorage.setItem('wl_user', JSON.stringify({ id: v.id })); else localStorage.removeItem('wl_user'); } catch {}
+  };
+
+  const handleAuth = (acct) => {
+    setUser(acct);
+    setAccounts(prev => {
+      const exists = prev.find(a => a.id === acct.id);
+      if (exists) return prev.map(a => a.id === acct.id ? acct : a);
+      return [...prev, acct];
+    });
+  };
+
+  const handleRegister = (acct) => setAccounts(prev => [...prev, acct]);
+
+  const handleOnboardingDone = ({ nickname, wsType }) => {
+    const updated = { ...user, nickname, wsType };
+    setUser(updated);
+    setAccounts(prev => prev.map(a => a.id === user.id ? { ...a, nickname, wsType } : a));
+  };
+
+  // Needs onboarding?
+  const needsOnboarding = user && (!user.wsType || !user.nickname);
+
+  return (
+    <>
+      <Styles />
+      {!user && <AuthScreen accounts={accounts} onAuth={handleAuth} onRegister={handleRegister} />}
+      {user && needsOnboarding && <OnboardingScreen user={user} onDone={handleOnboardingDone} />}
+      {user && !needsOnboarding && <MainApp user={user} setUser={setUser} accounts={accounts} setAccounts={setAccounts} />}
+    </>
   );
 }
