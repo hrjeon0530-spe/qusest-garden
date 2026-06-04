@@ -170,7 +170,7 @@ const ICON_SETS = {
 const uid = () => Math.random().toString(36).slice(2, 9);
 const tod = () => new Date().toISOString().split('T')[0];
 const gc = () => Math.random().toString(36).slice(2, 8).toUpperCase();
-const ld = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? JSON.stringify(d)); } catch { return d; } };
+const ld = (k, d) => { try { const v = localStorage.getItem(k); return JSON.parse(v !== null ? v : JSON.stringify(d)); } catch { return d; } };
 const sv = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const moNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 const dayNames = ['일','월','화','수','목','금','토'];
@@ -832,7 +832,7 @@ function CalendarScreen({ events, setEvents, wsType }) {
           {selDay ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>{fmtFull(selDate!)}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>{fmtFull(selDate)}</div>
                 <Btn onClick={() => setShowModal(true)} bg={cfg.c} sm>+ 추가</Btn>
               </div>
               {selEvents.length === 0
@@ -1882,7 +1882,7 @@ function TemplateScreen({ user, onUpdate }) {
             <div style={{ height:12,borderRadius:6,background:'rgba(0,0,0,.08)',width:'40%' }}/>
             {[1,2,3].map(i=>(
               <div key={i} style={{ background:themeObj.cardBg,border:`1px solid ${themeObj.cardBorder}`,borderRadius:8,padding:'8px 10px',display:'flex',gap:8,alignItems:'center' }}>
-                <div style={{ width:8,height:8,borderRadius:'50%',background:themeObj.preview?.[2]||'#E5E7EB',flexShrink:0 }}/>
+                <div style={{ width:8,height:8,borderRadius:'50%',background:(themeObj.preview&&themeObj.preview[2])||'#E5E7EB',flexShrink:0 }}/>
                 <div style={{ height:8,borderRadius:4,background:'rgba(0,0,0,.08)',flex:1 }}/>
               </div>
             ))}
@@ -1897,7 +1897,7 @@ function TemplateScreen({ user, onUpdate }) {
           {Object.values(THEMES).map(t => {
             const active = selTheme === t.id;
             return (
-              <button key={t.id} onClick={() => setSelTheme(t.id)} style={{ padding:'14px 10px',borderRadius:16,border:`2.5px solid ${active?t.preview?.[2]||'#2563EB':'transparent'}`,background:t.sidebarBg,cursor:'pointer',textAlign:'center',boxShadow:active?'0 4px 16px rgba(0,0,0,.12)':'0 2px 6px rgba(0,0,0,.06)',transition:'all .2s',position:'relative' }}>
+              <button key={t.id} onClick={() => setSelTheme(t.id)} style={{ padding:'14px 10px',borderRadius:16,border:`2.5px solid ${active?((t.preview&&t.preview[2])||'#2563EB'):'transparent'}`,background:t.sidebarBg,cursor:'pointer',textAlign:'center',boxShadow:active?'0 4px 16px rgba(0,0,0,.12)':'0 2px 6px rgba(0,0,0,.06)',transition:'all .2s',position:'relative' }}>
                 {active&&<div style={{ position:'absolute',top:-6,right:-6,width:18,height:18,borderRadius:'50%',background:'#111827',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:9,fontWeight:900 }}>✓</div>}
                 {/* 색상 팔레트 미리보기 */}
                 <div style={{ display:'flex',gap:4,justifyContent:'center',marginBottom:8 }}>
