@@ -7,37 +7,40 @@ const WS = {
   school: {
     label: '학교', icon: '🎓', c: '#2563EB', l: '#EFF6FF', d: '#1D4ED8', m: '#DBEAFE',
     tagline: '과제, 노트, 일정을 한 곳에서',
-    perks: ['📚 과제 트래커', '📝 수업 노트', '📅 시험 캘린더', '✅ 할일 관리'],
+    perks: ['📚 과제 트래커', '📝 수업 노트', '📅 시험 캘린더', '🏆 성적 관리'],
     nav: [
       { id:'home',    e:'🏠', n:'홈' },
       { id:'todo',    e:'✅', n:'할일' },
       { id:'cal',     e:'📅', n:'캘린더' },
       { id:'assign',  e:'📚', n:'과제' },
-      { id:'notes',   e:'📝', n:'노트' },
+      { id:'grades',  e:'🏆', n:'성적' },
+      { id:'attend',  e:'📋', n:'출석' },
     ],
   },
   company: {
     label: '회사', icon: '💼', c: '#0F766E', l: '#F0FDFA', d: '#0D5C56', m: '#CCFBF1',
     tagline: '업무, 회의, 프로젝트를 효율적으로',
-    perks: ['✅ 업무 관리', '🎙️ 회의록', '📊 프로젝트 보드', '👥 팀 협업'],
+    perks: ['✅ 업무 관리', '🤖 AI 회의 요약', '⏱️ 타임트래커', '📊 주간 리포트'],
     nav: [
-      { id:'home',     e:'🏠', n:'홈' },
-      { id:'todo',     e:'✅', n:'업무' },
-      { id:'cal',      e:'📅', n:'일정' },
-      { id:'meetings', e:'🎙️', n:'회의' },
-      { id:'projects', e:'📊', n:'프로젝트' },
+      { id:'home',      e:'🏠', n:'홈' },
+      { id:'todo',      e:'✅', n:'업무' },
+      { id:'cal',       e:'📅', n:'일정' },
+      { id:'meetings',  e:'🤖', n:'AI 회의' },
+      { id:'timetrack', e:'⏱️', n:'타임트래커' },
+      { id:'projects',  e:'📊', n:'프로젝트' },
     ],
   },
   personal: {
     label: '개인', icon: '✨', c: '#7C3AED', l: '#F5F3FF', d: '#5B21B6', m: '#EDE9FE',
     tagline: '목표, 습관, 일상을 체계적으로',
-    perks: ['🎯 목표 트래커', '💪 습관 관리', '📖 개인 일기', '📅 일정 관리'],
+    perks: ['🔥 습관 스트릭', '🎯 목표 트래커', '📖 개인 일기', '📅 일정 관리'],
     nav: [
-      { id:'home',  e:'🏠', n:'홈' },
-      { id:'todo',  e:'✅', n:'할일' },
-      { id:'cal',   e:'📅', n:'캘린더' },
-      { id:'goals', e:'🎯', n:'목표' },
-      { id:'jour',  e:'📖', n:'일기' },
+      { id:'home',   e:'🏠', n:'홈' },
+      { id:'todo',   e:'✅', n:'할일' },
+      { id:'cal',    e:'📅', n:'캘린더' },
+      { id:'habits', e:'🔥', n:'습관' },
+      { id:'goals',  e:'🎯', n:'목표' },
+      { id:'jour',   e:'📖', n:'일기' },
     ],
   },
 };
@@ -191,12 +194,12 @@ const timeAgo = (iso) => {
 /* ══════════════════════════════════════════════════════════
    STYLES
 ══════════════════════════════════════════════════════════ */
-function Styles() {
+function Styles({ isDark }) {
   useEffect(() => {
     const el = document.createElement('style');
+    el.id = 'wl-base';
     el.textContent = `
       @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
-      @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
       *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
       html,body,#root{width:100%;height:100%;overflow:hidden;}
       body{font-family:'Nunito',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
@@ -218,6 +221,19 @@ function Styles() {
     document.head.appendChild(el);
     return () => el.remove();
   }, []);
+
+  useEffect(() => {
+    let dark = document.getElementById('wl-dark');
+    if (!dark) { dark = document.createElement('style'); dark.id = 'wl-dark'; document.head.appendChild(dark); }
+    dark.textContent = isDark ? `
+      [data-wl-dark] input, [data-wl-dark] textarea, [data-wl-dark] select {
+        background: #1E293B !important; color: #E2E8F0 !important; border-color: #334155 !important;
+      }
+      [data-wl-dark] input::placeholder, [data-wl-dark] textarea::placeholder { color: #64748B !important; }
+      [data-wl-dark] ::-webkit-scrollbar-thumb { background: #475569; }
+    ` : '';
+  }, [isDark]);
+
   return null;
 }
 
@@ -1041,86 +1057,278 @@ function NotesScreen({ notes, setNotes }) {
 /* ══════════════════════════════════════════════════════════
    MEETINGS SCREEN (Company)
 ══════════════════════════════════════════════════════════ */
-function MeetingsScreen({ meetings, setMeetings }) {
+/* ══════════════════════════════════════════════════════════
+   MEETINGS SCREEN (Company) — AI 회의 요약 + 할일 추출
+══════════════════════════════════════════════════════════ */
+function MeetingsScreen({ meetings, setMeetings, todos, setTodos }) {
   const cfg = WS.company;
-  const [showModal, setShowModal] = useState(false);
+  const [mode, setMode] = useState('list'); // 'list' | 'ai' | 'manual'
   const [sel, setSel] = useState(null);
-  const [form, setForm] = useState({ title: '', date: tod(), time: '', attendees: '', agenda: '', actionItems: '' });
 
-  const add = () => {
-    if (!form.title.trim()) return;
-    setMeetings(p => [...p, { id: uid(), ...form, title: form.title.trim(), attendees: form.attendees.split(',').map(s => s.trim()).filter(Boolean) }]);
-    setForm({ title: '', date: tod(), time: '', attendees: '', agenda: '', actionItems: '' });
-    setShowModal(false);
+  // AI 분석 상태
+  const [aiText, setAiText] = useState('');
+  const [aiTitle, setAiTitle] = useState('');
+  const [audioFile, setAudioFile] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
+  const fileRef = useRef(null);
+
+  // 수동 회의록 상태
+  const [form, setForm] = useState({ title:'',date:tod(),time:'',attendees:'',agenda:'',actionItems:'' });
+
+  const handleAudioUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setAudioFile(file);
+    setAiTitle(file.name.replace(/\.[^.]+$/, ''));
   };
 
-  const del = (id) => { setMeetings(p => p.filter(m => m.id !== id)); if (sel?.id === id) setSel(null); };
+  const analyzeWithAI = async () => {
+    const inputText = aiText.trim();
+    if (!inputText && !audioFile) return;
+    setAiLoading(true);
+    setAiResult(null);
+    try {
+      const prompt = inputText
+        ? `다음 회의 내용을 분석해서 아래 형식의 JSON으로만 응답해주세요 (한국어로):
+
+회의 내용:
+${inputText}
+
+응답 형식 (JSON만, 마크다운 없이):
+{"summary":"3-4문장 요약","decisions":["주요 결정사항1","결정사항2"],"todos":["할일1","할일2","할일3"],"keywords":["키워드1","키워드2","키워드3"],"duration":"예상 회의시간 (예: 약 30분)"}`
+        : `회의 파일명: ${audioFile.name}
+이 회의 파일을 분석한 샘플 요약을 JSON으로 생성해주세요 (실제 음성 파일은 텍스트로 변환 후 분석이 필요합니다):
+{"summary":"음성 파일이 업로드되었습니다. 회의 내용을 텍스트로 입력하시면 AI가 자동으로 분석합니다.","decisions":["텍스트 입력창에 회의 내용을 붙여넣어 주세요"],"todos":["회의 내용 텍스트 변환 후 재분석"],"keywords":["회의","분석","할일"],"duration":"분석 대기 중"}`;
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:1000,
+          messages:[{ role:'user', content:prompt }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content[0].text;
+      const cleaned = raw.replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(cleaned);
+      setAiResult(parsed);
+    } catch(e) {
+      setAiResult({ summary:'분석 중 오류가 발생했어요. 회의 내용을 텍스트로 입력해보세요.', decisions:[], todos:[], keywords:[], duration:'알 수 없음' });
+    }
+    setAiLoading(false);
+  };
+
+  const saveMeetingFromAI = () => {
+    if (!aiResult) return;
+    const m = {
+      id:uid(), title:aiTitle||'AI 회의 요약 '+new Date().toLocaleDateString('ko-KR'),
+      date:tod(), time:'', attendees:[],
+      agenda:aiText, actionItems:aiResult.todos.join('\n'),
+      aiSummary:aiResult.summary, aiDecisions:aiResult.decisions, aiKeywords:aiResult.keywords,
+      isAI:true
+    };
+    setMeetings(p=>[m,...p]);
+    // 할일도 자동 추가
+    if (setTodos && aiResult.todos.length > 0) {
+      const newTodos = aiResult.todos.map(t=>({ id:uid(), title:t, status:'todo', priority:'medium', dueDate:'', category:'회의', notes:'AI 회의 요약에서 추출', createdAt:new Date().toISOString() }));
+      setTodos(p=>[...p, ...newTodos]);
+    }
+    setAiResult(null); setAiText(''); setAiTitle(''); setAudioFile(null); setMode('list');
+  };
+
+  const addManual = () => {
+    if (!form.title.trim()) return;
+    setMeetings(p=>[...p, { id:uid(), ...form, title:form.title.trim(), attendees:form.attendees.split(',').map(s=>s.trim()).filter(Boolean), isAI:false }]);
+    setForm({ title:'',date:tod(),time:'',attendees:'',agenda:'',actionItems:'' });
+    setMode('list');
+  };
+
+  const del = (id) => { setMeetings(p=>p.filter(m=>m.id!==id)); if(sel?.id===id) setSel(null); };
+
+  if (mode==='ai') return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ display:'flex',alignItems:'center',gap:12,marginBottom:24 }}>
+        <button onClick={()=>{setMode('list');setAiResult(null);setAiText('');setAudioFile(null);}} style={{ width:34,height:34,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>←</button>
+        <div>
+          <div style={{ fontSize:18,fontWeight:900,color:'#111827' }}>🤖 AI 회의 분석</div>
+          <div style={{ fontSize:12,color:'#9CA3AF' }}>음성 업로드 또는 텍스트 입력 → 자동 요약 + 할일 추출</div>
+        </div>
+      </div>
+
+      {/* 음성 파일 업로드 */}
+      <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
+        <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>📁 음성 파일 업로드</div>
+        <input ref={fileRef} type="file" accept="audio/*,video/*" onChange={handleAudioUpload} style={{ display:'none' }}/>
+        {audioFile ? (
+          <div style={{ display:'flex',alignItems:'center',gap:12,background:'#F0FDFA',borderRadius:12,padding:'12px 16px',border:'1.5px solid '+cfg.m }}>
+            <span style={{ fontSize:24 }}>🎙️</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13,fontWeight:700,color:'#111827' }}>{audioFile.name}</div>
+              <div style={{ fontSize:12,color:'#6B7280' }}>{(audioFile.size/1024/1024).toFixed(1)} MB</div>
+              <audio src={URL.createObjectURL(audioFile)} controls style={{ width:'100%',marginTop:8,height:32 }}/>
+            </div>
+            <button onClick={()=>{setAudioFile(null);setAiTitle('');}} style={{ background:'none',border:'none',color:'#9CA3AF',cursor:'pointer',fontSize:16 }}>✕</button>
+          </div>
+        ) : (
+          <button onClick={()=>fileRef.current?.click()} style={{ width:'100%',padding:'20px',borderRadius:12,border:'2px dashed #E5E7EB',background:'#FAFAFA',cursor:'pointer',textAlign:'center' }}>
+            <div style={{ fontSize:32,marginBottom:8 }}>🎙️</div>
+            <div style={{ fontSize:14,fontWeight:700,color:'#374151' }}>클릭해서 녹음 파일 선택</div>
+            <div style={{ fontSize:12,color:'#9CA3AF',marginTop:4 }}>MP3, M4A, WAV 등 지원 · 갤러리/파일에서 선택 가능</div>
+          </button>
+        )}
+        {audioFile&&(
+          <div style={{ marginTop:10,background:'#FFFBEB',borderRadius:9,padding:'10px 14px',fontSize:12,color:'#92400E',lineHeight:1.6 }}>
+            💡 <strong>음성→텍스트 자동변환</strong>은 AssemblyAI API 연동이 필요해요.<br/>
+            아래 텍스트 입력창에 회의 내용을 직접 붙여넣으면 바로 AI 분석이 가능해요!
+          </div>
+        )}
+      </div>
+
+      {/* 회의 제목 */}
+      <Field value={aiTitle} onChange={setAiTitle} label="회의 제목" placeholder="예: 마케팅 전략 회의"/>
+
+      {/* 텍스트 입력 */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>회의 내용 텍스트 <span style={{ color:'#9CA3AF',fontWeight:500 }}>(음성 파일이 없으면 필수)</span></div>
+        <textarea value={aiText} onChange={e=>setAiText(e.target.value)} rows={8}
+          placeholder={'회의 내용을 여기에 입력하거나 붙여넣어 주세요.\n\n예시:\n- 음악회 준비 일정: 오후 2시~오후 6시\n- 담당자: 홍길동 (무대), 이수현 (음향)\n- 예산: 50만원 승인됨\n- 다음 회의: 다음주 월요일 10시'}
+          style={{ width:'100%',padding:'12px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:12,resize:'none',fontFamily:'inherit',lineHeight:1.65 }}/>
+      </div>
+
+      <button onClick={analyzeWithAI} disabled={aiLoading||(!aiText.trim()&&!audioFile)} style={{ width:'100%',padding:'13px',borderRadius:12,border:'none',background:aiLoading||(!aiText.trim()&&!audioFile)?'#E5E7EB':'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:15,fontWeight:800,cursor:aiLoading?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:20 }}>
+        {aiLoading?<><div style={{ width:16,height:16,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .7s linear infinite' }}/>분석 중...</>:'🤖 AI 분석 시작'}
+      </button>
+
+      {/* AI 결과 */}
+      {aiResult&&(
+        <div className="fu" style={{ background:'white',borderRadius:18,border:'1.5px solid '+cfg.m,overflow:'hidden' }}>
+          <div style={{ background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',padding:'16px 20px' }}>
+            <div style={{ fontSize:15,fontWeight:900,color:'white' }}>🤖 AI 분석 결과</div>
+            {aiResult.duration&&<div style={{ fontSize:12,color:'rgba(255,255,255,.8)',marginTop:2 }}>⏱️ {aiResult.duration}</div>}
+          </div>
+          <div style={{ padding:'20px' }}>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:12,fontWeight:800,color:cfg.c,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8 }}>📋 회의 요약</div>
+              <div style={{ fontSize:14,color:'#374151',lineHeight:1.75,background:'#F0FDFA',borderRadius:10,padding:'12px 14px' }}>{aiResult.summary}</div>
+            </div>
+            {aiResult.decisions&&aiResult.decisions.length>0&&(
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:12,fontWeight:800,color:'#7C3AED',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8 }}>✅ 주요 결정사항</div>
+                {aiResult.decisions.map((d,i)=>(
+                  <div key={i} style={{ display:'flex',gap:10,alignItems:'flex-start',marginBottom:6 }}>
+                    <div style={{ width:20,height:20,borderRadius:'50%',background:'#EDE9FE',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#7C3AED',flexShrink:0 }}>{i+1}</div>
+                    <div style={{ fontSize:13,color:'#374151',lineHeight:1.5 }}>{d}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {aiResult.todos&&aiResult.todos.length>0&&(
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:12,fontWeight:800,color:'#059669',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8 }}>📌 추출된 할일 ({aiResult.todos.length}개)</div>
+                {aiResult.todos.map((t,i)=>(
+                  <div key={i} style={{ display:'flex',gap:10,alignItems:'center',background:'#ECFDF5',borderRadius:9,padding:'9px 12px',marginBottom:6 }}>
+                    <span style={{ fontSize:14 }}>□</span>
+                    <span style={{ fontSize:13,fontWeight:600,color:'#065F46' }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {aiResult.keywords&&aiResult.keywords.length>0&&(
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',marginBottom:8 }}>🏷️ 키워드</div>
+                <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+                  {aiResult.keywords.map((k,i)=><span key={i} style={{ background:cfg.l,color:cfg.d,fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:99 }}>#{k}</span>)}
+                </div>
+              </div>
+            )}
+            <div style={{ display:'flex',gap:10 }}>
+              <button onClick={()=>setAiResult(null)} style={{ flex:1,padding:'11px',borderRadius:11,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer' }}>다시 분석</button>
+              <button onClick={saveMeetingFromAI} style={{ flex:2,padding:'11px',borderRadius:11,border:'none',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:13,fontWeight:800,cursor:'pointer' }}>💾 저장 + 할일 자동 추가</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (mode==='manual') return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ display:'flex',alignItems:'center',gap:12,marginBottom:20 }}>
+        <button onClick={()=>setMode('list')} style={{ width:34,height:34,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>←</button>
+        <div style={{ fontSize:17,fontWeight:900,color:'#111827' }}>📝 회의록 직접 작성</div>
+      </div>
+      <Field value={form.title} onChange={v=>setForm(p=>({...p,title:v}))} label="회의 제목" placeholder="회의 제목 입력" required/>
+      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12 }}>
+        <Field value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} label="날짜" type="date"/>
+        <Field value={form.time} onChange={v=>setForm(p=>({...p,time:v}))} label="시간" placeholder="14:00"/>
+      </div>
+      <Field value={form.attendees} onChange={v=>setForm(p=>({...p,attendees:v}))} label="참석자" placeholder="쉼표로 구분"/>
+      <Field value={form.agenda} onChange={v=>setForm(p=>({...p,agenda:v}))} label="안건" placeholder="회의 안건" rows={3}/>
+      <Field value={form.actionItems} onChange={v=>setForm(p=>({...p,actionItems:v}))} label="액션 아이템" placeholder="결정된 실행 항목" rows={3}/>
+      <div style={{ display:'flex',gap:10 }}>
+        <Btn onClick={()=>setMode('list')} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+        <Btn onClick={addManual} bg={cfg.c} style={{ flex:2 }}>저장하기</Btn>
+      </div>
+    </div>
+  );
 
   return (
-    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>🎙️ 회의록</div>
-        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 회의 추가</Btn>
+    <div style={{ padding:'24px',height:'100%',display:'flex',flexDirection:'column' }}>
+      <div className="fu" style={{ marginBottom:20 }}>
+        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>🤖 AI 회의 관리</div>
+        <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>음성이나 텍스트로 회의를 기록하면 AI가 요약해드려요</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, flex: 1, minHeight: 0 }}>
-        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {meetings.length === 0
-            ? <Empty icon="🎙️" title="회의록이 없어요" desc="회의를 추가해보세요" />
-            : meetings.map(m => (
-              <div key={m.id} onClick={() => setSel(m)} style={{ background: sel?.id === m.id ? cfg.l : 'white', border: `1.5px solid ${sel?.id === m.id ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 4 }}>{m.title}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>📅 {fmtD(m.date)} {m.time && `· ${m.time}`}</div>
-                {m.attendees?.length > 0 && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }}>👥 {m.attendees.join(', ')}</div>}
-              </div>
-            ))
-          }
+      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20 }}>
+        <button onClick={()=>setMode('ai')} style={{ padding:'20px',borderRadius:16,border:'2px solid '+cfg.c,background:cfg.l,cursor:'pointer',textAlign:'left' }}>
+          <div style={{ fontSize:28,marginBottom:8 }}>🤖</div>
+          <div style={{ fontSize:14,fontWeight:800,color:cfg.c }}>AI 자동 분석</div>
+          <div style={{ fontSize:12,color:cfg.d,marginTop:4 }}>음성/텍스트 → 요약 + 할일 자동 추출</div>
+        </button>
+        <button onClick={()=>setMode('manual')} style={{ padding:'20px',borderRadius:16,border:'2px solid #E5E7EB',background:'white',cursor:'pointer',textAlign:'left' }}>
+          <div style={{ fontSize:28,marginBottom:8 }}>📝</div>
+          <div style={{ fontSize:14,fontWeight:800,color:'#374151' }}>직접 작성</div>
+          <div style={{ fontSize:12,color:'#6B7280',marginTop:4 }}>회의록을 직접 입력해요</div>
+        </button>
+      </div>
+
+      <div style={{ display:'grid',gridTemplateColumns:'260px 1fr',gap:16,flex:1,minHeight:0 }}>
+        <div style={{ overflowY:'auto',display:'flex',flexDirection:'column',gap:8 }}>
+          {meetings.length===0&&<Empty icon="🎙️" title="회의록이 없어요" desc="위에서 회의를 분석하거나 직접 작성해보세요"/>}
+          {meetings.map(m=>(
+            <div key={m.id} onClick={()=>setSel(m)} style={{ background:sel?.id===m.id?cfg.l:'white',border:'1.5px solid '+(sel?.id===m.id?cfg.c:'#F3F4F6'),borderRadius:12,padding:'12px 14px',cursor:'pointer',transition:'all .12s' }}>
+              {m.isAI&&<div style={{ fontSize:10,fontWeight:800,color:cfg.c,marginBottom:3 }}>🤖 AI 분석</div>}
+              <div style={{ fontSize:13,fontWeight:700,color:'#111827',marginBottom:3 }}>{m.title}</div>
+              <div style={{ fontSize:11,color:'#9CA3AF' }}>📅 {fmtD(m.date)}{m.time&&' · '+m.time}</div>
+            </div>
+          ))}
         </div>
-        <div style={{ background: 'white', borderRadius: 16, padding: '20px', border: '1px solid #F3F4F6', overflowY: 'auto' }}>
+        <div style={{ background:'white',borderRadius:16,padding:'20px',border:'1px solid #F3F4F6',overflowY:'auto' }}>
           {sel ? (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ display:'flex',justifyContent:'space-between',marginBottom:16 }}>
                 <div>
-                  <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 6 }}>{sel.title}</div>
-                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>📅 {fmtFull(sel.date)} {sel.time && `· ${sel.time}`}</div>
-                  {sel.attendees?.length > 0 && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>👥 {sel.attendees.join(' · ')}</div>}
+                  {sel.isAI&&<div style={{ fontSize:11,fontWeight:800,color:cfg.c,marginBottom:4 }}>🤖 AI 분석 결과</div>}
+                  <div style={{ fontSize:18,fontWeight:900,color:'#111827' }}>{sel.title}</div>
+                  <div style={{ fontSize:12,color:'#9CA3AF',marginTop:3 }}>📅 {fmtFull(sel.date)}{sel.time&&' · '+sel.time}</div>
                 </div>
-                <button onClick={() => del(sel.id)} style={{ background: '#FEF2F2', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: '#EF4444', fontWeight: 700, cursor: 'pointer' }}>삭제</button>
+                <button onClick={()=>del(sel.id)} style={{ background:'#FEF2F2',border:'none',borderRadius:8,padding:'6px 12px',fontSize:12,color:'#EF4444',fontWeight:700,cursor:'pointer' }}>삭제</button>
               </div>
-              {sel.agenda && <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: cfg.c, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>안건</div>
-                <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-wrap', background: '#F9FAFB', borderRadius: 10, padding: '12px' }}>{sel.agenda}</div>
-              </div>}
-              {sel.actionItems && <div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>액션 아이템</div>
-                <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-wrap', background: '#ECFDF5', borderRadius: 10, padding: '12px' }}>{sel.actionItems}</div>
-              </div>}
+              {sel.aiSummary&&<div style={{ background:'#F0FDFA',borderRadius:10,padding:'12px',marginBottom:14 }}><div style={{ fontSize:11,fontWeight:800,color:cfg.c,marginBottom:6 }}>📋 AI 요약</div><div style={{ fontSize:13,color:'#374151',lineHeight:1.7 }}>{sel.aiSummary}</div></div>}
+              {sel.aiDecisions&&sel.aiDecisions.length>0&&<div style={{ marginBottom:14 }}><div style={{ fontSize:11,fontWeight:800,color:'#7C3AED',marginBottom:6 }}>✅ 결정사항</div>{sel.aiDecisions.map((d,i)=><div key={i} style={{ fontSize:13,color:'#374151',marginBottom:4 }}>• {d}</div>)}</div>}
+              {sel.actionItems&&<div style={{ marginBottom:14 }}><div style={{ fontSize:11,fontWeight:800,color:'#059669',marginBottom:6 }}>📌 액션 아이템</div><div style={{ fontSize:13,color:'#374151',whiteSpace:'pre-wrap',lineHeight:1.7 }}>{sel.actionItems}</div></div>}
+              {sel.agenda&&!sel.aiSummary&&<div><div style={{ fontSize:11,fontWeight:800,color:cfg.c,marginBottom:6 }}>안건</div><div style={{ fontSize:13,color:'#374151',whiteSpace:'pre-wrap',lineHeight:1.7 }}>{sel.agenda}</div></div>}
             </>
-          ) : <Empty icon="📋" title="회의를 선택하세요" desc="왼쪽에서 회의를 선택하세요" />}
+          ) : <Empty icon="📋" title="회의를 선택하세요" desc="왼쪽 목록에서 회의를 선택하면 내용이 표시됩니다"/>}
         </div>
       </div>
-      {showModal && (
-        <Modal title="회의 추가" onClose={() => setShowModal(false)}>
-          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="회의 제목" placeholder="회의 제목 입력" required />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))} label="날짜" type="date" />
-            <Field value={form.time} onChange={v => setForm(p => ({ ...p, time: v }))} label="시간" placeholder="14:00" />
-          </div>
-          <Field value={form.attendees} onChange={v => setForm(p => ({ ...p, attendees: v }))} label="참석자" placeholder="쉼표로 구분 (예: 김철수, 이영희)" />
-          <Field value={form.agenda} onChange={v => setForm(p => ({ ...p, agenda: v }))} label="안건" placeholder="회의 안건을 입력하세요" rows={3} />
-          <Field value={form.actionItems} onChange={v => setForm(p => ({ ...p, actionItems: v }))} label="액션 아이템" placeholder="결정된 실행 항목" rows={3} />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
-            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>저장하기</Btn>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   PROJECTS SCREEN (Company)
-══════════════════════════════════════════════════════════ */
+
 function ProjectsScreen({ projects, setProjects }) {
   const cfg = WS.company;
   const [showModal, setShowModal] = useState(false);
@@ -1334,6 +1542,519 @@ function JournalScreen({ journals, setJournals }) {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   HABITS SCREEN (Personal) — 습관 트래커 + 스트릭
+══════════════════════════════════════════════════════════ */
+function HabitsScreen({ habits, setHabits }) {
+  const cfg = WS.personal;
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name:'', icon:'🔥', frequency:'daily', target:1 });
+  const todayKey = tod();
+  const ICONS = ['🔥','💪','📚','🏃','🧘','💧','🥗','😴','🎸','✍️','🌿','☀️'];
+
+  const addHabit = () => {
+    if (!form.name.trim()) return;
+    setHabits(p => [...p, { id:uid(), name:form.name.trim(), icon:form.icon, frequency:form.frequency, target:form.target, log:{}, createdAt:new Date().toISOString() }]);
+    setForm({ name:'', icon:'🔥', frequency:'daily', target:1 });
+    setShowForm(false);
+  };
+
+  const toggleDay = (id, key) => {
+    setHabits(p => p.map(h => {
+      if (h.id !== id) return h;
+      const log = { ...h.log };
+      log[key] = !log[key];
+      return { ...h, log };
+    }));
+  };
+
+  const getStreak = (habit) => {
+    let streak = 0;
+    let d = new Date();
+    while (true) {
+      const key = d.toISOString().split('T')[0];
+      if (!habit.log[key]) break;
+      streak++;
+      d.setDate(d.getDate() - 1);
+    }
+    return streak;
+  };
+
+  const getLast7 = () => {
+    const days = [];
+    for (let i=6; i>=0; i--) {
+      const d = new Date(); d.setDate(d.getDate()-i);
+      days.push(d.toISOString().split('T')[0]);
+    }
+    return days;
+  };
+
+  const last7 = getLast7();
+  const dayLabels = ['일','월','화','수','목','금','토'];
+
+  return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>🔥 습관 트래커</div>
+          <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>매일 쌓아가는 나만의 루틴</div>
+        </div>
+        <button onClick={()=>setShowForm(p=>!p)} style={{ padding:'9px 16px',borderRadius:10,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 습관 추가</button>
+      </div>
+
+      {showForm&&(
+        <div className="fu" style={{ background:'white',borderRadius:16,padding:'18px',border:'1.5px solid '+cfg.m,marginBottom:20 }}>
+          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>새 습관 만들기</div>
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>아이콘</div>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
+              {ICONS.map(ic=><button key={ic} onClick={()=>setForm(p=>({...p,icon:ic}))} style={{ width:38,height:38,borderRadius:10,border:'2px solid '+(form.icon===ic?cfg.c:'#E5E7EB'),background:form.icon===ic?cfg.l:'white',fontSize:20,cursor:'pointer' }}>{ic}</button>)}
+            </div>
+          </div>
+          <Field value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} label="습관 이름" placeholder="예: 매일 운동하기, 물 2L 마시기" required/>
+          <div style={{ display:'flex',gap:8 }}>
+            <Btn onClick={()=>setShowForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={addHabit} bg={cfg.c} disabled={!form.name.trim()} style={{ flex:2 }}>추가하기</Btn>
+          </div>
+        </div>
+      )}
+
+      {habits.length===0&&<Empty icon="🔥" title="습관이 없어요" desc="작은 습관이 큰 변화를 만들어요. 첫 번째 습관을 추가해보세요!"/>}
+
+      {habits.map(h=>{
+        const streak = getStreak(h);
+        const todayDone = !!h.log[todayKey];
+        return (
+          <div key={h.id} className="fu" style={{ background:'white',borderRadius:18,padding:'18px 20px',border:'1px solid #F3F4F6',marginBottom:14,boxShadow:'0 2px 8px rgba(0,0,0,.04)' }}>
+            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
+              <div style={{ display:'flex',alignItems:'center',gap:12 }}>
+                <div style={{ width:48,height:48,borderRadius:14,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24 }}>{h.icon}</div>
+                <div>
+                  <div style={{ fontSize:16,fontWeight:800,color:'#111827' }}>{h.name}</div>
+                  {streak>0&&<div style={{ fontSize:12,fontWeight:700,color:'#D97706',marginTop:2 }}>🔥 {streak}일 연속 달성 중!</div>}
+                </div>
+              </div>
+              <div style={{ display:'flex',gap:8,alignItems:'center' }}>
+                <button onClick={()=>toggleDay(h.id, todayKey)} style={{ padding:'9px 18px',borderRadius:99,border:'none',background:todayDone?cfg.c:cfg.l,color:todayDone?'white':cfg.d,fontSize:13,fontWeight:800,cursor:'pointer',transition:'all .2s' }}>
+                  {todayDone?'✓ 완료':'오늘 체크'}
+                </button>
+                <button onClick={()=>setHabits(p=>p.filter(x=>x.id!==h.id))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:14 }}>✕</button>
+              </div>
+            </div>
+            {/* 최근 7일 그래프 */}
+            <div>
+              <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:8 }}>최근 7일</div>
+              <div style={{ display:'flex',gap:6 }}>
+                {last7.map((day,i)=>{
+                  const done = !!h.log[day];
+                  const isToday = day===todayKey;
+                  const dow = new Date(day+'T00:00:00').getDay();
+                  return (
+                    <div key={day} style={{ flex:1,textAlign:'center' }}>
+                      <div style={{ fontSize:10,fontWeight:600,color:isToday?cfg.c:'#9CA3AF',marginBottom:4 }}>{dayLabels[dow]}</div>
+                      <button onClick={()=>toggleDay(h.id,day)} style={{ width:'100%',aspectRatio:'1',borderRadius:8,border:'none',background:done?cfg.c:isToday?cfg.l:'#F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,transition:'all .15s' }}>
+                        {done&&<span style={{ color:'white',fontWeight:900 }}>✓</span>}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   GRADES SCREEN (School) — 성적 트래커
+══════════════════════════════════════════════════════════ */
+function GradesScreen({ grades, setGrades }) {
+  const cfg = WS.school;
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ subject:'', exam:'', score:'', maxScore:'100', date:tod() });
+  const [showExam, setShowExam] = useState(false);
+  const [examForm, setExamForm] = useState({ subject:'', name:'', date:'', type:'중간고사' });
+  const [exams, setExams] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wl_exams_user')||'[]'); } catch { return []; }
+  });
+
+  const saveExams = (v) => { setExams(v); try { localStorage.setItem('wl_exams_user', JSON.stringify(v)); } catch {} };
+
+  const addGrade = () => {
+    if (!form.subject.trim()||!form.score) return;
+    const pct = Math.round((Number(form.score)/Number(form.maxScore||100))*100);
+    setGrades(p=>[...p, { id:uid(), ...form, score:Number(form.score), maxScore:Number(form.maxScore||100), pct }]);
+    setForm({ subject:'', exam:'', score:'', maxScore:'100', date:tod() });
+    setShowForm(false);
+  };
+
+  const addExam = () => {
+    if (!examForm.subject.trim()||!examForm.date) return;
+    const diff = Math.ceil((new Date(examForm.date+' 00:00:00')-new Date())/(1000*60*60*24));
+    saveExams([...exams, { id:uid(), ...examForm, dday:diff }]);
+    setExamForm({ subject:'', name:'', date:'', type:'중간고사' });
+    setShowExam(false);
+  };
+
+  // 과목별 평균
+  const subjectMap = {};
+  grades.forEach(g => {
+    if (!subjectMap[g.subject]) subjectMap[g.subject] = [];
+    subjectMap[g.subject].push(g.pct);
+  });
+  const subjects = Object.entries(subjectMap).map(([s,pcts])=>({ subject:s, avg:Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length), count:pcts.length }));
+  const totalAvg = subjects.length ? Math.round(subjects.reduce((a,b)=>a+b.avg,0)/subjects.length) : null;
+
+  const getGrade = (pct) => pct>=90?{l:'A+',c:'#059669'}:pct>=80?{l:'B+',c:'#2563EB'}:pct>=70?{l:'C+',c:'#D97706'}:pct>=60?{l:'D',c:'#DC2626'}:{l:'F',c:'#6B7280'};
+  const ddayColor = (d) => d<=3?'#DC2626':d<=7?'#D97706':'#059669';
+
+  return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
+        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>🏆 성적 & 시험 관리</div>
+        <div style={{ display:'flex',gap:8 }}>
+          <button onClick={()=>setShowExam(p=>!p)} style={{ padding:'8px 12px',borderRadius:9,border:'1.5px solid '+cfg.c,background:'white',color:cfg.c,fontSize:12,fontWeight:700,cursor:'pointer' }}>📅 시험 등록</button>
+          <button onClick={()=>setShowForm(p=>!p)} style={{ padding:'8px 12px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:12,fontWeight:700,cursor:'pointer' }}>+ 성적 입력</button>
+        </div>
+      </div>
+
+      {/* 시험 D-day */}
+      {exams.length>0&&(
+        <div style={{ marginBottom:20 }}>
+          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10 }}>시험 D-day</div>
+          <div style={{ display:'flex',gap:10,overflowX:'auto',paddingBottom:4 }}>
+            {exams.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(e=>{
+              const diff = Math.ceil((new Date(e.date+' 00:00:00')-new Date())/(1000*60*60*24));
+              const past = diff < 0;
+              return (
+                <div key={e.id} style={{ background:'white',borderRadius:16,padding:'14px 16px',border:'1.5px solid '+(past?'#F3F4F6':'#E5E7EB'),flexShrink:0,minWidth:130,position:'relative' }}>
+                  <button onClick={()=>saveExams(exams.filter(x=>x.id!==e.id))} style={{ position:'absolute',top:6,right:8,background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:11 }}>✕</button>
+                  <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:4 }}>{e.type}</div>
+                  <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:6 }}>{e.subject}</div>
+                  <div style={{ fontSize:24,fontWeight:900,color:past?'#9CA3AF':ddayColor(diff) }}>
+                    {past?'종료':`D-${diff}`}
+                  </div>
+                  <div style={{ fontSize:11,color:'#9CA3AF',marginTop:4 }}>{e.date}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {showExam&&(
+        <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
+          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>시험 등록</div>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+            <Field value={examForm.subject} onChange={v=>setExamForm(p=>({...p,subject:v}))} label="과목" placeholder="예: 수학"/>
+            <Select label="유형" value={examForm.type} onChange={v=>setExamForm(p=>({...p,type:v}))} options={['중간고사','기말고사','쪽지시험','수행평가','모의고사'].map(v=>({value:v,label:v}))}/>
+          </div>
+          <Field value={examForm.date} onChange={v=>setExamForm(p=>({...p,date:v}))} label="시험 날짜" type="date" required/>
+          <div style={{ display:'flex',gap:8 }}>
+            <Btn onClick={()=>setShowExam(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={addExam} bg={cfg.c} disabled={!examForm.subject.trim()||!examForm.date} style={{ flex:2 }}>등록</Btn>
+          </div>
+        </div>
+      )}
+
+      {showForm&&(
+        <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
+          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>성적 입력</div>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+            <Field value={form.subject} onChange={v=>setForm(p=>({...p,subject:v}))} label="과목" placeholder="예: 수학"/>
+            <Field value={form.exam} onChange={v=>setForm(p=>({...p,exam:v}))} label="시험명" placeholder="예: 1차 중간고사"/>
+          </div>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10 }}>
+            <Field value={form.score} onChange={v=>setForm(p=>({...p,score:v}))} label="점수" placeholder="85" type="number"/>
+            <Field value={form.maxScore} onChange={v=>setForm(p=>({...p,maxScore:v}))} label="만점" placeholder="100" type="number"/>
+            <Field value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} label="날짜" type="date"/>
+          </div>
+          <div style={{ display:'flex',gap:8 }}>
+            <Btn onClick={()=>setShowForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={addGrade} bg={cfg.c} disabled={!form.subject.trim()||!form.score} style={{ flex:2 }}>입력</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* 과목 평균 요약 */}
+      {subjects.length>0&&(
+        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
+            <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>과목별 평균</div>
+            {totalAvg!==null&&<div style={{ fontSize:20,fontWeight:900,color:getGrade(totalAvg).c }}>전체 {totalAvg}점 ({getGrade(totalAvg).l})</div>}
+          </div>
+          {subjects.map(s=>{
+            const g = getGrade(s.avg);
+            return (
+              <div key={s.subject} style={{ marginBottom:12 }}>
+                <div style={{ display:'flex',justifyContent:'space-between',marginBottom:5 }}>
+                  <div style={{ fontSize:13,fontWeight:700,color:'#374151' }}>{s.subject}</div>
+                  <div style={{ fontSize:13,fontWeight:800,color:g.c }}>{s.avg}점 ({g.l})</div>
+                </div>
+                <div style={{ height:8,background:'#F3F4F6',borderRadius:99,overflow:'hidden' }}>
+                  <div style={{ height:'100%',width:s.avg+'%',background:'linear-gradient(90deg,'+cfg.c+','+cfg.d+')',borderRadius:99,transition:'width .5s' }}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 성적 기록 */}
+      {grades.length===0&&subjects.length===0&&<Empty icon="🏆" title="성적이 없어요" desc="성적을 입력하고 과목별 분석을 확인해보세요"/>}
+      {grades.length>0&&(
+        <div>
+          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10 }}>성적 기록</div>
+          {[...grades].reverse().map(g=>{
+            const gr = getGrade(g.pct);
+            return (
+              <div key={g.id} style={{ background:'white',borderRadius:12,padding:'13px 16px',border:'1px solid #F3F4F6',marginBottom:8,display:'flex',alignItems:'center',gap:12 }}>
+                <div style={{ width:44,height:44,borderRadius:12,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                  <span style={{ fontSize:18,fontWeight:900,color:gr.c }}>{gr.l}</span>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{g.subject} {g.exam&&'— '+g.exam}</div>
+                  <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>📅 {fmtFull(g.date)}</div>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontSize:20,fontWeight:900,color:gr.c }}>{g.score}</div>
+                  <div style={{ fontSize:11,color:'#9CA3AF' }}>/{g.maxScore} ({g.pct}%)</div>
+                </div>
+                <button onClick={()=>setGrades(p=>p.filter(x=>x.id!==g.id))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13 }}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   ATTENDANCE SCREEN (School) — 출석 체크
+══════════════════════════════════════════════════════════ */
+function AttendanceScreen({ attend, setAttend }) {
+  const cfg = WS.school;
+  const [subjects, setSubjects] = useState(() => { try { return JSON.parse(localStorage.getItem('wl_attend_subjects')||'[]'); } catch { return []; } });
+  const [showAdd, setShowAdd] = useState(false);
+  const [newSubject, setNewSubject] = useState('');
+  const todayKey = tod();
+  const dayNames2 = ['일','월','화','수','목','금','토'];
+
+  const saveSubjects = (v) => { setSubjects(v); try { localStorage.setItem('wl_attend_subjects', JSON.stringify(v)); } catch {} };
+
+  const getLast14 = () => {
+    const days = [];
+    for (let i=13; i>=0; i--) {
+      const d = new Date(); d.setDate(d.getDate()-i);
+      days.push(d.toISOString().split('T')[0]);
+    }
+    return days;
+  };
+
+  const toggleAttend = (subject, day, status) => {
+    const key = subject+'|'+day;
+    setAttend(p => {
+      const next = {...p};
+      if (next[key]===status) delete next[key];
+      else next[key] = status;
+      return next;
+    });
+  };
+
+  const getStats = (subject) => {
+    const days = getLast14();
+    let present=0, absent=0, late=0;
+    days.forEach(d => {
+      const v = attend[subject+'|'+d];
+      if (v==='O') present++;
+      else if (v==='X') absent++;
+      else if (v==='△') late++;
+    });
+    return { present, absent, late, total:days.length };
+  };
+
+  const last14 = getLast14();
+
+  return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>📋 출석 체크</div>
+          <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>O 출석 · X 결석 · △ 지각</div>
+        </div>
+        <button onClick={()=>setShowAdd(p=>!p)} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 과목 추가</button>
+      </div>
+
+      {showAdd&&(
+        <div className="fu" style={{ background:'white',borderRadius:12,padding:'14px',border:'1.5px solid '+cfg.m,marginBottom:16,display:'flex',gap:8 }}>
+          <input value={newSubject} onChange={e=>setNewSubject(e.target.value)} placeholder="과목명 입력 (예: 수학)" onKeyDown={e=>e.key==='Enter'&&newSubject.trim()&&(saveSubjects([...subjects,newSubject.trim()]),setNewSubject(''),setShowAdd(false))} style={{ flex:1,padding:'9px 12px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:9,fontFamily:'inherit' }}/>
+          <Btn onClick={()=>{if(newSubject.trim()){saveSubjects([...subjects,newSubject.trim()]);setNewSubject('');setShowAdd(false);}}} bg={cfg.c} sm>추가</Btn>
+        </div>
+      )}
+
+      {subjects.length===0&&<Empty icon="📋" title="과목이 없어요" desc="과목을 추가하고 출석을 체크해보세요"/>}
+
+      {subjects.map(subject=>{
+        const stats = getStats(subject);
+        const rate = Math.round((stats.present/(stats.present+stats.absent+stats.late||1))*100);
+        return (
+          <div key={subject} style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16,boxShadow:'0 2px 8px rgba(0,0,0,.04)' }}>
+            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
+              <div style={{ fontSize:15,fontWeight:800,color:'#111827' }}>{subject}</div>
+              <div style={{ display:'flex',gap:10,alignItems:'center' }}>
+                <span style={{ fontSize:12,fontWeight:700,color:'#059669' }}>출{stats.present}</span>
+                <span style={{ fontSize:12,fontWeight:700,color:'#DC2626' }}>결{stats.absent}</span>
+                <span style={{ fontSize:12,fontWeight:700,color:'#D97706' }}>지{stats.late}</span>
+                <span style={{ fontSize:13,fontWeight:800,color:rate>=90?'#059669':rate>=80?'#2563EB':'#DC2626' }}>{rate}%</span>
+                <button onClick={()=>saveSubjects(subjects.filter(s=>s!==subject))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13 }}>✕</button>
+              </div>
+            </div>
+            <div style={{ display:'flex',gap:4,overflowX:'auto' }}>
+              {last14.map(day=>{
+                const v = attend[subject+'|'+day];
+                const isToday = day===todayKey;
+                const dow = new Date(day+'T00:00:00').getDay();
+                return (
+                  <div key={day} style={{ flexShrink:0,textAlign:'center',minWidth:32 }}>
+                    <div style={{ fontSize:9,color:isToday?cfg.c:'#9CA3AF',marginBottom:3,fontWeight:600 }}>{dayNames2[dow]}</div>
+                    <div style={{ display:'flex',flexDirection:'column',gap:2 }}>
+                      {['O','△','X'].map(s=>(
+                        <button key={s} onClick={()=>toggleAttend(subject,day,s)} style={{ width:30,height:20,borderRadius:5,border:'none',background:v===s?(s==='O'?'#059669':s==='X'?'#DC2626':'#D97706'):(isToday?cfg.l:'#F3F4F6'),color:v===s?'white':(isToday?cfg.c:'#9CA3AF'),fontSize:10,fontWeight:700,cursor:'pointer' }}>{s}</button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   TIME TRACKER SCREEN (Company) — 업무 시간 기록
+══════════════════════════════════════════════════════════ */
+function TimeTrackerScreen({ timeLogs, setTimeLogs }) {
+  const cfg = WS.company;
+  const [running, setRunning] = useState(null); // { taskName, startTime }
+  const [elapsed, setElapsed] = useState(0);
+  const [taskName, setTaskName] = useState('');
+  const [showReport, setShowReport] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const iv = setInterval(() => setElapsed(Math.floor((Date.now()-running.startTime)/1000)), 1000);
+    return () => clearInterval(iv);
+  }, [running]);
+
+  const startTimer = () => {
+    if (!taskName.trim()) return;
+    setRunning({ taskName:taskName.trim(), startTime:Date.now() });
+    setElapsed(0);
+  };
+
+  const stopTimer = () => {
+    if (!running) return;
+    const duration = Math.floor((Date.now()-running.startTime)/1000);
+    if (duration > 5) {
+      setTimeLogs(p=>[...p, { id:uid(), task:running.taskName, duration, date:todayKey, startTime:new Date(running.startTime).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}), createdAt:new Date().toISOString() }]);
+    }
+    setRunning(null); setElapsed(0); setTaskName('');
+  };
+
+  const todayKey = tod();
+  const fmt = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0?`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${m}:${String(sec).padStart(2,'0')}`; };
+  const fmtH = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0?`${h}시간 ${m}분`:`${m}분`; };
+
+  const todayLogs = timeLogs.filter(l=>l.date===todayKey);
+  const todayTotal = todayLogs.reduce((a,b)=>a+b.duration,0);
+
+  // 주간 리포트
+  const weekDays = [];
+  for (let i=6;i>=0;i--) { const d=new Date();d.setDate(d.getDate()-i);weekDays.push(d.toISOString().split('T')[0]); }
+  const weekData = weekDays.map(d=>({ date:d, total:timeLogs.filter(l=>l.date===d).reduce((a,b)=>a+b.duration,0) }));
+  const maxWeek = Math.max(...weekData.map(d=>d.total), 1);
+  const dayLabels3 = ['일','월','화','수','목','금','토'];
+
+  return (
+    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
+      <div className="fu" style={{ marginBottom:20 }}>
+        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>⏱️ 타임트래커</div>
+        <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>업무 시간을 기록하고 분석해요</div>
+      </div>
+
+      {/* 타이머 */}
+      <div className="fu" style={{ background:'white',borderRadius:18,padding:'24px',border:'1px solid #F3F4F6',marginBottom:20,textAlign:'center',boxShadow:'0 4px 16px rgba(0,0,0,.06)' }}>
+        {running ? (
+          <>
+            <div style={{ fontSize:13,fontWeight:700,color:'#9CA3AF',marginBottom:6 }}>기록 중</div>
+            <div style={{ fontSize:14,fontWeight:800,color:cfg.c,marginBottom:12,background:cfg.l,padding:'6px 16px',borderRadius:99,display:'inline-block' }}>{running.taskName}</div>
+            <div style={{ fontSize:52,fontWeight:900,color:'#111827',fontVariantNumeric:'tabular-nums',letterSpacing:-2,marginBottom:20 }}>{fmt(elapsed)}</div>
+            <button onClick={stopTimer} style={{ padding:'12px 32px',borderRadius:12,border:'none',background:'#EF4444',color:'white',fontSize:15,fontWeight:800,cursor:'pointer' }}>■ 정지</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize:52,fontWeight:900,color:'#D1D5DB',marginBottom:16 }}>00:00</div>
+            <div style={{ display:'flex',gap:8,maxWidth:360,margin:'0 auto' }}>
+              <input value={taskName} onChange={e=>setTaskName(e.target.value)} placeholder="업무 이름 입력" onKeyDown={e=>e.key==='Enter'&&startTimer()} style={{ flex:1,padding:'11px 14px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:11,fontFamily:'inherit' }}/>
+              <button onClick={startTimer} disabled={!taskName.trim()} style={{ padding:'11px 24px',borderRadius:11,border:'none',background:taskName.trim()?cfg.c:'#E5E7EB',color:'white',fontSize:14,fontWeight:700,cursor:taskName.trim()?'pointer':'default' }}>▶ 시작</button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* 오늘 합계 + 주간 그래프 */}
+      <div style={{ display:'grid',gridTemplateColumns:'1fr 2fr',gap:16,marginBottom:20 }}>
+        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',textAlign:'center' }}>
+          <div style={{ fontSize:12,fontWeight:700,color:'#9CA3AF',marginBottom:6 }}>오늘 총 업무</div>
+          <div style={{ fontSize:28,fontWeight:900,color:cfg.c }}>{fmtH(todayTotal)}</div>
+          <div style={{ fontSize:12,color:'#9CA3AF',marginTop:4 }}>{todayLogs.length}개 업무</div>
+        </div>
+        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6' }}>
+          <div style={{ fontSize:12,fontWeight:700,color:'#9CA3AF',marginBottom:10 }}>이번 주</div>
+          <div style={{ display:'flex',gap:4,alignItems:'flex-end',height:60 }}>
+            {weekData.map((d,i)=>{
+              const isToday = d.date===todayKey;
+              const h = d.total>0 ? Math.max(4, Math.round((d.total/maxWeek)*56)) : 2;
+              const dow = new Date(d.date+'T00:00:00').getDay();
+              return (
+                <div key={d.date} style={{ flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4 }}>
+                  <div title={fmtH(d.total)} style={{ width:'100%',height:h,borderRadius:4,background:isToday?cfg.c:d.total>0?cfg.m:'#F3F4F6',transition:'height .3s' }}/>
+                  <div style={{ fontSize:9,color:isToday?cfg.c:'#9CA3AF',fontWeight:isToday?800:500 }}>{dayLabels3[dow]}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 오늘 기록 */}
+      {todayLogs.length>0&&(
+        <div>
+          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10 }}>오늘 기록</div>
+          {[...todayLogs].reverse().map(l=>(
+            <div key={l.id} style={{ background:'white',borderRadius:12,padding:'13px 16px',border:'1px solid #F3F4F6',marginBottom:8,display:'flex',alignItems:'center',gap:12 }}>
+              <div style={{ width:40,height:40,borderRadius:11,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0 }}>⏱️</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{l.task}</div>
+                <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>시작: {l.startTime}</div>
+              </div>
+              <div style={{ fontSize:16,fontWeight:900,color:cfg.c }}>{fmtH(l.duration)}</div>
+              <button onClick={()=>setTimeLogs(p=>p.filter(x=>x.id!==l.id))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13 }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {timeLogs.length===0&&<Empty icon="⏱️" title="기록된 업무가 없어요" desc="업무 이름을 입력하고 타이머를 시작해보세요"/>}
     </div>
   );
 }
@@ -2207,6 +2928,10 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   const [goals, setGoalsRaw] = useState(() => ld(`wl_goals_${user.id}`, []));
   const [journals, setJournalsRaw] = useState(() => ld(`wl_journals_${user.id}`, []));
   const [spaces, setSpacesRaw] = useState(() => ld('wl_spaces', []));
+  const [habits, setHabitsRaw] = useState(() => ld(`wl_habits_${user.id}`, []));
+  const [grades, setGradesRaw] = useState(() => ld(`wl_grades_${user.id}`, []));
+  const [attend, setAttendRaw] = useState(() => ld(`wl_attend_${user.id}`, {}));
+  const [timeLogs, setTimeLogsRaw] = useState(() => ld(`wl_time_${user.id}`, []));
   // 이 유저에게 온 알림 (초대 등)
   const [notifs, setNotifsRaw] = useState(() => ld(`wl_notifs_${user.id}`, []));
 
@@ -2218,20 +2943,80 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   const setProjects = (v) => { setProjectsRaw(v); sv(`wl_projects_${user.id}`, typeof v==='function'?v(projects):v); };
   const setGoals = (v) => { setGoalsRaw(v); sv(`wl_goals_${user.id}`, typeof v==='function'?v(goals):v); };
   const setJournals = (v) => { setJournalsRaw(v); sv(`wl_journals_${user.id}`, typeof v==='function'?v(journals):v); };
-  const setSpaces = (v) => { setSpacesRaw(v); };
-  const setNotifs = (v) => { const val=typeof v==='function'?v(notifs):v; setNotifsRaw(val); sv(`wl_notifs_${user.id}`,val); };
+  const setHabits = (v) => { const val=typeof v==='function'?v(habits):v; setHabitsRaw(val); sv(`wl_habits_${user.id}`,val); };
+  const setGrades = (v) => { const val=typeof v==='function'?v(grades):v; setGradesRaw(val); sv(`wl_grades_${user.id}`,val); };
+  const setAttend = (v) => { const val=typeof v==='function'?v(attend):v; setAttendRaw(val); sv(`wl_attend_${user.id}`,val); };
+  const setTimeLogs = (v) => { const val=typeof v==='function'?v(timeLogs):v; setTimeLogsRaw(val); sv(`wl_time_${user.id}`,val); };
+  const setSpaces = (v) => {
+    const val = typeof v==='function'?v(spaces):v;
+    setSpacesRaw(val);
+    sv('wl_spaces', val);
+    if (window.__worklyBC) window.__worklyBC.postMessage('spaces');
+  };
+  const setNotifs = (v) => {
+    const val=typeof v==='function'?v(notifs):v;
+    setNotifsRaw(val);
+    sv('wl_notifs_'+user.id, val);
+    if (window.__worklyBC) window.__worklyBC.postMessage('notif_'+user.id);
+  };
 
-  // 알림 3초마다 새로고침 (같은 기기에서 다른 계정이 초대 보낸 경우 반영)
+  // ── 실시간 동기화 ──
+  // 1) storage 이벤트: 다른 탭에서 localStorage 변경 시 즉시 반영
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'wl_spaces') setSpacesRaw(ld('wl_spaces', []));
+      if (e.key === 'wl_notifs_' + user.id) setNotifsRaw(ld('wl_notifs_' + user.id, []));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [user.id]);
+
+  // 2) BroadcastChannel: 같은 브라우저 내 즉각 메시지 전달
+  useEffect(() => {
+    if (!('BroadcastChannel' in window)) return;
+    const bc = new BroadcastChannel('workly_sync');
+    window.__worklyBC = bc;
+    bc.onmessage = (e) => {
+      if (e.data === 'spaces') setSpacesRaw(ld('wl_spaces', []));
+      if (e.data === 'notif_' + user.id) setNotifsRaw(ld('wl_notifs_' + user.id, []));
+    };
+    return () => { bc.close(); delete window.__worklyBC; };
+  }, [user.id]);
+
+  // 3) 폴링 백업 (3초): BroadcastChannel 미지원 환경용
   useEffect(() => {
     const interval = setInterval(() => {
-      const fresh = ld(`wl_notifs_${user.id}`, []);
-      setNotifsRaw(fresh);
+      setNotifsRaw(ld('wl_notifs_' + user.id, []));
+      setSpacesRaw(ld('wl_spaces', []));
     }, 3000);
     return () => clearInterval(interval);
   }, [user.id]);
 
-  // 미읽은 알림 수 (pending 상태이고 아직 안 읽은 것)
+  // 미읽은 알림 수
   const unreadCount = notifs.filter(n => n.status === 'pending' && !n.read).length;
+
+  // 다크모드
+  const isDark = user.darkMode || false;
+
+  // 다크모드 색상 오버라이드
+  const DK = isDark ? {
+    pageBg:       '#0F172A',
+    sidebarBg:    '#1E293B',
+    sidebarBorder:'#334155',
+    navActiveBg:  '#334155',
+    navTextColor: '#94A3B8',
+    navTextActive:'#E2E8F0',
+    cardBg:       '#1E293B',
+    cardBorder:   '#334155',
+    headerBg:     '#1E293B',
+    headerBorder: '#334155',
+    textPrimary:  '#F1F5F9',
+    textSecondary:'#94A3B8',
+  } : {
+    pageBg: null, sidebarBg: null, sidebarBorder: null, navActiveBg: null,
+    navTextColor: null, navTextActive: null, cardBg: null, cardBorder: null,
+    headerBg: 'white', headerBorder: '#F3F4F6', textPrimary: '#111827', textSecondary: '#6B7280',
+  };
 
   const updateUser = (patch) => {
     const updated = { ...user, ...patch };
@@ -2281,10 +3066,14 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
       case 'cal':      return <CalendarScreen events={events} setEvents={setEvents} wsType={user.wsType} />;
       case 'assign':   return <AssignmentsScreen assigns={assigns} setAssigns={setAssigns} />;
       case 'notes':    return <NotesScreen notes={notes} setNotes={setNotes} />;
-      case 'meetings': return <MeetingsScreen meetings={meetings} setMeetings={setMeetings} />;
+      case 'meetings': return <MeetingsScreen meetings={meetings} setMeetings={setMeetings} todos={todos} setTodos={setTodos} />;
       case 'projects': return <ProjectsScreen projects={projects} setProjects={setProjects} />;
       case 'goals':    return <GoalsScreen goals={goals} setGoals={setGoals} />;
       case 'jour':     return <JournalScreen journals={journals} setJournals={setJournals} />;
+      case 'habits':   return <HabitsScreen habits={habits} setHabits={setHabits} />;
+      case 'grades':   return <GradesScreen grades={grades} setGrades={setGrades} />;
+      case 'attend':   return <AttendanceScreen attend={attend} setAttend={setAttend} />;
+      case 'timetrack':return <TimeTrackerScreen timeLogs={timeLogs} setTimeLogs={setTimeLogs} />;
       case 'workspace':return <WorkspaceScreen user={user} accounts={accounts} spaces={spaces} setSpaces={setSpaces} />;
       case 'notif':    return <NotifScreen user={user} spaces={spaces} setSpaces={setSpaces} notifs={notifs} setNotifs={setNotifs} />;
       case 'template': return <TemplateScreen user={user} onUpdate={updateUser} />;
@@ -2296,18 +3085,18 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   if (showPro) return <ProUpgradeScreen user={user} onUpgrade={() => { setIsProUser(true); updateUser({isPro:true}); setShowPro(false); }} onBack={() => setShowPro(false)} />;
 
   return (
-    <div style={{ display:'flex',height:'100vh',background:'#F8FAFC' }}>
+    <div data-wl-dark={isDark?'true':'false'} style={{ display:'flex',height:'100vh',background:DK.pageBg||'#F8FAFC',transition:'background .3s,color .3s' }}>
       {/* ── 사이드바 ── */}
-      <div className="sr" style={{ width:sidebarOpen?220:64,flexShrink:0,background:themeObj.sidebarBg,borderRight:`1px solid ${themeObj.sidebarBorder}`,display:'flex',flexDirection:'column',transition:'width .25s',overflow:'hidden' }}>
+      <div className="sr" style={{ width:sidebarOpen?220:64,flexShrink:0,background:DK.sidebarBg||themeObj.sidebarBg,borderRight:'1px solid '+(DK.sidebarBorder||themeObj.sidebarBorder),display:'flex',flexDirection:'column',transition:'width .25s',overflow:'hidden' }}>
         {/* 로고 */}
         <div style={{ padding:'18px 16px',display:'flex',alignItems:'center',gap:10,borderBottom:'1px solid #F9FAFB',flexShrink:0 }}>
           <div style={{ width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${cfg.c},${cfg.d})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0 }}>🌿</div>
-          {sidebarOpen&&<div style={{ fontWeight:900,fontSize:17,color:'#111827',whiteSpace:'nowrap' }}>Workly</div>}
+          {sidebarOpen&&<div style={{ fontWeight:900,fontSize:17,color:DK.textPrimary||'#111827',whiteSpace:'nowrap' }}>Workly</div>}
         </div>
         {/* 워크스페이스 유형 뱃지 */}
         {sidebarOpen&&(
-          <div style={{ padding:'10px 14px',background:themeObj.navActiveBg||cfg.l,margin:'12px 10px',borderRadius:10,border:`1px solid ${themeObj.sidebarBorder}` }}>
-            <div style={{ fontSize:10,fontWeight:800,color:themeObj.navTextActive||cfg.d,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:2 }}>{cfg.icon} {cfg.label}용 워크스페이스</div>
+          <div style={{ padding:'10px 14px',background:DK.navActiveBg||themeObj.navActiveBg||cfg.l,margin:'12px 10px',borderRadius:10,border:'1px solid '+(DK.sidebarBorder||themeObj.sidebarBorder) }}>
+            <div style={{ fontSize:10,fontWeight:800,color:DK.navTextActive||themeObj.navTextActive||cfg.d,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:2 }}>{cfg.icon} {cfg.label}용 워크스페이스</div>
             <div style={{ fontSize:12,fontWeight:600,color:themeObj.navTextColor||cfg.c,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{user.nickname||user.name}</div>
           </div>
         )}
@@ -2341,7 +3130,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
             );
           })}
           {!isProUser&&sidebarOpen&&(
-            <button onClick={() => setShowPro(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:'none',background:'#FFFBEB',color:'#D97706',fontWeight:700,fontSize:13,cursor:'pointer',marginTop:8 }}>
+            <button onClick={() => setShowPro(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:'none',background:isDark?'#2D2200':'#FFFBEB',color:'#D97706',fontWeight:700,fontSize:13,cursor:'pointer',marginTop:8 }}>
               <span style={{ fontSize:17 }}>⚡️</span>Pro 업그레이드
             </button>
           )}
@@ -2353,15 +3142,19 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
       </div>
 
       {/* ── 메인 콘텐츠 ── */}
-      <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:themeObj.pageBg }}>
+      <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:DK.pageBg||themeObj.pageBg }}>
         {/* 탑바 */}
-        <div style={{ height:52,flexShrink:0,background:themeObj.cardBg||'white',borderBottom:`1px solid ${themeObj.sidebarBorder||'#F3F4F6'}`,display:'flex',alignItems:'center',padding:'0 20px',justifyContent:'space-between' }}>
-          <div style={{ fontSize:13,fontWeight:600,color:'#9CA3AF' }}>
+        <div style={{ height:52,flexShrink:0,background:DK.headerBg||themeObj.cardBg||'white',borderBottom:'1px solid '+(DK.headerBorder||themeObj.sidebarBorder||'#F3F4F6'),display:'flex',alignItems:'center',padding:'0 20px',justifyContent:'space-between' }}>
+          <div style={{ fontSize:13,fontWeight:600,color:DK.textSecondary||'#9CA3AF' }}>
             {navItems.find(n=>n.id===screen)?.n||'홈'}
           </div>
           <div style={{ display:'flex',alignItems:'center',gap:10 }}>
             {isProUser&&<Badge color={cfg.d} bg={cfg.l}>✨ Pro</Badge>}
-            {/* 알림 벨 버튼 */}
+            {/* 다크모드 토글 */}
+            <button onClick={()=>updateUser({darkMode:!isDark})} title={isDark?'라이트 모드':'다크 모드'} style={{ width:36,height:36,borderRadius:10,border:'1.5px solid '+(DK.headerBorder||'#F3F4F6'),background:isDark?'#334155':'#F9FAFB',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:'all .2s' }}>
+              {isDark?'☀️':'🌙'}
+            </button>
+            {/* 알림 벨 버튼 */}}
             <button onClick={() => handleNavClick('notif')} title="알림함" style={{ position:'relative',width:36,height:36,borderRadius:10,border:`1.5px solid ${screen==='notif'?cfg.c:'#F3F4F6'}`,background:screen==='notif'?cfg.l:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17 }}>
               🔔
               {unreadCount>0&&(
@@ -2441,7 +3234,7 @@ export default function App() {
 
   return (
     <>
-      <Styles />
+      <Styles isDark={user?.darkMode || false} />
       {!user && <AuthScreen accounts={accounts} onAuth={handleAuth} onRegister={handleRegister} />}
       {user && needsOnboarding && <OnboardingScreen user={user} onDone={handleOnboardingDone} />}
       {user && !needsOnboarding && <MainApp user={user} setUser={setUser} accounts={accounts} setAccounts={setAccounts} />}
