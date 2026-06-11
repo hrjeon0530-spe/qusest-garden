@@ -1022,7 +1022,7 @@ function MeetingsScreen({ meetings, setMeetings, todos, setTodos }) {
     }
 
     // HTTPS 확인
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
       setRecError('녹음 기능은 HTTPS 환경에서만 작동해요. (배포된 주소에서 사용해주세요)');
       return;
     }
