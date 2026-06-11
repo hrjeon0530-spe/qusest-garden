@@ -212,6 +212,7 @@ function Styles({ isDark }) {
       @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
       @keyframes pop{0%{transform:scale(.8);opacity:0;}70%{transform:scale(1.05);}100%{transform:scale(1);opacity:1;}}
       @keyframes spin{to{transform:rotate(360deg);}}
+      @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.7;transform:scale(1.15);}}
       @keyframes slideRight{from{transform:translateX(-110%);}to{transform:translateX(0);}}
       .fu{animation:fadeUp .35s ease both;}
       .fi{animation:fadeIn .25s ease both;}
@@ -559,7 +560,7 @@ function OnboardingScreen({ user, onDone }) {
             <div style={{ display: 'flex', gap: 10 }}>
               <Btn onClick={() => setStep(0)} outline color="#6B7280" style={{ flex: 1, padding: '12px', borderRadius: 12 }}>← 이전</Btn>
               <button onClick={() => { if (wsType) onDone({ nickname: nick.trim(), wsType }); }} disabled={!wsType}
-                style={{ flex: 2, padding: '13px', borderRadius: 12, border: 'none', background: wsType ? WS[wsType]?.c : '#9CA3AF', color: 'white', fontSize: 15, fontWeight: 700, cursor: wsType ? 'pointer' : 'default', opacity: wsType ? 1 : 0.5 }}>
+                style={{ flex: 2, padding: '13px', borderRadius: 12, border: 'none', background: wsType ? (WS[wsType]&&WS[wsType].c) : '#9CA3AF', color: 'white', fontSize: 15, fontWeight: 700, cursor: wsType ? 'pointer' : 'default', opacity: wsType ? 1 : 0.5 }}>
                 시작하기 🚀
               </button>
             </div>
@@ -630,7 +631,7 @@ function HomeScreen({ user, todos, events, setScreen }) {
             ? <div style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '16px 0' }}>오늘 할일이 없어요 🎉</div>
             : todayTodos.slice(0, 4).map(t => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F9FAFB' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: PRIO[t.priority]?.c || '#6B7280', flexShrink: 0 }} />
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: PRIO[t.priority]&&PRIO[t.priority].c || '#6B7280', flexShrink: 0 }} />
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
               </div>
             ))
@@ -733,7 +734,7 @@ function TodoScreen({ todos, setTodos, wsType }) {
                         <button onClick={e => { e.stopPropagation(); del(t.id); }} style={{ background: 'none', border: 'none', color: '#D1D5DB', fontSize: 13, flexShrink: 0, cursor: 'pointer' }}>✕</button>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <Badge color={PRIO[t.priority]?.c} bg={PRIO[t.priority]?.bg}>{PRIO[t.priority]?.l}</Badge>
+                        <Badge color={PRIO[t.priority]&&PRIO[t.priority].c} bg={PRIO[t.priority]&&PRIO[t.priority].bg}>{PRIO[t.priority]&&PRIO[t.priority].l}</Badge>
                         {t.dueDate && <Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(t.dueDate)}</Badge>}
                         {t.category && <Badge color={cfg.d} bg={cfg.l}>{t.category}</Badge>}
                       </div>
@@ -943,9 +944,9 @@ function AssignmentsScreen({ assigns, setAssigns }) {
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {a.dueDate && <Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(a.dueDate)}</Badge>}
-              <Badge color={PRIO[a.priority]?.c} bg={PRIO[a.priority]?.bg}>{PRIO[a.priority]?.l}</Badge>
+              <Badge color={PRIO[a.priority]&&PRIO[a.priority].c} bg={PRIO[a.priority]&&PRIO[a.priority].bg}>{PRIO[a.priority]&&PRIO[a.priority].l}</Badge>
               <select value={a.status} onChange={e => upd(a.id, 'status', e.target.value)}
-                style={{ fontSize: 11, fontWeight: 700, color: ASTATS[a.status]?.c, background: ASTATS[a.status]?.bg, border: 'none', borderRadius: 99, padding: '2px 8px', cursor: 'pointer' }}>
+                style={{ fontSize: 11, fontWeight: 700, color: ASTATS[a.status]&&ASTATS[a.status].c, background: ASTATS[a.status]&&ASTATS[a.status].bg, border: 'none', borderRadius: 99, padding: '2px 8px', cursor: 'pointer' }}>
                 {Object.entries(ASTATS).map(([k, v]) => <option key={k} value={k}>{v.l}</option>)}
               </select>
             </div>
@@ -988,7 +989,7 @@ function NotesScreen({ notes, setNotes }) {
     setShowModal(false);
   };
 
-  const del = (id) => { setNotes(p => p.filter(n => n.id !== id)); if (selNote?.id === id) setSelNote(null); };
+  const del = (id) => { setNotes(p => p.filter(n => n.id !== id)); if (selNote&&selNote.id === id) setSelNote(null); };
 
   const subjects = ['전체', ...new Set(notes.map(n => n.subject).filter(Boolean))];
   const filtered = filter === '전체' ? notes : notes.filter(n => n.subject === filter);
@@ -1012,7 +1013,7 @@ function NotesScreen({ notes, setNotes }) {
             ? <Empty icon="📝" title="노트가 없어요" desc="노트를 추가해보세요" />
             : filtered.map(n => (
               <div key={n.id} onClick={() => setSelNote(n)} style={{
-                background: selNote?.id === n.id ? cfg.l : 'white', border: `1.5px solid ${selNote?.id === n.id ? cfg.c : '#F3F4F6'}`,
+                background: selNote&&selNote.id === n.id ? cfg.l : 'white', border: `1.5px solid ${selNote&&selNote.id === n.id ? cfg.c : '#F3F4F6'}`,
                 borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s',
               }}>
                 {n.subject && <div style={{ fontSize: 10, fontWeight: 800, color: cfg.c, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>{n.subject}</div>}
@@ -1072,6 +1073,124 @@ function MeetingsScreen({ meetings, setMeetings, todos, setTodos }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState(null);
   const fileRef = useRef(null);
+
+  // 🎙️ 실시간 녹음 상태
+  const [recording, setRecording] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
+  const [recTranscript, setRecTranscript] = useState('');
+  const [recInterim, setRecInterim] = useState('');
+  const [recError, setRecError] = useState('');
+  const mediaRecRef = useRef(null);
+  const speechRecRef = useRef(null);
+  const recTimerRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  const startRecording = async () => {
+    setRecError('');
+
+    // 브라우저 지원 확인
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setRecError('이 브라우저는 녹음을 지원하지 않아요. Chrome 또는 Edge를 사용해주세요.');
+      return;
+    }
+
+    // HTTPS 확인
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      setRecError('녹음 기능은 HTTPS 환경에서만 작동해요. (배포된 주소에서 사용해주세요)');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+      // MediaRecorder
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/ogg';
+      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
+        const dateStr = new Date().toLocaleDateString('ko-KR', {month:'2-digit',day:'2-digit'}).replace(/\./g,'').replace(' ','');
+        const file = new File([blob], '회의녹음_' + dateStr + '.' + (mimeType.includes('ogg')?'ogg':'webm'), { type: mimeType || 'audio/webm' });
+        setAudioFile(file);
+        if (!aiTitle) setAiTitle('회의 녹음 ' + new Date().toLocaleDateString('ko-KR'));
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start(1000);
+      mediaRecRef.current = mr;
+
+      // Web Speech API
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        const sr = new SR();
+        sr.lang = 'ko-KR';
+        sr.continuous = true;
+        sr.interimResults = true;
+        let finalText = '';
+        sr.onresult = (e) => {
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) finalText += e.results[i][0].transcript + ' ';
+            else interim += e.results[i][0].transcript;
+          }
+          setRecTranscript(finalText);
+          setRecInterim(interim);
+          setAiText(finalText);
+        };
+        sr.onerror = (e) => {
+          if (e.error === 'no-speech') return;
+          if (e.error === 'not-allowed') setRecError('마이크 권한이 거부됐어요. 브라우저 설정에서 허용해주세요.');
+        };
+        sr.onend = () => { if (recording) { try { sr.start(); } catch(e) {} } };
+        sr.start();
+        speechRecRef.current = sr;
+      } else {
+        setRecError('이 브라우저는 실시간 자막을 지원하지 않아요. 녹음은 계속 진행돼요. (Chrome 권장)');
+      }
+
+      setRecSeconds(0);
+      setRecTranscript('');
+      setRecInterim('');
+      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+      setRecording(true);
+
+    } catch(e) {
+      console.error('녹음 오류:', e);
+      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+        setRecError('마이크 권한이 거부됐어요. 주소창 왼쪽 🔒 아이콘을 클릭해서 마이크를 허용해주세요.');
+      } else if (e.name === 'NotFoundError') {
+        setRecError('마이크를 찾을 수 없어요. 마이크가 연결되어 있는지 확인해주세요.');
+      } else {
+        setRecError('녹음을 시작할 수 없어요: ' + e.message);
+      }
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecRef.current) {
+      try { mediaRecRef.current.stop(); } catch(e) {}
+      mediaRecRef.current = null;
+    }
+    if (speechRecRef.current) {
+      try { speechRecRef.current.abort(); } catch(e) {}
+      speechRecRef.current = null;
+    }
+    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
+    setRecording(false);
+    setRecInterim('');
+  };
+
+  // 컴포넌트 언마운트 시 정리
+  useEffect(() => () => {
+    if (mediaRecRef.current) mediaRecRef.current.stop();
+    if (speechRecRef.current) speechRecRef.current.stop();
+    if (recTimerRef.current) clearInterval(recTimerRef.current);
+  }, []);
+
+  const fmtRecTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
   // 수동 회의록 상태
   const [form, setForm] = useState({ title:'',date:tod(),time:'',attendees:'',agenda:'',actionItems:'' });
@@ -1146,7 +1265,7 @@ ${inputText}
     setMode('list');
   };
 
-  const del = (id) => { setMeetings(p=>p.filter(m=>m.id!==id)); if(sel?.id===id) setSel(null); };
+  const del = (id) => { setMeetings(p=>p.filter(m=>m.id!==id)); if(sel && sel.id===id) setSel(null); };
 
   if (mode==='ai') return (
     <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
@@ -1158,9 +1277,59 @@ ${inputText}
         </div>
       </div>
 
+      {/* 🎙️ 실시간 녹음 섹션 */}
+      <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1.5px solid '+(recording?cfg.c:'#F3F4F6'),marginBottom:16,transition:'border-color .3s' }}>
+        <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>🎙️ 실시간 녹음</div>
+
+        {!recording ? (
+          <>
+            {recError && (
+              <div className="fu" style={{ background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:12,padding:'12px 16px',marginBottom:12,fontSize:13,fontWeight:600,color:'#DC2626',lineHeight:1.6 }}>
+                ⚠️ {recError}
+              </div>
+            )}
+            <button onClick={startRecording} style={{ width:'100%',padding:'20px',borderRadius:14,border:'2px dashed '+cfg.c,background:cfg.l,cursor:'pointer',textAlign:'center' }}>
+              <div style={{ fontSize:36,marginBottom:8 }}>🎙️</div>
+              <div style={{ fontSize:15,fontWeight:800,color:cfg.c }}>녹음 시작하기</div>
+              <div style={{ fontSize:12,color:cfg.d,marginTop:4 }}>클릭하면 마이크 권한을 요청해요 · 말하는 내용이 자동으로 텍스트로 변환돼요</div>
+              <div style={{ fontSize:11,color:'#9CA3AF',marginTop:6 }}>🌐 Chrome / Edge 권장</div>
+            </button>
+          </>
+        ) : (
+          <div>
+            {/* 녹음 중 UI */}
+            <div style={{ display:'flex',alignItems:'center',gap:16,background:cfg.l,borderRadius:14,padding:'16px 20px',marginBottom:14 }}>
+              <div style={{ width:44,height:44,borderRadius:'50%',background:cfg.c,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,animation:'pulse 1.2s ease-in-out infinite' }}>
+                <div style={{ width:14,height:14,borderRadius:'50%',background:'white' }}/>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14,fontWeight:800,color:cfg.c }}>녹음 중...</div>
+                <div style={{ fontSize:22,fontWeight:900,color:'#111827',fontVariantNumeric:'tabular-nums' }}>{fmtRecTime(recSeconds)}</div>
+              </div>
+              <button onClick={stopRecording} style={{ padding:'10px 20px',borderRadius:10,border:'none',background:'#EF4444',color:'white',fontSize:14,fontWeight:800,cursor:'pointer' }}>■ 정지</button>
+            </div>
+
+            {/* 실시간 자막 */}
+            <div style={{ background:'#F9FAFB',borderRadius:12,padding:'14px',minHeight:80,border:'1px solid #E5E7EB' }}>
+              <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:8 }}>실시간 자막</div>
+              <div style={{ fontSize:14,color:'#374151',lineHeight:1.75 }}>
+                {recTranscript && <span>{recTranscript}</span>}
+                {recInterim && <span style={{ color:'#9CA3AF',fontStyle:'italic' }}>{recInterim}</span>}
+                {!recTranscript && !recInterim && (
+                  <span style={{ color:'#D1D5DB' }}>말씀하시면 여기에 실시간으로 표시돼요...</span>
+                )}
+              </div>
+            </div>
+            <div style={{ fontSize:11,color:'#9CA3AF',marginTop:8 }}>
+              💡 Chrome/Edge에서 가장 잘 작동해요 · Web Speech API 사용 중
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* 음성 파일 업로드 */}
       <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
-        <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>📁 음성 파일 업로드</div>
+        <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>📁 기존 녹음 파일 업로드</div>
         <input ref={fileRef} type="file" accept="audio/*,video/*" onChange={handleAudioUpload} style={{ display:'none' }}/>
         {audioFile ? (
           <div style={{ display:'flex',alignItems:'center',gap:12,background:'#F0FDFA',borderRadius:12,padding:'12px 16px',border:'1.5px solid '+cfg.m }}>
@@ -1173,7 +1342,7 @@ ${inputText}
             <button onClick={()=>{setAudioFile(null);setAiTitle('');}} style={{ background:'none',border:'none',color:'#9CA3AF',cursor:'pointer',fontSize:16 }}>✕</button>
           </div>
         ) : (
-          <button onClick={()=>fileRef.current?.click()} style={{ width:'100%',padding:'20px',borderRadius:12,border:'2px dashed #E5E7EB',background:'#FAFAFA',cursor:'pointer',textAlign:'center' }}>
+          <button onClick={()=>fileRef.current && fileRef.current.click()} style={{ width:'100%',padding:'20px',borderRadius:12,border:'2px dashed #E5E7EB',background:'#FAFAFA',cursor:'pointer',textAlign:'center' }}>
             <div style={{ fontSize:32,marginBottom:8 }}>🎙️</div>
             <div style={{ fontSize:14,fontWeight:700,color:'#374151' }}>클릭해서 녹음 파일 선택</div>
             <div style={{ fontSize:12,color:'#9CA3AF',marginTop:4 }}>MP3, M4A, WAV 등 지원 · 갤러리/파일에서 선택 가능</div>
@@ -1197,6 +1366,17 @@ ${inputText}
           placeholder={'회의 내용을 여기에 입력하거나 붙여넣어 주세요.\n\n예시:\n- 음악회 준비 일정: 오후 2시~오후 6시\n- 담당자: 홍길동 (무대), 이수현 (음향)\n- 예산: 50만원 승인됨\n- 다음 회의: 다음주 월요일 10시'}
           style={{ width:'100%',padding:'12px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:12,resize:'none',fontFamily:'inherit',lineHeight:1.65 }}/>
       </div>
+
+      {/* 녹음 완료 후 메시지 */}
+      {!recording && audioFile && audioFile.name.includes('녹음_') && (
+        <div className="fu" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:12,padding:'12px 16px',marginBottom:12,display:'flex',alignItems:'center',gap:10 }}>
+          <span style={{ fontSize:18 }}>✅</span>
+          <div>
+            <div style={{ fontSize:13,fontWeight:700,color:'#059669' }}>녹음 완료! 자막이 아래 텍스트 입력창에 자동으로 채워졌어요.</div>
+            <div style={{ fontSize:12,color:'#6B7280',marginTop:2 }}>내용을 확인하고 AI 분석을 시작하세요.</div>
+          </div>
+        </div>
+      )}
 
       <button onClick={analyzeWithAI} disabled={aiLoading||(!aiText.trim()&&!audioFile)} style={{ width:'100%',padding:'13px',borderRadius:12,border:'none',background:aiLoading||(!aiText.trim()&&!audioFile)?'#E5E7EB':'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:15,fontWeight:800,cursor:aiLoading?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:20 }}>
         {aiLoading?<><div style={{ width:16,height:16,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .7s linear infinite' }}/>분석 중...</>:'🤖 AI 분석 시작'}
@@ -1298,7 +1478,7 @@ ${inputText}
         <div style={{ overflowY:'auto',display:'flex',flexDirection:'column',gap:8 }}>
           {meetings.length===0&&<Empty icon="🎙️" title="회의록이 없어요" desc="위에서 회의를 분석하거나 직접 작성해보세요"/>}
           {meetings.map(m=>(
-            <div key={m.id} onClick={()=>setSel(m)} style={{ background:sel?.id===m.id?cfg.l:'white',border:'1.5px solid '+(sel?.id===m.id?cfg.c:'#F3F4F6'),borderRadius:12,padding:'12px 14px',cursor:'pointer',transition:'all .12s' }}>
+            <div key={m.id} onClick={()=>setSel(m)} style={{ background:sel&&sel.id===m.id?cfg.l:'white',border:'1.5px solid '+(sel&&sel.id===m.id?cfg.c:'#F3F4F6'),borderRadius:12,padding:'12px 14px',cursor:'pointer',transition:'all .12s' }}>
               {m.isAI&&<div style={{ fontSize:10,fontWeight:800,color:cfg.c,marginBottom:3 }}>🤖 AI 분석</div>}
               <div style={{ fontSize:13,fontWeight:700,color:'#111827',marginBottom:3 }}>{m.title}</div>
               <div style={{ fontSize:11,color:'#9CA3AF' }}>📅 {fmtD(m.date)}{m.time&&' · '+m.time}</div>
@@ -1370,7 +1550,7 @@ function ProjectsScreen({ projects, setProjects }) {
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 {pr.dueDate && <Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(pr.dueDate)}</Badge>}
                 <select value={pr.status} onChange={e => updStatus(pr.id, e.target.value)}
-                  style={{ fontSize: 11, fontWeight: 700, color: PSTATS[pr.status]?.c, background: PSTATS[pr.status]?.bg, border: 'none', borderRadius: 99, padding: '3px 10px', cursor: 'pointer' }}>
+                  style={{ fontSize: 11, fontWeight: 700, color: PSTATS[pr.status]&&PSTATS[pr.status].c, background: PSTATS[pr.status]&&PSTATS[pr.status].bg, border: 'none', borderRadius: 99, padding: '3px 10px', cursor: 'pointer' }}>
                   {Object.entries(PSTATS).map(([k, v]) => <option key={k} value={k}>{v.l}</option>)}
                 </select>
               </div>
@@ -1482,7 +1662,7 @@ function JournalScreen({ journals, setJournals }) {
     setSel(entry);
   };
 
-  const del = (id) => { setJournals(p => p.filter(j => j.id !== id)); if (sel?.id === id) setSel(null); };
+  const del = (id) => { setJournals(p => p.filter(j => j.id !== id)); if (sel&&sel.id === id) setSel(null); };
 
   return (
     <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1495,7 +1675,7 @@ function JournalScreen({ journals, setJournals }) {
           {journals.length === 0
             ? <Empty icon="📖" title="일기가 없어요" desc="오늘의 일기를 써보세요" />
             : journals.map(j => (
-              <div key={j.id} onClick={() => setSel(j)} style={{ background: sel?.id === j.id ? cfg.l : 'white', border: `1.5px solid ${sel?.id === j.id ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s' }}>
+              <div key={j.id} onClick={() => setSel(j)} style={{ background: sel&&sel.id === j.id ? cfg.l : 'white', border: `1.5px solid ${sel&&sel.id === j.id ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{j.title}</div>
                   <span style={{ fontSize: 16 }}>{MOOD[j.mood - 1]}</span>
@@ -2108,7 +2288,7 @@ function NotifScreen({ user, spaces, setSpaces, notifs, setNotifs }) {
                     <span style={{ color: '#4F46E5', fontWeight: 900 }}>{n.fromName}</span>님이 워크스페이스로 초대했어요
                   </div>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0F4FF', borderRadius: 8, padding: '4px 10px', marginBottom: 8 }}>
-                    <span style={{ fontSize: 15 }}>{WS[n.spaceType]?.icon || '📁'}</span>
+                    <span style={{ fontSize: 15 }}>{WS[n.spaceType]&&WS[n.spaceType].icon || '📁'}</span>
                     <span style={{ fontSize: 13, fontWeight: 800, color: '#3730A3' }}>{n.spaceName}</span>
                   </div>
                   {n.message && (
@@ -2310,8 +2490,8 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
     await new Promise(r => setTimeout(r, 400));
     setSearching(false);
     const found = accounts.find(a => a.email.toLowerCase()===invEmail.trim().toLowerCase()&&a.id!==user.id);
-    const space = spaces.find(s=>s.id===selSpace?.id);
-    if (found && space?.members.find(m=>m.id===found.id)) setInvResult('already_member');
+    const space = spaces.find(s=>s.id===selSpace&&selSpace.id);
+    if (found && space&&space.members.find(m=>m.id===found.id)) setInvResult('already_member');
     else setInvResult(found||'not_found');
   };
 
@@ -2328,7 +2508,7 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
     if (!todoForm.title.trim()) return;
     const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
     const assignee = space.members.find(m=>m.id===todoForm.assigneeId);
-    const todo = { id:uid(), title:todoForm.title.trim(), status:'todo', priority:todoForm.priority, dueDate:todoForm.dueDate, assigneeId:todoForm.assigneeId, assigneeName:assignee?.name||'', createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
+    const todo = { id:uid(), title:todoForm.title.trim(), status:'todo', priority:todoForm.priority, dueDate:todoForm.dueDate, assigneeId:todoForm.assigneeId, assigneeName:assignee&&assignee.name||'', createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
     updateSpace({ ...space, todos:[...(space.todos||[]), todo] });
     setTodoForm({ title:'', priority:'medium', dueDate:'', assigneeId:'' }); setShowTodoForm(false);
   };
@@ -2487,7 +2667,7 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
                       {colTodos.map(t=>(
                         <div key={t.id} style={{ background:'white',borderRadius:12,padding:'12px',border:'1px solid #F3F4F6',marginBottom:8,boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
                           <div style={{ display:'flex',justifyContent:'space-between',gap:6,marginBottom:8 }}>
-                            <div style={{ fontSize:13,fontWeight:700,color:'#111827',lineHeight:1.4,textDecoration:t.status==='done'?'line-through':'none',opacity:t.status==='done'?.6:1 }}>{t.title}</div>
+                            <div style={{ fontSize:13,fontWeight:700,color:'#111827',lineHeight:1.4,textDecoration:t.status==='done'?'line-through':'none',opacity:t.status==='done'?0.6:1 }}>{t.title}</div>
                             <button onClick={()=>delTodo(t.id)} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:12,flexShrink:0 }}>✕</button>
                           </div>
                           <div style={{ display:'flex',gap:4,flexWrap:'wrap',marginBottom:8 }}>
@@ -2747,7 +2927,7 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
           <div style={{ width: 88, height: 88, borderRadius: '50%', background: `linear-gradient(135deg, ${cfg.c}, ${cfg.d})`, border: `3px solid ${cfg.c}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             {user.avatar ? <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <span style={{ fontSize: 36, color: 'white', fontWeight: 900 }}>{(user.nickname || user.name || '?')[0]}</span>}
           </div>
-          <button onClick={() => fileRef.current?.click()} style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%', background: '#111827', border: '2px solid white', color: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
+          <button onClick={() => { if(fileRef.current) fileRef.current.click(); }} style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%', background: '#111827', border: '2px solid white', color: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
           <input ref={fileRef} type="file" accept="image/*" onChange={handleAvatar} style={{ display: 'none' }} />
         </div>
         {editNick ? (
@@ -2767,7 +2947,7 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
 
       {/* Info */}
       <div className="fu" style={{ background: 'white', borderRadius: 16, border: '1px solid #F3F4F6', padding: '0 18px', marginBottom: 16, animationDelay: '.08s' }}>
-        {[['이름', user.name], ['이메일', user.email], ['닉네임', user.nickname || user.name], ['워크스페이스 유형', `${WS[user.wsType]?.icon} ${WS[user.wsType]?.label}용`], ['플랜', isProUser ? '✨ Pro' : '무료']].map(([l, v]) => (
+        {[['이름', user.name], ['이메일', user.email], ['닉네임', user.nickname || user.name], ['워크스페이스 유형', `${WS[user.wsType]&&WS[user.wsType].icon} ${WS[user.wsType]&&WS[user.wsType].label}용`], ['플랜', isProUser ? '✨ Pro' : '무료']].map(([l, v]) => (
           <div key={l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: '1px solid #F9FAFB' }}>
             <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 600 }}>{l}</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{v}</span>
@@ -2795,9 +2975,244 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
 }
 
 /* ══════════════════════════════════════════════════════════
-   TEMPLATE SCREEN — 테마 & 아이콘 스타일 설정
-   이미지의 뽀용한 파스텔 색감 기반
+   AI CHAT SCREEN — Workly 전용 AI 어시스턴트
+   사용자의 실제 데이터(할일/목표/습관/성적 등)를 알고 대화
 ══════════════════════════════════════════════════════════ */
+function AIChatScreen({ user, todos, events, goals, habits, grades, journals, timeLogs, spaces }) {
+  const cfg = WS[user.wsType] || WS.personal;
+  const [messages, setMessages] = useState([{
+    role: 'assistant',
+    content: '안녕하세요, ' + (user.nickname || user.name) + '님! 👋 저는 Workly AI예요.\n\n지금 등록된 할일 ' + todos.length + '개, 일정 ' + events.length + '개를 알고 있어요. 무엇이든 물어보세요!',
+    id: 'welcome',
+  }]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const buildContext = () => {
+    const wsLabel = user.wsType === 'school' ? '학교' : user.wsType === 'company' ? '회사' : '개인';
+    const todoDone = todos.filter(function(t) { return t.status === 'done'; }).length;
+    const todoActive = todos.filter(function(t) { return t.status !== 'done'; });
+    const todayKey = new Date().toISOString().split('T')[0];
+    const todayEvents = events.filter(function(e) { return e.date === todayKey; });
+    const todayHabits = habits ? habits.filter(function(h) { return h.log && h.log[todayKey]; }) : [];
+
+    var lines = [];
+    lines.push('[사용자 정보]');
+    lines.push('이름: ' + (user.nickname || user.name));
+    lines.push('워크스페이스: ' + wsLabel + '용');
+    lines.push('오늘: ' + new Date().toLocaleDateString('ko-KR'));
+    lines.push('');
+    lines.push('[할일 현황]');
+    lines.push('전체: ' + todos.length + '개 (완료: ' + todoDone + '개, 미완료: ' + todoActive.length + '개)');
+
+    if (todoActive.length > 0) {
+      lines.push('미완료 할일:');
+      todoActive.slice(0, 8).forEach(function(t) {
+        var p = t.priority === 'high' ? '높음' : t.priority === 'low' ? '낮음' : '중간';
+        var due = t.dueDate ? ' (마감: ' + t.dueDate + ')' : '';
+        lines.push('- [' + p + '] ' + t.title + due);
+      });
+    }
+
+    if (todayEvents.length > 0) {
+      lines.push('');
+      lines.push('[오늘 일정]');
+      todayEvents.forEach(function(e) {
+        lines.push('- ' + e.title + (e.time ? ' ' + e.time : ''));
+      });
+    }
+
+    if (goals && goals.length > 0) {
+      lines.push('');
+      lines.push('[목표 현황]');
+      goals.slice(0, 5).forEach(function(g) {
+        lines.push('- ' + g.title + ': ' + g.progress + '%');
+      });
+    }
+
+    if (habits && habits.length > 0) {
+      lines.push('');
+      lines.push('[습관 트래커]');
+      lines.push('오늘 완료: ' + todayHabits.length + '/' + habits.length + '개');
+      habits.slice(0, 5).forEach(function(h) {
+        var streak = 0;
+        var d = new Date();
+        while (h.log && h.log[d.toISOString().split('T')[0]]) {
+          streak++;
+          d.setDate(d.getDate() - 1);
+        }
+        lines.push('- ' + (h.icon || '') + ' ' + h.name + ': ' + streak + '일 연속');
+      });
+    }
+
+    if (user.wsType === 'school' && grades && grades.length > 0) {
+      var avg = Math.round(grades.reduce(function(a, b) { return a + b.pct; }, 0) / grades.length);
+      lines.push('');
+      lines.push('[성적] 평균: ' + avg + '점 (' + grades.length + '개 기록)');
+    }
+
+    if (user.wsType === 'company' && timeLogs && timeLogs.length > 0) {
+      var todayTime = timeLogs.filter(function(l) { return l.date === todayKey; }).reduce(function(a, b) { return a + b.duration; }, 0);
+      lines.push('');
+      lines.push('[업무 시간] 오늘: ' + Math.floor(todayTime / 3600) + '시간 ' + Math.floor((todayTime % 3600) / 60) + '분');
+    }
+
+    return lines.join('\n');
+  };
+
+  const sendMessage = function(text) {
+    var userText = (text || input).trim();
+    if (!userText) return;
+    setInput('');
+    var userMsg = { role: 'user', content: userText, id: uid() };
+    var newMessages = messages.concat([userMsg]);
+    setMessages(newMessages);
+    setLoading(true);
+
+    var context = buildContext();
+    var systemPrompt = '당신은 Workly의 AI 어시스턴트예요. 사용자의 생산성을 돕는 친절한 조수예요.\n\n'
+      + '사용자 실제 데이터:\n' + context + '\n\n'
+      + '규칙:\n'
+      + '- 한국어로 답변\n'
+      + '- 사용자 데이터를 활용해서 구체적 조언\n'
+      + '- 짧고 명확하게\n'
+      + '- 이모지 적절히 사용\n'
+      + '- 동기부여와 응원 포함';
+
+    var apiMessages = newMessages
+      .filter(function(m) { return m.id !== 'welcome'; })
+      .map(function(m) { return { role: m.role, content: m.content }; });
+
+    fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 800,
+        system: systemPrompt,
+        messages: apiMessages,
+      })
+    }).then(function(res) {
+      return res.json();
+    }).then(function(data) {
+      var reply = data.content && data.content[0] ? data.content[0].text : '죄송해요, 잠시 후 다시 시도해주세요.';
+      setMessages(function(p) { return p.concat([{ role: 'assistant', content: reply, id: uid() }]); });
+      setLoading(false);
+      setTimeout(function() { if (inputRef.current) inputRef.current.focus(); }, 100);
+    }).catch(function() {
+      setMessages(function(p) { return p.concat([{ role: 'assistant', content: '연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요. 🙏', id: uid() }]); });
+      setLoading(false);
+    });
+  };
+
+  var quickActions = {
+    school:   ['오늘 할일 정리해줘', '이번 주 시험 준비 계획 짜줘', '집중해야 할 과제가 뭐야?', '성적 올리는 방법 알려줘'],
+    company:  ['오늘 업무 우선순위 정해줘', '이번 주 진행 상황 요약해줘', '할일 중 급한 것만 골라줘', '업무 효율 높이는 방법'],
+    personal: ['오늘 할일 정리해줘', '목표 달성률 분석해줘', '습관 유지 팁 알려줘', '이번 주 잘한 점 알려줘'],
+  };
+  var actions = quickActions[user.wsType] || quickActions.personal;
+
+  return (
+    <div style={{ height:'100%', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      {/* 헤더 */}
+      <div style={{ padding:'16px 20px', borderBottom:'1px solid #F3F4F6', flexShrink:0, background:'white', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>🤖</div>
+          <div>
+            <div style={{ fontSize:16, fontWeight:900, color:'#111827' }}>Workly AI</div>
+            <div style={{ fontSize:11, color:'#9CA3AF' }}>나의 데이터를 알고 있는 AI 어시스턴트</div>
+          </div>
+        </div>
+        <button onClick={function() { setMessages([{ role:'assistant', content:'대화를 초기화했어요. 무엇을 도와드릴까요? 😊', id:uid() }]); }} style={{ padding:'6px 12px', borderRadius:8, border:'1.5px solid #E5E7EB', background:'white', color:'#6B7280', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+          🔄 초기화
+        </button>
+      </div>
+
+      {/* 메시지 영역 */}
+      <div style={{ flex:1, overflowY:'auto', padding:'20px 20px 0', display:'flex', flexDirection:'column', gap:12 }}>
+        {messages.length <= 1 && (
+          <div className="fu" style={{ marginBottom:8 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:'#9CA3AF', marginBottom:10 }}>💡 빠른 질문</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+              {actions.map(function(a, i) {
+                return (
+                  <button key={i} onClick={function() { sendMessage(a); }}
+                    style={{ padding:'8px 14px', borderRadius:99, border:'1.5px solid '+cfg.m, background:cfg.l, color:cfg.d, fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                    {a}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {messages.map(function(msg) {
+          return (
+            <div key={msg.id} style={{ display:'flex', gap:10, alignItems:'flex-start', flexDirection: msg.role==='user' ? 'row-reverse' : 'row' }}>
+              <div style={{ width:34, height:34, borderRadius:'50%', background: msg.role==='user' ? cfg.c : 'linear-gradient(135deg,#6366F1,#2563EB)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:900, color:'white', flexShrink:0 }}>
+                {msg.role==='user' ? (user.nickname||user.name||'?')[0] : '🤖'}
+              </div>
+              <div style={{ maxWidth:'75%', background: msg.role==='user' ? cfg.c : 'white', color: msg.role==='user' ? 'white' : '#111827', borderRadius: msg.role==='user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px', padding:'12px 16px', fontSize:14, lineHeight:1.75, boxShadow:'0 2px 8px rgba(0,0,0,.06)', border: msg.role==='user' ? 'none' : '1px solid #F3F4F6', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                {msg.content}
+              </div>
+            </div>
+          );
+        })}
+
+        {loading && (
+          <div className="fu" style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+            <div style={{ width:34, height:34, borderRadius:'50%', background:'linear-gradient(135deg,#6366F1,#2563EB)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>🤖</div>
+            <div style={{ background:'white', border:'1px solid #F3F4F6', borderRadius:'4px 16px 16px 16px', padding:'14px 18px', boxShadow:'0 2px 8px rgba(0,0,0,.06)' }}>
+              <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+                {[0,1,2].map(function(i) {
+                  return <div key={i} style={{ width:7, height:7, borderRadius:'50%', background:cfg.c, animation:'pulse 1.2s ease-in-out '+((i*0.2)+'s')+' infinite' }}/>;
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} style={{ height:1 }}/>
+      </div>
+
+      {/* 입력창 */}
+      <div style={{ padding:'14px 20px 20px', flexShrink:0, background:'white', borderTop:'1px solid #F3F4F6' }}>
+        <div style={{ display:'flex', gap:10, alignItems:'flex-end', background:'#F9FAFB', borderRadius:16, padding:'10px 14px', border:'1.5px solid #E5E7EB' }}>
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={function(e) { setInput(e.target.value); }}
+            placeholder="메시지 입력... (Enter 전송, Shift+Enter 줄바꿈)"
+            rows={1}
+            style={{ flex:1, background:'none', border:'none', resize:'none', fontSize:14, lineHeight:1.55, fontFamily:'inherit', color:'#1F2937', maxHeight:120, overflowY:'auto' }}
+            onKeyDown={function(e) {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!loading && input.trim()) sendMessage();
+              }
+            }}
+          />
+          <button
+            onClick={function() { if (!loading && input.trim()) sendMessage(); }}
+            disabled={loading || !input.trim()}
+            style={{ width:38, height:38, borderRadius:11, border:'none', background: input.trim() && !loading ? cfg.c : '#E5E7EB', color:'white', fontSize:17, cursor: input.trim() && !loading ? 'pointer' : 'default', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            ↑
+          </button>
+        </div>
+        <div style={{ fontSize:11, color:'#9CA3AF', textAlign:'center', marginTop:8 }}>
+          {'AI가 내 할일 ' + todos.length + '개, 일정 ' + events.length + '개를 알고 있어요'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function TemplateScreen({ user, onUpdate }) {
   const currentTheme = user.theme || 'default';
   const currentIconSet = user.iconSet || 'default';
@@ -3038,6 +3453,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   // 네비게이션 (아이콘셋 반영)
   const navItems = [
     ...cfg.nav.map(item => ({ ...item, e: iconSet[item.id] || item.e })),
+    { id:'ai',        e: '🤖',                        n:'AI' },
     { id:'workspace', e: iconSet.workspace || '👥', n:'협업' },
     { id:'notif',     e: iconSet.notif || '🔔',    n:'알림' },
     { id:'template',  e: iconSet.template || '🎨', n:'테마' },
@@ -3076,6 +3492,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
       case 'timetrack':return <TimeTrackerScreen timeLogs={timeLogs} setTimeLogs={setTimeLogs} />;
       case 'workspace':return <WorkspaceScreen user={user} accounts={accounts} spaces={spaces} setSpaces={setSpaces} />;
       case 'notif':    return <NotifScreen user={user} spaces={spaces} setSpaces={setSpaces} notifs={notifs} setNotifs={setNotifs} />;
+      case 'ai':       return <AIChatScreen user={user} todos={todos} events={events} goals={goals} habits={habits} grades={grades} journals={journals} timeLogs={timeLogs} spaces={spaces} />;
       case 'template': return <TemplateScreen user={user} onUpdate={updateUser} />;
       case 'profile':  return <ProfileScreen user={user} onUpdate={updateUser} onLogout={logout} onDeleteAccount={deleteAccount} onShowPro={() => setShowPro(true)} isProUser={isProUser} />;
       default:         return <HomeScreen user={user} todos={todos} events={events} setScreen={setScreen} />;
@@ -3146,7 +3563,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
         {/* 탑바 */}
         <div style={{ height:52,flexShrink:0,background:DK.headerBg||themeObj.cardBg||'white',borderBottom:'1px solid '+(DK.headerBorder||themeObj.sidebarBorder||'#F3F4F6'),display:'flex',alignItems:'center',padding:'0 20px',justifyContent:'space-between' }}>
           <div style={{ fontSize:13,fontWeight:600,color:DK.textSecondary||'#9CA3AF' }}>
-            {navItems.find(n=>n.id===screen)?.n||'홈'}
+            {(navItems.find(n=>n.id===screen)||{n:'홈'}).n}
           </div>
           <div style={{ display:'flex',alignItems:'center',gap:10 }}>
             {isProUser&&<Badge color={cfg.d} bg={cfg.l}>✨ Pro</Badge>}
@@ -3234,7 +3651,7 @@ export default function App() {
 
   return (
     <>
-      <Styles isDark={user?.darkMode || false} />
+      <Styles isDark={user&&user.darkMode || false} />
       {!user && <AuthScreen accounts={accounts} onAuth={handleAuth} onRegister={handleRegister} />}
       {user && needsOnboarding && <OnboardingScreen user={user} onDone={handleOnboardingDone} />}
       {user && !needsOnboarding && <MainApp user={user} setUser={setUser} accounts={accounts} setAccounts={setAccounts} />}
