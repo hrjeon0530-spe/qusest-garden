@@ -4,46 +4,23 @@ import { useState, useEffect, useRef } from "react";
    WORKSPACE TYPE CONFIG
 ══════════════════════════════════════════════════════════ */
 const WS = {
-  school: {
-    label: '학교', icon: '🎓', c: '#2563EB', l: '#EFF6FF', d: '#1D4ED8', m: '#DBEAFE',
-    tagline: '과제, 노트, 일정을 한 곳에서',
-    perks: ['📚 과제 트래커', '📝 수업 노트', '📅 시험 캘린더', '🏆 성적 관리'],
-    nav: [
-      { id:'home',    e:'🏠', n:'홈' },
-      { id:'todo',    e:'✅', n:'할일' },
-      { id:'cal',     e:'📅', n:'캘린더' },
-      { id:'assign',  e:'📚', n:'과제' },
-      { id:'grades',  e:'🏆', n:'성적' },
-      { id:'attend',  e:'📋', n:'출석' },
-    ],
-  },
-  company: {
-    label: '회사', icon: '💼', c: '#0F766E', l: '#F0FDFA', d: '#0D5C56', m: '#CCFBF1',
-    tagline: '업무, 회의, 프로젝트를 효율적으로',
-    perks: ['✅ 업무 관리', '🤖 AI 회의 요약', '⏱️ 타임트래커', '📊 주간 리포트'],
-    nav: [
-      { id:'home',      e:'🏠', n:'홈' },
-      { id:'todo',      e:'✅', n:'업무' },
-      { id:'cal',       e:'📅', n:'일정' },
-      { id:'meetings',  e:'🤖', n:'AI 회의' },
-      { id:'timetrack', e:'⏱️', n:'타임트래커' },
-      { id:'projects',  e:'📊', n:'프로젝트' },
-    ],
-  },
   personal: {
-    label: '개인', icon: '✨', c: '#7C3AED', l: '#F5F3FF', d: '#5B21B6', m: '#EDE9FE',
-    tagline: '목표, 습관, 일상을 체계적으로',
-    perks: ['🔥 습관 스트릭', '🎯 목표 트래커', '📖 개인 일기', '📅 일정 관리'],
-    nav: [
-      { id:'home',   e:'🏠', n:'홈' },
-      { id:'todo',   e:'✅', n:'할일' },
-      { id:'cal',    e:'📅', n:'캘린더' },
-      { id:'habits', e:'🔥', n:'습관' },
-      { id:'goals',  e:'🎯', n:'목표' },
-      { id:'jour',   e:'📖', n:'일기' },
+    label:'Workly', icon:'🌿', c:'#4F46E5', l:'#EEF2FF', d:'#3730A3', m:'#E0E7FF',
+    tagline:'나만의 스마트 워크스페이스',
+    perks:['✅ 할일 관리','📅 캘린더','🔥 습관 트래커','🎯 목표 관리'],
+    nav:[
+      { id:'home',  e:'🏠', n:'홈' },
+      { id:'todo',  e:'✅', n:'할일' },
+      { id:'cal',   e:'📅', n:'캘린더' },
+      { id:'exam',  e:'📋', n:'시험' },
+      { id:'habits',e:'🔥', n:'습관' },
+      { id:'goals', e:'🎯', n:'목표' },
+      { id:'jour',  e:'📖', n:'일기' },
     ],
   },
 };
+// 통합 단일 앱 — wsType 무관하게 항상 personal 사용
+const getWS = () => WS.personal;
 
 const PRIO = {
   high:   { l:'높음', c:'#DC2626', bg:'#FEF2F2', border:'#FECACA' },
@@ -227,11 +204,9 @@ function Styles({ isDark }) {
     let dark = document.getElementById('wl-dark');
     if (!dark) { dark = document.createElement('style'); dark.id = 'wl-dark'; document.head.appendChild(dark); }
     dark.textContent = isDark ? `
-      [data-wl-dark] input, [data-wl-dark] textarea, [data-wl-dark] select {
-        background: #1E293B !important; color: #E2E8F0 !important; border-color: #334155 !important;
-      }
-      [data-wl-dark] input::placeholder, [data-wl-dark] textarea::placeholder { color: #64748B !important; }
-      [data-wl-dark] ::-webkit-scrollbar-thumb { background: #475569; }
+      
+      
+      
     ` : '';
   }, [isDark]);
 
@@ -503,79 +478,31 @@ function AuthScreen({ accounts, onAuth, onRegister }) {
    ONBOARDING
 ══════════════════════════════════════════════════════════ */
 function OnboardingScreen({ user, onDone }) {
-  const [step, setStep] = useState(0);
   const [nick, setNick] = useState(user.name || '');
-  const [wsType, setWsType] = useState('');
-
   return (
-    <div style={{ minHeight: '100vh', background: '#FAFAFA', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 540 }}>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 40, justifyContent: 'center' }}>
-          {[0, 1].map(i => (
-            <div key={i} style={{ height: 4, width: step >= i ? 56 : 28, borderRadius: 2, background: step >= i ? '#2563EB' : '#E5E7EB', transition: 'all .35s' }} />
-          ))}
+    <div style={{ minHeight:'100vh',background:'#FAFAFA',display:'flex',alignItems:'center',justifyContent:'center',padding:24 }}>
+      <div style={{ width:'100%',maxWidth:480 }} className="fu">
+        <div style={{ textAlign:'center',marginBottom:36 }}>
+          <div style={{ fontSize:56,marginBottom:14 }}>👋</div>
+          <h2 style={{ fontSize:28,fontWeight:900,color:'#111827',marginBottom:8 }}>반가워요, {user.name}님!</h2>
+          <p style={{ fontSize:14,color:'#6B7280',lineHeight:1.6 }}>Workly에서 사용할 닉네임을 설정해주세요.</p>
         </div>
-
-        {step === 0 && (
-          <div className="fu">
-            <div style={{ textAlign: 'center', marginBottom: 36 }}>
-              <div style={{ fontSize: 56, marginBottom: 14 }}>👋</div>
-              <h2 style={{ fontSize: 28, fontWeight: 900, color: '#111827', marginBottom: 8 }}>반가워요, {user.name}님!</h2>
-              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6 }}>워크스페이스에서 사용할 닉네임을 설정해주세요.<br />다른 멤버들에게 이 이름으로 표시됩니다.</p>
-            </div>
-            <div style={{ background: 'white', borderRadius: 20, padding: 28, boxShadow: '0 4px 24px rgba(0,0,0,.06)', border: '1px solid #F3F4F6' }}>
-              <Field value={nick} onChange={setNick} label="닉네임" placeholder="예: 개발자 길동, 디자이너 수현" hint="나중에 프로필에서 변경할 수 있어요" />
-              <Btn onClick={() => { if (nick.trim()) setStep(1); }} disabled={!nick.trim()} full bg="#2563EB" style={{ padding: '13px', borderRadius: 12, fontSize: 15 }}>다음 →</Btn>
-            </div>
-          </div>
-        )}
-
-        {step === 1 && (
-          <div className="fu">
-            <div style={{ textAlign: 'center', marginBottom: 32 }}>
-              <h2 style={{ fontSize: 26, fontWeight: 900, color: '#111827', marginBottom: 8 }}>어떤 용도로 사용하실 건가요?</h2>
-              <p style={{ fontSize: 14, color: '#6B7280' }}>선택에 따라 최적화된 기능을 제공해드려요</p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              {Object.entries(WS).map(([k, v]) => (
-                <button key={k} onClick={() => setWsType(k)} style={{
-                  display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderRadius: 16, textAlign: 'left',
-                  border: `2px solid ${wsType === k ? v.c : '#E5E7EB'}`,
-                  background: wsType === k ? v.l : 'white', cursor: 'pointer', transition: 'all .15s',
-                }}>
-                  <div style={{ width: 50, height: 50, borderRadius: 14, background: wsType === k ? v.c : v.l, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{v.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 3 }}>{v.label}용</div>
-                    <div style={{ fontSize: 12, color: '#6B7280' }}>{v.tagline}</div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                      {v.perks.slice(0, 2).map(p => <Badge key={p} color={v.d} bg={v.l}>{p}</Badge>)}
-                    </div>
-                  </div>
-                  <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${wsType === k ? v.c : '#D1D5DB'}`, background: wsType === k ? v.c : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {wsType === k && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white' }} />}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Btn onClick={() => setStep(0)} outline color="#6B7280" style={{ flex: 1, padding: '12px', borderRadius: 12 }}>← 이전</Btn>
-              <button onClick={() => { if (wsType) onDone({ nickname: nick.trim(), wsType }); }} disabled={!wsType}
-                style={{ flex: 2, padding: '13px', borderRadius: 12, border: 'none', background: wsType ? (WS[wsType]&&WS[wsType].c) : '#9CA3AF', color: 'white', fontSize: 15, fontWeight: 700, cursor: wsType ? 'pointer' : 'default', opacity: wsType ? 1 : 0.5 }}>
-                시작하기 🚀
-              </button>
-            </div>
-          </div>
-        )}
+        <div style={{ background:'white',borderRadius:20,padding:28,boxShadow:'0 4px 24px rgba(0,0,0,.06)',border:'1px solid #F3F4F6' }}>
+          <Field value={nick} onChange={setNick} label="닉네임" placeholder="예: 수현, 길동" hint="언제든지 프로필에서 바꿀 수 있어요" />
+          <button onClick={() => { if(nick.trim()) onDone({ nickname:nick.trim(), wsType:'personal' }); }}
+            disabled={!nick.trim()}
+            style={{ width:'100%',padding:'13px',borderRadius:12,border:'none',background:nick.trim() ? 'linear-gradient(135deg,#4F46E5,#2563EB)':'#E5E7EB',color:'white',fontSize:15,fontWeight:700,cursor:nick.trim() ? 'pointer':'default' }}>
+            시작하기 🚀
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   HOME SCREEN
-══════════════════════════════════════════════════════════ */
+
 function HomeScreen({ user, todos, events, setScreen }) {
-  const cfg = WS[user.wsType] || WS.personal;
+  const cfg = WS.personal;
   const todayTodos = todos.filter(t => t.dueDate === tod() && t.status !== 'done');
   const todayEvents = events.filter(e => e.date === tod());
   const done = todos.filter(t => t.status === 'done').length;
@@ -666,7 +593,7 @@ function HomeScreen({ user, todos, events, setScreen }) {
    TODO SCREEN
 ══════════════════════════════════════════════════════════ */
 function TodoScreen({ todos, setTodos, wsType }) {
-  const cfg = WS[wsType] || WS.personal;
+  const cfg = WS.personal;
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: '', priority: 'medium', dueDate: '', category: '', notes: '' });
   const [filter, setFilter] = useState('all');
@@ -771,7 +698,7 @@ function TodoScreen({ todos, setTodos, wsType }) {
    CALENDAR SCREEN
 ══════════════════════════════════════════════════════════ */
 function CalendarScreen({ events, setEvents, wsType }) {
-  const cfg = WS[wsType] || WS.personal;
+  const cfg = WS.personal;
   const now = new Date();
   const [yr, setYr] = useState(now.getFullYear());
   const [mo, setMo] = useState(now.getMonth());
@@ -897,7 +824,7 @@ function CalendarScreen({ events, setEvents, wsType }) {
    ASSIGNMENTS SCREEN (School)
 ══════════════════════════════════════════════════════════ */
 function AssignmentsScreen({ assigns, setAssigns }) {
-  const cfg = WS.school;
+  const cfg = WS.personal;
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ subject: '', title: '', dueDate: '', status: 'not_started', description: '', priority: 'medium' });
 
@@ -976,7 +903,7 @@ function AssignmentsScreen({ assigns, setAssigns }) {
    NOTES SCREEN (School)
 ══════════════════════════════════════════════════════════ */
 function NotesScreen({ notes, setNotes }) {
-  const cfg = WS.school;
+  const cfg = WS.personal;
   const [showModal, setShowModal] = useState(false);
   const [selNote, setSelNote] = useState(null);
   const [form, setForm] = useState({ subject: '', title: '', content: '' });
@@ -1062,7 +989,7 @@ function NotesScreen({ notes, setNotes }) {
    MEETINGS SCREEN (Company) — AI 회의 요약 + 할일 추출
 ══════════════════════════════════════════════════════════ */
 function MeetingsScreen({ meetings, setMeetings, todos, setTodos }) {
-  const cfg = WS.company;
+  const cfg = WS.personal;
   const [mode, setMode] = useState('list'); // 'list' | 'ai' | 'manual'
   const [sel, setSel] = useState(null);
 
@@ -1114,7 +1041,7 @@ function MeetingsScreen({ meetings, setMeetings, todos, setTodos }) {
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
         const dateStr = new Date().toLocaleDateString('ko-KR', {month:'2-digit',day:'2-digit'}).replace(/\./g,'').replace(' ','');
-        const file = new File([blob], '회의녹음_' + dateStr + '.' + (mimeType.includes('ogg')?'ogg':'webm'), { type: mimeType || 'audio/webm' });
+        const file = new File([blob], '회의녹음_' + dateStr + '.' + (mimeType.includes('ogg') ? 'ogg':'webm'), { type: mimeType || 'audio/webm' });
         setAudioFile(file);
         if (!aiTitle) setAiTitle('회의 녹음 ' + new Date().toLocaleDateString('ko-KR'));
         stream.getTracks().forEach(t => t.stop());
@@ -1378,7 +1305,7 @@ ${inputText}
         </div>
       )}
 
-      <button onClick={analyzeWithAI} disabled={aiLoading||(!aiText.trim()&&!audioFile)} style={{ width:'100%',padding:'13px',borderRadius:12,border:'none',background:aiLoading||(!aiText.trim()&&!audioFile)?'#E5E7EB':'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:15,fontWeight:800,cursor:aiLoading?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:20 }}>
+      <button onClick={analyzeWithAI} disabled={aiLoading||(!aiText.trim()&&!audioFile)} style={{ width:'100%',padding:'13px',borderRadius:12,border:'none',background:aiLoading||(!aiText.trim()&&!audioFile) ? '#E5E7EB':'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:15,fontWeight:800,cursor:aiLoading ? 'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:20 }}>
         {aiLoading?<><div style={{ width:16,height:16,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .7s linear infinite' }}/>분석 중...</>:'🤖 AI 분석 시작'}
       </button>
 
@@ -1510,7 +1437,7 @@ ${inputText}
 
 
 function ProjectsScreen({ projects, setProjects }) {
-  const cfg = WS.company;
+  const cfg = WS.personal;
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', status: 'planning', dueDate: '' });
 
@@ -1715,7 +1642,7 @@ function JournalScreen({ journals, setJournals }) {
               ))}
             </div>
           </div>
-          <Field value={form.content} onChange={v => setForm(p => ({ ...p, content: v }))} label="내용" placeholder="오늘 어땠나요?" rows={7} />
+          <Field value={form.content} onChange={v => setForm(p => ({ ...p, content: v }))} label="내용" placeholder="오늘 어땠나요 ? " rows={7} />
           <div style={{ display: 'flex', gap: 10 }}>
             <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
             <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>저장하기</Btn>
@@ -1819,8 +1746,8 @@ function HabitsScreen({ habits, setHabits }) {
                 </div>
               </div>
               <div style={{ display:'flex',gap:8,alignItems:'center' }}>
-                <button onClick={()=>toggleDay(h.id, todayKey)} style={{ padding:'9px 18px',borderRadius:99,border:'none',background:todayDone?cfg.c:cfg.l,color:todayDone?'white':cfg.d,fontSize:13,fontWeight:800,cursor:'pointer',transition:'all .2s' }}>
-                  {todayDone?'✓ 완료':'오늘 체크'}
+                <button onClick={()=>toggleDay(h.id, todayKey)} style={{ padding:'9px 18px',borderRadius:99,border:'none',background:todayDone?cfg.c:cfg.l,color:todayDone ? 'white':cfg.d,fontSize:13,fontWeight:800,cursor:'pointer',transition:'all .2s' }}>
+                  {todayDone ? '✓ 완료':'오늘 체크'}
                 </button>
                 <button onClick={()=>setHabits(p=>p.filter(x=>x.id!==h.id))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:14 }}>✕</button>
               </div>
@@ -1855,7 +1782,7 @@ function HabitsScreen({ habits, setHabits }) {
    GRADES SCREEN (School) — 성적 트래커
 ══════════════════════════════════════════════════════════ */
 function GradesScreen({ grades, setGrades }) {
-  const cfg = WS.school;
+  const cfg = WS.personal;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ subject:'', exam:'', score:'', maxScore:'100', date:tod() });
   const [showExam, setShowExam] = useState(false);
@@ -1892,7 +1819,7 @@ function GradesScreen({ grades, setGrades }) {
   const totalAvg = subjects.length ? Math.round(subjects.reduce((a,b)=>a+b.avg,0)/subjects.length) : null;
 
   const getGrade = (pct) => pct>=90?{l:'A+',c:'#059669'}:pct>=80?{l:'B+',c:'#2563EB'}:pct>=70?{l:'C+',c:'#D97706'}:pct>=60?{l:'D',c:'#DC2626'}:{l:'F',c:'#6B7280'};
-  const ddayColor = (d) => d<=3?'#DC2626':d<=7?'#D97706':'#059669';
+  const ddayColor = (d) => d<=3 ? '#DC2626':d<=7 ? '#D97706':'#059669';
 
   return (
     <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
@@ -1913,12 +1840,12 @@ function GradesScreen({ grades, setGrades }) {
               const diff = Math.ceil((new Date(e.date+' 00:00:00')-new Date())/(1000*60*60*24));
               const past = diff < 0;
               return (
-                <div key={e.id} style={{ background:'white',borderRadius:16,padding:'14px 16px',border:'1.5px solid '+(past?'#F3F4F6':'#E5E7EB'),flexShrink:0,minWidth:130,position:'relative' }}>
+                <div key={e.id} style={{ background:'white',borderRadius:16,padding:'14px 16px',border:'1.5px solid '+(past ? '#F3F4F6':'#E5E7EB'),flexShrink:0,minWidth:130,position:'relative' }}>
                   <button onClick={()=>saveExams(exams.filter(x=>x.id!==e.id))} style={{ position:'absolute',top:6,right:8,background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:11 }}>✕</button>
                   <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:4 }}>{e.type}</div>
                   <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:6 }}>{e.subject}</div>
-                  <div style={{ fontSize:24,fontWeight:900,color:past?'#9CA3AF':ddayColor(diff) }}>
-                    {past?'종료':`D-${diff}`}
+                  <div style={{ fontSize:24,fontWeight:900,color:past ? '#9CA3AF':ddayColor(diff) }}>
+                    {past ? '종료':`D-${diff}`}
                   </div>
                   <div style={{ fontSize:11,color:'#9CA3AF',marginTop:4 }}>{e.date}</div>
                 </div>
@@ -2020,7 +1947,7 @@ function GradesScreen({ grades, setGrades }) {
    ATTENDANCE SCREEN (School) — 출석 체크
 ══════════════════════════════════════════════════════════ */
 function AttendanceScreen({ attend, setAttend }) {
-  const cfg = WS.school;
+  const cfg = WS.personal;
   const [subjects, setSubjects] = useState(() => { try { return JSON.parse(localStorage.getItem('wl_attend_subjects')||'[]'); } catch { return []; } });
   const [showAdd, setShowAdd] = useState(false);
   const [newSubject, setNewSubject] = useState('');
@@ -2092,7 +2019,7 @@ function AttendanceScreen({ attend, setAttend }) {
                 <span style={{ fontSize:12,fontWeight:700,color:'#059669' }}>출{stats.present}</span>
                 <span style={{ fontSize:12,fontWeight:700,color:'#DC2626' }}>결{stats.absent}</span>
                 <span style={{ fontSize:12,fontWeight:700,color:'#D97706' }}>지{stats.late}</span>
-                <span style={{ fontSize:13,fontWeight:800,color:rate>=90?'#059669':rate>=80?'#2563EB':'#DC2626' }}>{rate}%</span>
+                <span style={{ fontSize:13,fontWeight:800,color:rate>=90 ? '#059669':rate>=80 ? '#2563EB':'#DC2626' }}>{rate}%</span>
                 <button onClick={()=>saveSubjects(subjects.filter(s=>s!==subject))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13 }}>✕</button>
               </div>
             </div>
@@ -2106,7 +2033,7 @@ function AttendanceScreen({ attend, setAttend }) {
                     <div style={{ fontSize:9,color:isToday?cfg.c:'#9CA3AF',marginBottom:3,fontWeight:600 }}>{dayNames2[dow]}</div>
                     <div style={{ display:'flex',flexDirection:'column',gap:2 }}>
                       {['O','△','X'].map(s=>(
-                        <button key={s} onClick={()=>toggleAttend(subject,day,s)} style={{ width:30,height:20,borderRadius:5,border:'none',background:v===s?(s==='O'?'#059669':s==='X'?'#DC2626':'#D97706'):(isToday?cfg.l:'#F3F4F6'),color:v===s?'white':(isToday?cfg.c:'#9CA3AF'),fontSize:10,fontWeight:700,cursor:'pointer' }}>{s}</button>
+                        <button key={s} onClick={()=>toggleAttend(subject,day,s)} style={{ width:30,height:20,borderRadius:5,border:'none',background:v===s?(s==='O'?'#059669':s==='X'?'#DC2626':'#D97706'):(isToday?cfg.l:'#F3F4F6'),color:v===s ? 'white':(isToday?cfg.c:'#9CA3AF'),fontSize:10,fontWeight:700,cursor:'pointer' }}>{s}</button>
                       ))}
                     </div>
                   </div>
@@ -2124,7 +2051,7 @@ function AttendanceScreen({ attend, setAttend }) {
    TIME TRACKER SCREEN (Company) — 업무 시간 기록
 ══════════════════════════════════════════════════════════ */
 function TimeTrackerScreen({ timeLogs, setTimeLogs }) {
-  const cfg = WS.company;
+  const cfg = WS.personal;
   const [running, setRunning] = useState(null); // { taskName, startTime }
   const [elapsed, setElapsed] = useState(0);
   const [taskName, setTaskName] = useState('');
@@ -2152,8 +2079,8 @@ function TimeTrackerScreen({ timeLogs, setTimeLogs }) {
   };
 
   const todayKey = tod();
-  const fmt = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0?`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${m}:${String(sec).padStart(2,'0')}`; };
-  const fmtH = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0?`${h}시간 ${m}분`:`${m}분`; };
+  const fmt = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${m}:${String(sec).padStart(2,'0')}`; };
+  const fmtH = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0 ? `${h}시간 ${m}분`:`${m}분`; };
 
   const todayLogs = timeLogs.filter(l=>l.date===todayKey);
   const todayTotal = todayLogs.reduce((a,b)=>a+b.duration,0);
@@ -2186,7 +2113,7 @@ function TimeTrackerScreen({ timeLogs, setTimeLogs }) {
             <div style={{ fontSize:52,fontWeight:900,color:'#D1D5DB',marginBottom:16 }}>00:00</div>
             <div style={{ display:'flex',gap:8,maxWidth:360,margin:'0 auto' }}>
               <input value={taskName} onChange={e=>setTaskName(e.target.value)} placeholder="업무 이름 입력" onKeyDown={e=>e.key==='Enter'&&startTimer()} style={{ flex:1,padding:'11px 14px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:11,fontFamily:'inherit' }}/>
-              <button onClick={startTimer} disabled={!taskName.trim()} style={{ padding:'11px 24px',borderRadius:11,border:'none',background:taskName.trim()?cfg.c:'#E5E7EB',color:'white',fontSize:14,fontWeight:700,cursor:taskName.trim()?'pointer':'default' }}>▶ 시작</button>
+              <button onClick={startTimer} disabled={!taskName.trim()} style={{ padding:'11px 24px',borderRadius:11,border:'none',background:taskName.trim()?cfg.c:'#E5E7EB',color:'white',fontSize:14,fontWeight:700,cursor:taskName.trim() ? 'pointer':'default' }}>▶ 시작</button>
             </div>
           </>
         )}
@@ -2288,7 +2215,7 @@ function NotifScreen({ user, spaces, setSpaces, notifs, setNotifs }) {
                     <span style={{ color: '#4F46E5', fontWeight: 900 }}>{n.fromName}</span>님이 워크스페이스로 초대했어요
                   </div>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0F4FF', borderRadius: 8, padding: '4px 10px', marginBottom: 8 }}>
-                    <span style={{ fontSize: 15 }}>{WS[n.spaceType]&&WS[n.spaceType].icon || '📁'}</span>
+                    <span style={{ fontSize: 15 }}>{(WS.personal&&WS.personal.icon) || '📁'}</span>
                     <span style={{ fontSize: 13, fontWeight: 800, color: '#3730A3' }}>{n.spaceName}</span>
                   </div>
                   {n.message && (
@@ -2389,7 +2316,7 @@ function CommentInput({ members, onSubmit, placeholder, accentColor }) {
           rows={2}
           style={{ flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:11,resize:'none',fontFamily:'inherit',lineHeight:1.5 }}
           onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();} }} />
-        <button onClick={submit} disabled={!text.trim()} style={{ padding:'10px 16px',borderRadius:11,border:'none',background:text.trim()?(accentColor||'#4F46E5'):'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:text.trim()?'pointer':'default',flexShrink:0,alignSelf:'flex-end' }}>전송</button>
+        <button onClick={submit} disabled={!text.trim()} style={{ padding:'10px 16px',borderRadius:11,border:'none',background:text.trim()?(accentColor||'#4F46E5'):'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:text.trim() ? 'pointer':'default',flexShrink:0,alignSelf:'flex-end' }}>전송</button>
       </div>
     </div>
   );
@@ -2453,7 +2380,7 @@ function CommentSection({ comments, members, user, onAddComment, onAddReply, onD
    WORKSPACE SCREEN (Pro — 공유 할일/캘린더/댓글 포함)
 ══════════════════════════════════════════════════════════ */
 function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
-  const cfg = WS[user.wsType] || WS.personal;
+  const cfg = WS.personal;
   const [view, setView] = useState('list');
   const [selSpace, setSelSpace] = useState(null);
   const [form, setForm] = useState({ name:'', description:'', type:user.wsType });
@@ -2544,7 +2471,7 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
 
   if (view==='detail'&&selSpace) {
     const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
-    const wCfg = WS[space.type]||WS.personal;
+    const wCfg = WS.personal;
     const isOwner = space.ownerId===user.id;
     const members = space.members||[];
     const todos = space.todos||[];
@@ -2705,7 +2632,7 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
                   <div style={{ marginBottom:14 }}>
                     <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>색상</div>
                     <div style={{ display:'flex',gap:8 }}>
-                      {EV_COLORS.map(c=><button key={c} onClick={()=>setEventForm(p=>({...p,color:c}))} style={{ width:26,height:26,borderRadius:'50%',background:c,border:eventForm.color===c?'3px solid #111827':'3px solid transparent',cursor:'pointer' }}/>)}
+                      {EV_COLORS.map(c=><button key={c} onClick={()=>setEventForm(p=>({...p,color:c}))} style={{ width:26,height:26,borderRadius:'50%',background:c,border:eventForm.color===c ? '3px solid #111827':'3px solid transparent',cursor:'pointer' }}/>)}
                     </div>
                   </div>
                   <div style={{ display:'flex',gap:8 }}>
@@ -2720,7 +2647,7 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
                   <div style={{ width:4,alignSelf:'stretch',borderRadius:2,background:ev.color||wCfg.c,flexShrink:0 }}/>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:14,fontWeight:700,color:'#111827',marginBottom:4 }}>{ev.title}</div>
-                    <div style={{ fontSize:12,color:'#6B7280' }}>{'📅 '+fmtFull(ev.date)+(ev.time?' · 🕐 '+ev.time:'')}</div>
+                    <div style={{ fontSize:12,color:'#6B7280' }}>{'📅 '+fmtFull(ev.date)+(ev.time ? ' · 🕐 '+ev.time:'')}</div>
                     <div style={{ fontSize:11,color:'#9CA3AF',marginTop:2 }}>등록: {ev.createdByName}</div>
                   </div>
                   <div style={{ display:'flex',gap:6 }}>
@@ -2796,7 +2723,7 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
         <>
           <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:12 }}>내 워크스페이스</div>
           {mySpaces.map(s=>{
-            const wCfg=WS[s.type]||WS.personal;
+            const wCfg=WS.personal;
             return (
               <div key={s.id} onClick={()=>{setSelSpace(s);setTab('members');setView('detail');setInvResult(null);setInvEmail('');}}
                 style={{ background:'white',borderRadius:14,padding:'16px 18px',border:'1px solid #F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',gap:14,marginBottom:10,boxShadow:'0 2px 8px rgba(0,0,0,.04)',transition:'all .15s' }}
@@ -2825,7 +2752,7 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
    PRO UPGRADE SCREEN
 ══════════════════════════════════════════════════════════ */
 function ProUpgradeScreen({ user, onUpgrade, onBack }) {
-  const cfg = WS[user.wsType] || WS.personal;
+  const cfg = WS.personal;
   const [plan, setPlan] = useState('annual');
   const [paying, setPaying] = useState(false);
   const [done, setDone] = useState(false);
@@ -2905,7 +2832,7 @@ function ProUpgradeScreen({ user, onUpgrade, onBack }) {
    PROFILE SCREEN
 ══════════════════════════════════════════════════════════ */
 function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, isProUser }) {
-  const cfg = WS[user.wsType] || WS.personal;
+  const cfg = WS.personal;
   const [editNick, setEditNick] = useState(false);
   const [nick, setNick] = useState(user.nickname || user.name);
   const [showDel, setShowDel] = useState(false);
@@ -2947,7 +2874,7 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
 
       {/* Info */}
       <div className="fu" style={{ background: 'white', borderRadius: 16, border: '1px solid #F3F4F6', padding: '0 18px', marginBottom: 16, animationDelay: '.08s' }}>
-        {[['이름', user.name], ['이메일', user.email], ['닉네임', user.nickname || user.name], ['워크스페이스 유형', `${WS[user.wsType]&&WS[user.wsType].icon} ${WS[user.wsType]&&WS[user.wsType].label}용`], ['플랜', isProUser ? '✨ Pro' : '무료']].map(([l, v]) => (
+        {[['이름', user.name], ['이메일', user.email], ['닉네임', user.nickname || user.name], ['워크스페이스 유형', `${WS.personal&&WS.personal.icon} ${WS.personal&&WS.personal.label}용`], ['플랜', isProUser ? '✨ Pro' : '무료']].map(([l, v]) => (
           <div key={l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: '1px solid #F9FAFB' }}>
             <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 600 }}>{l}</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{v}</span>
@@ -2962,7 +2889,7 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
       <button onClick={() => setShowDel(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px solid #F3F4F6', background: 'white', color: '#9CA3AF', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>회원 탈퇴</button>
 
       {showDel && (
-        <Modal title="정말 탈퇴하시겠어요?" onClose={() => setShowDel(false)} width={360}>
+        <Modal title="정말 탈퇴하시겠어요 ? " onClose={() => setShowDel(false)} width={360}>
           <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 18, fontSize: 13, color: '#DC2626', fontWeight: 600, textAlign: 'center' }}>모든 데이터가 영구 삭제됩니다.</div>
           <div style={{ display: 'flex', gap: 10 }}>
             <Btn onClick={() => setShowDel(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
@@ -2975,11 +2902,92 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
 }
 
 /* ══════════════════════════════════════════════════════════
+   EXAM SCREEN — 시험 D-day 트래커
+══════════════════════════════════════════════════════════ */
+function ExamScreen({ exams, setExams }) {
+  const cfg = WS.personal;
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ subject:'', date:'', type:'중간고사', memo:'' });
+
+  const addExam = () => {
+    if (!form.subject.trim() || !form.date) return;
+    setExams(function(p) { return [...p, { id:uid(), ...form, subject:form.subject.trim(), createdAt:new Date().toISOString() }].sort(function(a,b){return a.date.localeCompare(b.date);}); });
+    setForm({ subject:'', date:'', type:'중간고사', memo:'' });
+    setShowForm(false);
+  };
+
+  const getDday = function(dateStr) {
+    var today = new Date(); today.setHours(0,0,0,0);
+    var exam = new Date(dateStr + 'T00:00:00');
+    return Math.ceil((exam - today) / (1000*60*60*24));
+  };
+
+  var ddayColor = function(d) { return d<=0 ? '#DC2626':d<=3 ? '#D97706':d<=7 ? '#2563EB':'#059669'; };
+  var ddayBg = function(d) { return d<=0 ? '#FEF2F2':d<=3 ? '#FFFBEB':d<=7 ? '#EFF6FF':'#ECFDF5'; };
+  var ddayLabel = function(d) { return d<0?('D+'+Math.abs(d)):d===0 ? 'D-Day!':('D-'+d); };
+
+  var typeColors = { '중간고사':'#7C3AED', '기말고사':'#DC2626', '모의고사':'#2563EB', '수행평가':'#059669', '쪽지시험':'#D97706' };
+
+  return (
+    <div style={{ padding:'24px', height:'100%', overflowY:'auto' }}>
+      <div className="fu" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24 }}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:900, color:'#111827' }}>📋 시험 관리</div>
+          <div style={{ fontSize:13, color:'#6B7280', marginTop:2 }}>시험 날짜를 등록하면 D-day가 상단에 표시돼요</div>
+        </div>
+        <button onClick={function(){setShowForm(function(p){return !p;});}} style={{ padding:'9px 16px', borderRadius:10, border:'none', background:cfg.c, color:'white', fontSize:13, fontWeight:700, cursor:'pointer' }}>+ 시험 추가</button>
+      </div>
+
+      {showForm && (
+        <div className="fu" style={{ background:'white', borderRadius:16, padding:'18px', border:'1.5px solid '+cfg.m, marginBottom:20 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:'#111827', marginBottom:14 }}>새 시험 등록</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            <Field value={form.subject} onChange={function(v){setForm(function(p){return {...p,subject:v};});}} label="과목" placeholder="예: 수학, 영어" required />
+            <Select label="유형" value={form.type} onChange={function(v){setForm(function(p){return {...p,type:v};});}} options={['중간고사','기말고사','모의고사','수행평가','쪽지시험'].map(function(v){return {value:v,label:v};})} />
+          </div>
+          <Field value={form.date} onChange={function(v){setForm(function(p){return {...p,date:v};});}} label="시험 날짜" type="date" required />
+          <Field value={form.memo} onChange={function(v){setForm(function(p){return {...p,memo:v};});}} label="메모" placeholder="시험 범위, 준비사항 등 (선택)" />
+          <div style={{ display:'flex', gap:8 }}>
+            <Btn onClick={function(){setShowForm(false);}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={addExam} bg={cfg.c} disabled={!form.subject.trim()||!form.date} style={{ flex:2 }}>등록하기</Btn>
+          </div>
+        </div>
+      )}
+
+      {exams.length === 0 && <Empty icon="📋" title="등록된 시험이 없어요" desc="시험을 추가하면 D-day가 상단 오른쪽에 항상 표시돼요" />}
+
+      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        {exams.map(function(e) {
+          var d = getDday(e.date);
+          var isPast = d < 0;
+          return (
+            <div key={e.id} className="fu" style={{ background:'white', borderRadius:16, padding:'18px 20px', border:'1px solid #F3F4F6', display:'flex', alignItems:'center', gap:16, opacity:isPast?0.6:1, boxShadow:'0 2px 8px rgba(0,0,0,.04)' }}>
+              <div style={{ width:70, height:70, borderRadius:16, background:ddayBg(d), display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <div style={{ fontSize:20, fontWeight:900, color:ddayColor(d) }}>{ddayLabel(d)}</div>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                  <span style={{ fontSize:16, fontWeight:900, color:'#111827' }}>{e.subject}</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:typeColors[e.type]||cfg.c, background:'#F3F4F6', padding:'2px 8px', borderRadius:99 }}>{e.type}</span>
+                </div>
+                <div style={{ fontSize:13, color:'#6B7280' }}>📅 {e.date}{isPast ? ' · 종료':d===0 ? ' · 오늘!':''}</div>
+                {e.memo && <div style={{ fontSize:12, color:'#9CA3AF', marginTop:4 }}>{e.memo}</div>}
+              </div>
+              <button onClick={function(){setExams(function(p){return p.filter(function(x){return x.id!==e.id;});});}} style={{ background:'none', border:'none', color:'#D1D5DB', cursor:'pointer', fontSize:16 }}>✕</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    AI CHAT SCREEN — Workly 전용 AI 어시스턴트
    사용자의 실제 데이터(할일/목표/습관/성적 등)를 알고 대화
 ══════════════════════════════════════════════════════════ */
 function AIChatScreen({ user, todos, events, goals, habits, grades, journals, timeLogs, spaces }) {
-  const cfg = WS[user.wsType] || WS.personal;
+  const cfg = WS.personal;
   const [messages, setMessages] = useState([{
     role: 'assistant',
     content: '안녕하세요, ' + (user.nickname || user.name) + '님! 👋 저는 Workly AI예요.\n\n지금 등록된 할일 ' + todos.length + '개, 일정 ' + events.length + '개를 알고 있어요. 무엇이든 물어보세요!',
@@ -3112,7 +3120,7 @@ function AIChatScreen({ user, todos, events, goals, habits, grades, journals, ti
   };
 
   var quickActions = {
-    school:   ['오늘 할일 정리해줘', '이번 주 시험 준비 계획 짜줘', '집중해야 할 과제가 뭐야?', '성적 올리는 방법 알려줘'],
+    school:   ['오늘 할일 정리해줘', '이번 주 시험 준비 계획 짜줘', '집중해야 할 과제가 뭐야 ? ', '성적 올리는 방법 알려줘'],
     company:  ['오늘 업무 우선순위 정해줘', '이번 주 진행 상황 요약해줘', '할일 중 급한 것만 골라줘', '업무 효율 높이는 방법'],
     personal: ['오늘 할일 정리해줘', '목표 달성률 분석해줘', '습관 유지 팁 알려줘', '이번 주 잘한 점 알려줘'],
   };
@@ -3278,7 +3286,7 @@ function TemplateScreen({ user, onUpdate }) {
           {Object.values(THEMES).map(t => {
             const active = selTheme === t.id;
             return (
-              <button key={t.id} onClick={() => setSelTheme(t.id)} style={{ padding:'14px 10px',borderRadius:16,border:`2.5px solid ${active?((t.preview&&t.preview[2])||'#2563EB'):'transparent'}`,background:t.sidebarBg,cursor:'pointer',textAlign:'center',boxShadow:active?'0 4px 16px rgba(0,0,0,.12)':'0 2px 6px rgba(0,0,0,.06)',transition:'all .2s',position:'relative' }}>
+              <button key={t.id} onClick={() => setSelTheme(t.id)} style={{ padding:'14px 10px',borderRadius:16,border:`2.5px solid ${active?((t.preview&&t.preview[2])||'#2563EB'):'transparent'}`,background:t.sidebarBg,cursor:'pointer',textAlign:'center',boxShadow:active ? '0 4px 16px rgba(0,0,0,.12)':'0 2px 6px rgba(0,0,0,.06)',transition:'all .2s',position:'relative' }}>
                 {active&&<div style={{ position:'absolute',top:-6,right:-6,width:18,height:18,borderRadius:'50%',background:'#111827',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:9,fontWeight:900 }}>✓</div>}
                 {/* 색상 팔레트 미리보기 */}
                 <div style={{ display:'flex',gap:4,justifyContent:'center',marginBottom:8 }}>
@@ -3300,9 +3308,9 @@ function TemplateScreen({ user, onUpdate }) {
           {Object.values(ICON_SETS).map(s => {
             const active = selIcons === s.id;
             return (
-              <button key={s.id} onClick={() => setSelIcons(s.id)} style={{ padding:'16px 10px',borderRadius:16,border:`2.5px solid ${active?'#2563EB':'#F3F4F6'}`,background:active?'#EFF6FF':'white',cursor:'pointer',textAlign:'center',transition:'all .2s',boxShadow:active?'0 4px 12px rgba(37,99,235,.15)':'none' }}>
+              <button key={s.id} onClick={() => setSelIcons(s.id)} style={{ padding:'16px 10px',borderRadius:16,border:`2.5px solid ${active ? '#2563EB':'#F3F4F6'}`,background:active ? '#EFF6FF':'white',cursor:'pointer',textAlign:'center',transition:'all .2s',boxShadow:active ? '0 4px 12px rgba(37,99,235,.15)':'none' }}>
                 <div style={{ fontSize:26,marginBottom:6 }}>{s.preview}</div>
-                <div style={{ fontSize:13,fontWeight:700,color:active?'#2563EB':'#374151' }}>{s.name}</div>
+                <div style={{ fontSize:13,fontWeight:700,color:active ? '#2563EB':'#374151' }}>{s.name}</div>
                 {/* 아이콘 샘플 */}
                 <div style={{ display:'flex',gap:4,justifyContent:'center',marginTop:8 }}>
                   {['home','todo','cal'].map(id=><span key={id} style={{ fontSize:14 }}>{s[id]}</span>)}
@@ -3326,7 +3334,7 @@ function TemplateScreen({ user, onUpdate }) {
    MAIN APP LAYOUT
 ══════════════════════════════════════════════════════════ */
 function MainApp({ user, setUser, accounts, setAccounts }) {
-  const cfg = WS[user.wsType] || WS.personal;
+  const cfg = WS.personal;
   const [screen, setScreen] = useState('home');
   const [showPro, setShowPro] = useState(false);
   const [showProGate, setShowProGate] = useState(false); // 무료 유저가 협업 클릭 시
@@ -3349,6 +3357,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   const [timeLogs, setTimeLogsRaw] = useState(() => ld(`wl_time_${user.id}`, []));
   // 이 유저에게 온 알림 (초대 등)
   const [notifs, setNotifsRaw] = useState(() => ld(`wl_notifs_${user.id}`, []));
+  const [exams, setExamsRaw] = useState(() => ld(`wl_exams_${user.id}`, []));
 
   const setTodos = (v) => { setTodosRaw(v); sv(`wl_todos_${user.id}`, typeof v==='function'?v(todos):v); };
   const setEvents = (v) => { setEventsRaw(v); sv(`wl_events_${user.id}`, typeof v==='function'?v(events):v); };
@@ -3368,6 +3377,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
     sv('wl_spaces', val);
     if (window.__worklyBC) window.__worklyBC.postMessage('spaces');
   };
+  const setExams = (v) => { const val=typeof v==='function'?v(exams):v; setExamsRaw(val); sv(`wl_exams_${user.id}`,val); };
   const setNotifs = (v) => {
     const val=typeof v==='function'?v(notifs):v;
     setNotifsRaw(val);
@@ -3478,18 +3488,12 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   const renderScreen = () => {
     switch (screen) {
       case 'home':     return <HomeScreen user={user} todos={todos} events={events} setScreen={setScreen} />;
-      case 'todo':     return <TodoScreen todos={todos} setTodos={setTodos} wsType={user.wsType} />;
+      case 'todo':     return <TodoScreen todos={todos} setTodos={setTodos} wsType='personal' />;
+      case 'exam':     return <ExamScreen exams={exams} setExams={setExams} />;
       case 'cal':      return <CalendarScreen events={events} setEvents={setEvents} wsType={user.wsType} />;
-      case 'assign':   return <AssignmentsScreen assigns={assigns} setAssigns={setAssigns} />;
-      case 'notes':    return <NotesScreen notes={notes} setNotes={setNotes} />;
-      case 'meetings': return <MeetingsScreen meetings={meetings} setMeetings={setMeetings} todos={todos} setTodos={setTodos} />;
-      case 'projects': return <ProjectsScreen projects={projects} setProjects={setProjects} />;
       case 'goals':    return <GoalsScreen goals={goals} setGoals={setGoals} />;
       case 'jour':     return <JournalScreen journals={journals} setJournals={setJournals} />;
       case 'habits':   return <HabitsScreen habits={habits} setHabits={setHabits} />;
-      case 'grades':   return <GradesScreen grades={grades} setGrades={setGrades} />;
-      case 'attend':   return <AttendanceScreen attend={attend} setAttend={setAttend} />;
-      case 'timetrack':return <TimeTrackerScreen timeLogs={timeLogs} setTimeLogs={setTimeLogs} />;
       case 'workspace':return <WorkspaceScreen user={user} accounts={accounts} spaces={spaces} setSpaces={setSpaces} />;
       case 'notif':    return <NotifScreen user={user} spaces={spaces} setSpaces={setSpaces} notifs={notifs} setNotifs={setNotifs} />;
       case 'ai':       return <AIChatScreen user={user} todos={todos} events={events} goals={goals} habits={habits} grades={grades} journals={journals} timeLogs={timeLogs} spaces={spaces} />;
@@ -3502,7 +3506,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   if (showPro) return <ProUpgradeScreen user={user} onUpgrade={() => { setIsProUser(true); updateUser({isPro:true}); setShowPro(false); }} onBack={() => setShowPro(false)} />;
 
   return (
-    <div data-wl-dark={isDark?'true':'false'} style={{ display:'flex',height:'100vh',background:DK.pageBg||'#F8FAFC',transition:'background .3s,color .3s' }}>
+    <div style={{ display:'flex',height:'100vh',background:DK.pageBg||'#F8FAFC',transition:'background .3s,color .3s' }}>
       {/* ── 사이드바 ── */}
       <div className="sr" style={{ width:sidebarOpen?220:64,flexShrink:0,background:DK.sidebarBg||themeObj.sidebarBg,borderRight:'1px solid '+(DK.sidebarBorder||themeObj.sidebarBorder),display:'flex',flexDirection:'column',transition:'width .25s',overflow:'hidden' }}>
         {/* 로고 */}
@@ -3524,11 +3528,11 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
             const isLocked = id === 'workspace' && !isProUser;
             return (
               <button key={id} onClick={() => handleNavClick(id)} title={n} style={{
-                display:'flex',alignItems:'center',gap:10,padding:sidebarOpen?'10px 12px':'10px',borderRadius:10,border:'none',
+                display:'flex',alignItems:'center',gap:10,padding:sidebarOpen ? '10px 12px':'10px',borderRadius:10,border:'none',
                 background:active?(themeObj.navActiveBg||cfg.l):'transparent',
                 color:active?(themeObj.navTextActive||cfg.c):isLocked?(themeObj.navTextColor||'#9CA3AF'):(themeObj.navTextColor||'#6B7280'),
                 fontWeight:active?800:600,fontSize:14,cursor:'pointer',transition:'all .12s',whiteSpace:'nowrap',
-                justifyContent:sidebarOpen?'flex-start':'center',position:'relative',
+                justifyContent:sidebarOpen ? 'flex-start':'center',position:'relative',
               }}>
                 <span style={{ fontSize:17,flexShrink:0 }}>{e}</span>
                 {sidebarOpen&&n}
@@ -3547,14 +3551,14 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
             );
           })}
           {!isProUser&&sidebarOpen&&(
-            <button onClick={() => setShowPro(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:'none',background:isDark?'#2D2200':'#FFFBEB',color:'#D97706',fontWeight:700,fontSize:13,cursor:'pointer',marginTop:8 }}>
+            <button onClick={() => setShowPro(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:'none',background:isDark ? '#2D2200':'#FFFBEB',color:'#D97706',fontWeight:700,fontSize:13,cursor:'pointer',marginTop:8 }}>
               <span style={{ fontSize:17 }}>⚡️</span>Pro 업그레이드
             </button>
           )}
         </nav>
         {/* 사이드바 접기 */}
-        <button onClick={() => setSidebarOpen(s=>!s)} style={{ padding:'14px',border:'none',background:'none',color:'#9CA3AF',cursor:'pointer',fontSize:16,borderTop:'1px solid #F9FAFB',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'flex-end':'center',gap:8 }}>
-          {sidebarOpen?'←':'→'}
+        <button onClick={() => setSidebarOpen(s=>!s)} style={{ padding:'14px',border:'none',background:'none',color:'#9CA3AF',cursor:'pointer',fontSize:16,borderTop:'1px solid #F9FAFB',display:'flex',alignItems:'center',justifyContent:sidebarOpen ? 'flex-end':'center',gap:8 }}>
+          {sidebarOpen ? '←':'→'}
         </button>
       </div>
 
@@ -3562,16 +3566,36 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
       <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:DK.pageBg||themeObj.pageBg }}>
         {/* 탑바 */}
         <div style={{ height:52,flexShrink:0,background:DK.headerBg||themeObj.cardBg||'white',borderBottom:'1px solid '+(DK.headerBorder||themeObj.sidebarBorder||'#F3F4F6'),display:'flex',alignItems:'center',padding:'0 20px',justifyContent:'space-between' }}>
-          <div style={{ fontSize:13,fontWeight:600,color:DK.textSecondary||'#9CA3AF' }}>
-            {(navItems.find(n=>n.id===screen)||{n:'홈'}).n}
+          <div style={{ display:'flex',alignItems:'center',gap:10,flex:1,overflow:'hidden' }}>
+            <div style={{ fontSize:13,fontWeight:600,color:DK.textSecondary||'#9CA3AF',flexShrink:0 }}>
+              {(navItems.find(n=>n.id===screen)||{n:'홈'}).n}
+            </div>
+            {/* D-day 배지 + 오늘 이벤트 배지 */}
+            <div style={{ display:'flex',gap:5,overflow:'hidden' }}>
+              {exams.filter(e=>{
+                var t=new Date();t.setHours(0,0,0,0);
+                return t<=new Date(e.date+'T00:00:00');
+              }).map(e=>{
+                var t=new Date();t.setHours(0,0,0,0);
+                var d=Math.ceil((new Date(e.date+'T00:00:00')-t)/ 86400000);
+                return <span key={e.id} onClick={()=>setScreen('exam')} style={{ flexShrink:0,fontSize:11,fontWeight:800,color:d===0 ? '#DC2626':d<=3 ? '#D97706':'#4F46E5',background:d===0 ? '#FEF2F2':d<=3 ? '#FFFBEB':'#EEF2FF',padding:'3px 9px',borderRadius:99,cursor:'pointer',whiteSpace:'nowrap' }}>
+                  📋 {e.subject} {d===0 ? 'D-Day!' : 'D-'+d}
+                </span>;
+              })}
+              {events.filter(ev=>ev.date===new Date().toISOString().split('T')[0]).map(ev=>(
+                <span key={ev.id} onClick={()=>setScreen('cal')} style={{ flexShrink:0,fontSize:11,fontWeight:700,color:'white',background:ev.color||cfg.c,padding:'3px 9px',borderRadius:99,cursor:'pointer',whiteSpace:'nowrap',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis' }}>
+                  📅 {ev.title}{ev.time ? ' '+ev.time : ''}
+                </span>
+              ))}
+            </div>
           </div>
           <div style={{ display:'flex',alignItems:'center',gap:10 }}>
             {isProUser&&<Badge color={cfg.d} bg={cfg.l}>✨ Pro</Badge>}
             {/* 다크모드 토글 */}
-            <button onClick={()=>updateUser({darkMode:!isDark})} title={isDark?'라이트 모드':'다크 모드'} style={{ width:36,height:36,borderRadius:10,border:'1.5px solid '+(DK.headerBorder||'#F3F4F6'),background:isDark?'#334155':'#F9FAFB',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:'all .2s' }}>
-              {isDark?'☀️':'🌙'}
+            <button onClick={()=>updateUser({darkMode:!isDark})} title={isDark ? '라이트 모드':'다크 모드'} style={{ width:36,height:36,borderRadius:10,border:'1.5px solid '+(DK.headerBorder||'#F3F4F6'),background:isDark ? '#334155':'#F9FAFB',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:'all .2s' }}>
+              {isDark ? '☀️':'🌙'}
             </button>
-            {/* 알림 벨 버튼 */}}
+            {/* 알림 벨 버튼 */}
             <button onClick={() => handleNavClick('notif')} title="알림함" style={{ position:'relative',width:36,height:36,borderRadius:10,border:`1.5px solid ${screen==='notif'?cfg.c:'#F3F4F6'}`,background:screen==='notif'?cfg.l:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17 }}>
               🔔
               {unreadCount>0&&(
