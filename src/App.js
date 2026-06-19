@@ -2493,6 +2493,10 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
             <div style={{ fontSize:17,fontWeight:900,color:'#111827' }}>{space.name}</div>
             <div style={{ fontSize:12,color:'#9CA3AF' }}>{wCfg.icon} {wCfg.label}용 · {members.length}명</div>
           </div>
+          <div style={{ display:'flex',alignItems:'center',gap:5,background:'#ECFDF5',borderRadius:99,padding:'4px 10px' }}>
+            <div style={{ width:6,height:6,borderRadius:'50%',background:'#059669',animation:'pulse 1.5s ease-in-out infinite' }}/>
+            <span style={{ fontSize:11,fontWeight:700,color:'#059669' }}>실시간 동기화 중</span>
+          </div>
         </div>
         <div style={{ display:'flex',borderBottom:'1px solid #F3F4F6',background:'white',flexShrink:0,padding:'0 16px',overflowX:'auto' }}>
           {TABS.map(t=>(
@@ -2986,6 +2990,122 @@ function ExamScreen({ exams, setExams }) {
    AI CHAT SCREEN — Workly 전용 AI 어시스턴트
    사용자의 실제 데이터(할일/목표/습관/성적 등)를 알고 대화
 ══════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+   SEARCH OVERLAY — 전체 통합 검색
+══════════════════════════════════════════════════════════ */
+function SearchOverlay({ todos, events, goals, habits, exams, journals, onClose, onNavigate }) {
+  const cfg = WS.personal;
+  const [q, setQ] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(function() {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  var results = [];
+  if (q.trim().length > 0) {
+    var kw = q.trim().toLowerCase();
+
+    todos.forEach(function(t) {
+      if (t.title.toLowerCase().includes(kw) || (t.notes && t.notes.toLowerCase().includes(kw))) {
+        results.push({ type:'todo', icon:'✅', label:t.title, sub:t.status==='done' ? '완료' : t.dueDate ? '마감 '+t.dueDate : '할일', screen:'todo', item:t });
+      }
+    });
+    events.forEach(function(e) {
+      if (e.title.toLowerCase().includes(kw)) {
+        results.push({ type:'event', icon:'📅', label:e.title, sub:e.date+(e.time ? ' '+e.time : ''), screen:'cal', item:e });
+      }
+    });
+    exams.forEach(function(e) {
+      if (e.subject.toLowerCase().includes(kw) || (e.memo && e.memo.toLowerCase().includes(kw))) {
+        var d = Math.ceil((new Date(e.date+'T00:00:00')-new Date().setHours(0,0,0,0))/86400000);
+        results.push({ type:'exam', icon:'📋', label:e.subject, sub:e.type+' · '+(d>=0 ? 'D-'+d : '종료'), screen:'exam', item:e });
+      }
+    });
+    goals.forEach(function(g) {
+      if (g.title.toLowerCase().includes(kw)) {
+        results.push({ type:'goal', icon:'🎯', label:g.title, sub:'진행률 '+g.progress+'%', screen:'goals', item:g });
+      }
+    });
+    habits.forEach(function(h) {
+      if (h.name.toLowerCase().includes(kw)) {
+        results.push({ type:'habit', icon:h.icon||'🔥', label:h.name, sub:'습관', screen:'habits', item:h });
+      }
+    });
+    journals.forEach(function(j) {
+      if (j.title.toLowerCase().includes(kw) || (j.content && j.content.toLowerCase().includes(kw))) {
+        results.push({ type:'jour', icon:'📖', label:j.title, sub:j.date, screen:'jour', item:j });
+      }
+    });
+  }
+
+  var TYPE_LABELS = { todo:'할일', event:'일정', exam:'시험', goal:'목표', habit:'습관', jour:'일기' };
+  var TYPE_COLORS = { todo:'#2563EB', event:'#059669', exam:'#DC2626', goal:'#7C3AED', habit:'#D97706', jour:'#0891B2' };
+
+  return (
+    <div onClick={function(e){if(e.target===e.currentTarget)onClose();}} style={{ position:'fixed',inset:0,zIndex:999,background:'rgba(0,0,0,.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'60px 20px 20px' }}>
+      <div className="pp" style={{ background:'white',borderRadius:20,width:'100%',maxWidth:580,boxShadow:'0 24px 64px rgba(0,0,0,.2)',overflow:'hidden' }}>
+        {/* 검색창 */}
+        <div style={{ display:'flex',alignItems:'center',gap:12,padding:'16px 18px',borderBottom:'1px solid #F3F4F6' }}>
+          <span style={{ fontSize:18,color:'#9CA3AF' }}>🔍</span>
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={function(e){setQ(e.target.value);}}
+            placeholder="할일, 일정, 목표, 시험, 습관, 일기 검색..."
+            style={{ flex:1,fontSize:16,border:'none',outline:'none',fontFamily:'inherit',color:'#111827' }}
+          />
+          {q && <button onClick={function(){setQ('');inputRef.current&&inputRef.current.focus();}} style={{ background:'none',border:'none',color:'#9CA3AF',cursor:'pointer',fontSize:18 }}>✕</button>}
+          <button onClick={onClose} style={{ background:'#F3F4F6',border:'none',borderRadius:8,padding:'5px 10px',fontSize:12,color:'#6B7280',cursor:'pointer' }}>ESC</button>
+        </div>
+
+        {/* 결과 */}
+        <div style={{ maxHeight:400,overflowY:'auto' }}>
+          {q.trim().length === 0 && (
+            <div style={{ padding:'40px 20px',textAlign:'center',color:'#9CA3AF' }}>
+              <div style={{ fontSize:32,marginBottom:10 }}>🔍</div>
+              <div style={{ fontSize:14,fontWeight:600 }}>검색어를 입력하세요</div>
+              <div style={{ fontSize:12,marginTop:6 }}>할일, 일정, 목표, 시험, 습관, 일기를 한번에 검색해요</div>
+            </div>
+          )}
+          {q.trim().length > 0 && results.length === 0 && (
+            <div style={{ padding:'40px 20px',textAlign:'center',color:'#9CA3AF' }}>
+              <div style={{ fontSize:32,marginBottom:10 }}>😅</div>
+              <div style={{ fontSize:14,fontWeight:600 }}>"{q}"에 대한 결과가 없어요</div>
+            </div>
+          )}
+          {results.map(function(r, i) {
+            return (
+              <button key={i} onClick={function(){onNavigate(r.screen);onClose();}}
+                style={{ width:'100%',padding:'12px 18px',border:'none',background:'none',display:'flex',alignItems:'center',gap:12,cursor:'pointer',textAlign:'left',borderBottom:'1px solid #F9FAFB' }}
+                onMouseEnter={function(e){e.currentTarget.style.background='#F9FAFB';}}
+                onMouseLeave={function(e){e.currentTarget.style.background='none';}}>
+                <div style={{ width:36,height:36,borderRadius:10,background:(TYPE_COLORS[r.type]||cfg.c)+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0 }}>
+                  {r.icon}
+                </div>
+                <div style={{ flex:1,overflow:'hidden' }}>
+                  <div style={{ fontSize:14,fontWeight:700,color:'#111827',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>
+                    {r.label}
+                  </div>
+                  <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>{r.sub}</div>
+                </div>
+                <span style={{ fontSize:11,fontWeight:700,color:TYPE_COLORS[r.type]||cfg.c,background:(TYPE_COLORS[r.type]||cfg.c)+'18',padding:'3px 8px',borderRadius:99,flexShrink:0 }}>
+                  {TYPE_LABELS[r.type]||r.type}
+                </span>
+              </button>
+            );
+          })}
+          {results.length > 0 && (
+            <div style={{ padding:'10px 18px',fontSize:11,color:'#9CA3AF',textAlign:'right' }}>
+              {results.length}개 결과
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AIChatScreen({ user, todos, events, goals, habits, grades, journals, timeLogs, spaces }) {
   const cfg = WS.personal;
   const [messages, setMessages] = useState([{
@@ -3338,6 +3458,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   const [screen, setScreen] = useState('home');
   const [showPro, setShowPro] = useState(false);
   const [showProGate, setShowProGate] = useState(false); // 무료 유저가 협업 클릭 시
+  const [showSearch, setShowSearch] = useState(false);
   const [isProUser, setIsProUser] = useState(user.isPro || false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -3408,12 +3529,12 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
     return () => { bc.close(); delete window.__worklyBC; };
   }, [user.id]);
 
-  // 3) 폴링 백업 (3초): BroadcastChannel 미지원 환경용
+  // 3) 폴링 백업 (1초): 협업 실시간 동기화
   useEffect(() => {
     const interval = setInterval(() => {
       setNotifsRaw(ld('wl_notifs_' + user.id, []));
       setSpacesRaw(ld('wl_spaces', []));
-    }, 3000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [user.id]);
 
@@ -3591,6 +3712,10 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
           </div>
           <div style={{ display:'flex',alignItems:'center',gap:10 }}>
             {isProUser&&<Badge color={cfg.d} bg={cfg.l}>✨ Pro</Badge>}
+            {/* 검색 버튼 */}
+            <button onClick={function(){setShowSearch(true);}} title="전체 검색" style={{ width:36,height:36,borderRadius:10,border:'1.5px solid '+(DK.headerBorder||'#F3F4F6'),background:DK.headerBg||'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17 }}>
+              🔍
+            </button>
             {/* 다크모드 토글 */}
             <button onClick={()=>updateUser({darkMode:!isDark})} title={isDark ? '라이트 모드':'다크 모드'} style={{ width:36,height:36,borderRadius:10,border:'1.5px solid '+(DK.headerBorder||'#F3F4F6'),background:isDark ? '#334155':'#F9FAFB',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:'all .2s' }}>
               {isDark ? '☀️':'🌙'}
@@ -3617,11 +3742,20 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
         </div>
       </div>
 
-      {/* ── Pro 게이트 모달 (무료 유저가 협업 탭 클릭 시) ── */}
+      {/* ── Pro 게이트 모달 ── */}
       {showProGate&&(
         <ProGateModal
           onClose={() => setShowProGate(false)}
           onUpgrade={() => { setShowProGate(false); setShowPro(true); }}
+        />
+      )}
+      {/* ── 전체 검색 오버레이 ── */}
+      {showSearch&&(
+        <SearchOverlay
+          todos={todos} events={events} goals={goals}
+          habits={habits} exams={exams} journals={journals}
+          onClose={() => setShowSearch(false)}
+          onNavigate={(screen) => setScreen(screen)}
         />
       )}
     </div>
