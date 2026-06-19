@@ -2170,226 +2170,185 @@ function TimeTrackerScreen({ timeLogs, setTimeLogs }) {
    NOTIF SCREEN — 알림함 (워크스페이스 초대 수락/거절)
 ══════════════════════════════════════════════════════════ */
 function NotifScreen({ user, spaces, setSpaces, notifs, setNotifs }) {
+  const cfg = WS.personal;
+  const [codeModal, setCodeModal] = useState(null); // {notif}
+  const [codeInput, setCodeInput] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [codeSuccess, setCodeSuccess] = useState(false);
+
   const acceptInvite = (notif) => {
-    const updated = spaces.map(s => {
+    const updated = spaces.map(function(s) {
       if (s.id !== notif.spaceId) return s;
-      if (s.members.find(m => m.id === user.id)) return s;
-      return { ...s, members: [...s.members, { id: user.id, name: user.nickname || user.name, role: 'member' }] };
+      if (s.members && s.members.find(function(m) { return m.id === user.id; })) return s;
+      return { ...s, members: [...(s.members||[]), { id: user.id, name: user.nickname||user.name, role: 'member' }] };
     });
-    setSpaces(updated);
-    sv('wl_spaces', updated);
-    const upd = notifs.map(n => n.id === notif.id ? { ...n, status: 'accepted', read: true } : n);
-    setNotifs(upd);
-    sv(`wl_notifs_${user.id}`, upd);
+    setSpaces(updated); sv('wl_spaces', updated);
+    setNotifs(notifs.map(function(n) { return n.id===notif.id ? {...n, status:'accepted', read:true} : n; }));
   };
 
-  const declineInvite = (notif) => {
-    const upd = notifs.map(n => n.id === notif.id ? { ...n, status: 'declined', read: true } : n);
-    setNotifs(upd);
-    sv(`wl_notifs_${user.id}`, upd);
+  const rejectInvite = (notif) => {
+    setNotifs(notifs.map(function(n) { return n.id===notif.id ? {...n, status:'rejected', read:true} : n; }));
   };
 
-  const pending = notifs.filter(n => n.status === 'pending');
-  const handled = notifs.filter(n => n.status !== 'pending');
+  const openCodeModal = (notif) => {
+    setCodeModal(notif);
+    setCodeInput('');
+    setCodeError('');
+    setCodeSuccess(false);
+  };
+
+  const submitCode = () => {
+    if (!codeModal) return;
+    const space = spaces.find(function(s) { return s.id === codeModal.spaceId; });
+    if (!space) { setCodeError('워크스페이스를 찾을 수 없어요.'); return; }
+    const inputCode = codeInput.trim().toUpperCase();
+    const spaceCode = (space.inviteCode||'').toUpperCase();
+    if (inputCode === spaceCode) {
+      // 코드 일치 → 워크스페이스 참여
+      const updated = spaces.map(function(s) {
+        if (s.id !== space.id) return s;
+        if (s.members && s.members.find(function(m) { return m.id === user.id; })) return s;
+        return { ...s, members: [...(s.members||[]), { id: user.id, name: user.nickname||user.name, role: 'member' }] };
+      });
+      setSpaces(updated); sv('wl_spaces', updated);
+      setNotifs(notifs.map(function(n) { return n.id===codeModal.id ? {...n, status:'accepted', read:true} : n; }));
+      setCodeSuccess(true);
+      setTimeout(function() { setCodeModal(null); setCodeSuccess(false); }, 1800);
+    } else {
+      setCodeError('코드가 일치하지 않아요. 다시 확인해주세요.');
+    }
+  };
+
+  const sorted = [...notifs].sort(function(a,b) { return new Date(b.createdAt)-new Date(a.createdAt); });
+  const unread = sorted.filter(function(n) { return !n.read; }).length;
+
+  const markRead = (id) => {
+    setNotifs(notifs.map(function(n) { return n.id===id ? {...n,read:true} : n; }));
+  };
+
+  if (sorted.length === 0) return (
+    <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <Empty icon="🔔" title="알림이 없어요" desc="초대나 활동 알림이 여기 표시돼요"/>
+    </div>
+  );
 
   return (
-    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
-      <div className="fu" style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>🔔 알림함</div>
-        <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>워크스페이스 초대 알림이 여기 표시돼요</div>
-      </div>
-
-      {notifs.length === 0 && <Empty icon="🔔" title="아직 알림이 없어요" desc="누군가 워크스페이스에 초대하면 여기서 확인할 수 있어요" />}
-
-      {pending.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>새 초대 {pending.length}건</div>
-          {pending.map(n => (
-            <div key={n.id} className="fu" style={{ background: 'white', borderRadius: 18, padding: '20px', border: '1.5px solid #E0E7FF', marginBottom: 14, boxShadow: '0 4px 16px rgba(99,102,241,.1)' }}>
-              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 16 }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg,#6366F1,#2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
-                  {(n.fromName || '?')[0]}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 5 }}>
-                    <span style={{ color: '#4F46E5', fontWeight: 900 }}>{n.fromName}</span>님이 워크스페이스로 초대했어요
-                  </div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0F4FF', borderRadius: 8, padding: '4px 10px', marginBottom: 8 }}>
-                    <span style={{ fontSize: 15 }}>{(WS.personal&&WS.personal.icon) || '📁'}</span>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#3730A3' }}>{n.spaceName}</span>
-                  </div>
-                  {n.message && (
-                    <div style={{ fontSize: 13, color: '#6B7280', background: '#F9FAFB', borderRadius: 10, padding: '10px 14px', lineHeight: 1.6, borderLeft: '3px solid #C7D2FE' }}>
-                      "{n.message}"
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>{timeAgo(n.createdAt)}</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => declineInvite(n)} style={{ flex: 1, padding: '11px', borderRadius: 11, border: '1.5px solid #E5E7EB', background: 'white', color: '#6B7280', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>거절하기</button>
-                <button onClick={() => acceptInvite(n)} style={{ flex: 2, padding: '11px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#4F46E5,#2563EB)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  ✓ 수락하고 참여하기
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {handled.length > 0 && (
+    <div style={{ padding:'24px', height:'100%', overflowY:'auto' }}>
+      <div className="fu" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>지난 알림</div>
-          {handled.map(n => (
-            <div key={n.id} style={{ background: '#F9FAFB', borderRadius: 14, padding: '14px 16px', border: '1px solid #F3F4F6', marginBottom: 10 }}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#9CA3AF', flexShrink: 0 }}>{(n.fromName||'?')[0]}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#9CA3AF' }}>
-                    <span style={{ color:'#6B7280',fontWeight:700 }}>{n.fromName}</span>님의 <span style={{ color:'#6B7280',fontWeight:700 }}>{n.spaceName}</span> 초대
-                  </div>
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: n.status==='accepted'?'#059669':'#EF4444', background: n.status==='accepted'?'#ECFDF5':'#FEF2F2', padding: '3px 10px', borderRadius: 99, flexShrink: 0 }}>
-                  {n.status === 'accepted' ? '✓ 수락됨' : '✕ 거절됨'}
-                </span>
-              </div>
-            </div>
-          ))}
+          <div style={{ fontSize:20, fontWeight:900, color:'#111827' }}>🔔 알림</div>
+          {unread>0&&<div style={{ fontSize:13, color:cfg.c, fontWeight:700, marginTop:2 }}>읽지 않은 알림 {unread}개</div>}
         </div>
-      )}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════
-   COMMENT TEXT / INPUT / SECTION
-══════════════════════════════════════════════════════════ */
-function CommentText({ text }) {
-  const parts = text.split(/(@\S+)/g);
-  return (
-    <span>
-      {parts.map((part, i) =>
-        part.startsWith('@')
-          ? <span key={i} style={{ color:'#4F46E5',fontWeight:800,background:'#EEF2FF',borderRadius:4,padding:'0 4px' }}>{part}</span>
-          : part
-      )}
-    </span>
-  );
-}
-
-function CommentInput({ members, onSubmit, placeholder, accentColor }) {
-  const [text, setText] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const handleChange = (val) => {
-    setText(val);
-    const lastWord = val.split(/\s/).pop() || '';
-    if (lastWord.startsWith('@') && lastWord.length > 1) {
-      const q = lastWord.slice(1).toLowerCase();
-      setSuggestions(members.filter(m => m.name.toLowerCase().includes(q)));
-    } else { setSuggestions([]); }
-  };
-  const insertMention = (m) => {
-    const words = text.split(/\s/);
-    words[words.length - 1] = '@' + m.name;
-    setText(words.join(' ') + ' ');
-    setSuggestions([]);
-  };
-  const submit = () => {
-    if (!text.trim()) return;
-    onSubmit(text.trim()); setText(''); setSuggestions([]);
-  };
-  return (
-    <div style={{ position:'relative' }}>
-      {suggestions.length > 0 && (
-        <div className="fu" style={{ position:'absolute',bottom:'100%',left:0,right:0,background:'white',border:'1.5px solid #E5E7EB',borderRadius:12,boxShadow:'0 4px 16px rgba(0,0,0,.1)',marginBottom:6,overflow:'hidden',zIndex:10 }}>
-          {suggestions.map(m => (
-            <button key={m.id} onClick={() => insertMention(m)} style={{ width:'100%',padding:'9px 14px',border:'none',background:'none',display:'flex',alignItems:'center',gap:10,cursor:'pointer',textAlign:'left' }}>
-              <div style={{ width:26,height:26,borderRadius:'50%',background:accentColor||'#6366F1',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:800,flexShrink:0 }}>{m.name[0]}</div>
-              <span style={{ fontSize:13,fontWeight:700,color:'#374151' }}>@{m.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      <div style={{ display:'flex',gap:8 }}>
-        <textarea value={text} onChange={e=>handleChange(e.target.value)}
-          placeholder={placeholder||'댓글 입력... (@이름 멘션, Shift+Enter 줄바꿈)'}
-          rows={2}
-          style={{ flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:11,resize:'none',fontFamily:'inherit',lineHeight:1.5 }}
-          onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();} }} />
-        <button onClick={submit} disabled={!text.trim()} style={{ padding:'10px 16px',borderRadius:11,border:'none',background:text.trim()?(accentColor||'#4F46E5'):'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:text.trim() ? 'pointer':'default',flexShrink:0,alignSelf:'flex-end' }}>전송</button>
+        {unread>0&&<button onClick={function(){setNotifs(notifs.map(function(n){return {...n,read:true};}));}} style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid #E5E7EB', background:'white', color:'#6B7280', fontSize:12, fontWeight:600, cursor:'pointer' }}>전체 읽음</button>}
       </div>
-    </div>
-  );
-}
 
-function CommentSection({ comments, members, user, onAddComment, onAddReply, onDelete, accentColor }) {
-  const [replyTo, setReplyTo] = useState(null);
-  const [expanded, setExpanded] = useState({});
-  const toggleExpand = (id) => setExpanded(p=>({...p,[id]:!p[id]}));
-  return (
-    <div>
-      {comments.length===0&&<div style={{ textAlign:'center',padding:'24px 0',color:'#9CA3AF',fontSize:13 }}>아직 댓글이 없어요 💬</div>}
-      {comments.map(c=>(
-        <div key={c.id} className="fu" style={{ marginBottom:16 }}>
-          {c.linkedTitle&&<div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:6 }}>{c.linkedType==='todo'?'✅':'📅'} {c.linkedTitle}에 댓글</div>}
-          <div style={{ display:'flex',gap:10,alignItems:'flex-start' }}>
-            <div style={{ width:34,height:34,borderRadius:'50%',background:accentColor||'#6366F1',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:14,fontWeight:900,flexShrink:0 }}>{(c.authorName||'?')[0]}</div>
-            <div style={{ flex:1 }}>
-              <div style={{ background:'white',border:'1px solid #F3F4F6',borderRadius:'0 14px 14px 14px',padding:'12px 14px',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
-                <div style={{ display:'flex',justifyContent:'space-between',marginBottom:5 }}>
-                  <span style={{ fontSize:13,fontWeight:800,color:'#111827' }}>{c.authorName}</span>
-                  <span style={{ fontSize:11,color:'#9CA3AF' }}>{timeAgo(c.createdAt)}</span>
+      {sorted.map(function(notif) {
+        const isPending = notif.status === 'pending';
+        const isAccepted = notif.status === 'accepted';
+        const isRejected = notif.status === 'rejected';
+        const requiresCode = notif.requiresCode;
+
+        return (
+          <div key={notif.id} onClick={function(){if(!notif.read)markRead(notif.id);}} className="fu" style={{ background: notif.read ? 'white' : cfg.l, border:'1.5px solid '+(notif.read ? '#F3F4F6':cfg.m), borderRadius:16, padding:'16px', marginBottom:12, transition:'all .2s' }}>
+            <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+              <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+                {notif.type==='invite' ? '👥' : '🔔'}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, fontWeight:800, color:'#111827', marginBottom:3, lineHeight:1.5 }}>
+                  <span style={{ color:cfg.c }}>{notif.fromName}</span>님이{' '}
+                  <span style={{ fontWeight:900 }}>'{notif.spaceName}'</span>에 당신을 초대했습니다.
                 </div>
-                <div style={{ fontSize:14,color:'#374151',lineHeight:1.65 }}><CommentText text={c.text}/></div>
-              </div>
-              <div style={{ display:'flex',gap:12,marginTop:6,paddingLeft:4 }}>
-                <button onClick={()=>setReplyTo(replyTo===c.id?null:c.id)} style={{ background:'none',border:'none',fontSize:12,fontWeight:700,color:'#6B7280',cursor:'pointer' }}>↩ 답글</button>
-                {c.replies&&c.replies.length>0&&<button onClick={()=>toggleExpand(c.id)} style={{ background:'none',border:'none',fontSize:12,fontWeight:700,color:accentColor||'#4F46E5',cursor:'pointer' }}>{expanded[c.id]?'▲ 접기':'▼ 답글 '+c.replies.length+'개'}</button>}
-                {c.authorId===user.id&&<button onClick={()=>onDelete(c.id)} style={{ background:'none',border:'none',fontSize:12,fontWeight:700,color:'#EF4444',cursor:'pointer' }}>삭제</button>}
-              </div>
-              {expanded[c.id]&&c.replies&&c.replies.map(r=>(
-                <div key={r.id} style={{ display:'flex',gap:8,alignItems:'flex-start',marginTop:8,marginLeft:16 }}>
-                  <div style={{ width:28,height:28,borderRadius:'50%',background:'#E5E7EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#6B7280',flexShrink:0 }}>{(r.authorName||'?')[0]}</div>
-                  <div style={{ flex:1,background:'#F9FAFB',border:'1px solid #F3F4F6',borderRadius:'0 10px 10px 10px',padding:'9px 12px' }}>
-                    <div style={{ display:'flex',justifyContent:'space-between',marginBottom:3 }}>
-                      <span style={{ fontSize:12,fontWeight:800,color:'#374151' }}>{r.authorName}</span>
-                      <span style={{ fontSize:11,color:'#9CA3AF' }}>{timeAgo(r.createdAt)}</span>
+                {notif.message&&<div style={{ fontSize:13, color:'#6B7280', marginBottom:8, background:'#F9FAFB', borderRadius:8, padding:'8px 10px' }}>"{notif.message}"</div>}
+                <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:isPending?12:0 }}>{fmtFull(notif.createdAt&&notif.createdAt.split('T')[0]||'')}</div>
+
+                {isPending&&(
+                  requiresCode ? (
+                    <button onClick={function(e){e.stopPropagation();openCodeModal(notif);}} style={{ width:'100%', padding:'10px', borderRadius:10, border:'none', background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')', color:'white', fontSize:13, fontWeight:800, cursor:'pointer' }}>
+                      🔑 초대 코드 입력하고 참여하기
+                    </button>
+                  ) : (
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button onClick={function(e){e.stopPropagation();rejectInvite(notif);}} style={{ flex:1, padding:'9px', borderRadius:10, border:'1.5px solid #E5E7EB', background:'white', color:'#6B7280', fontSize:13, fontWeight:700, cursor:'pointer' }}>거절</button>
+                      <button onClick={function(e){e.stopPropagation();acceptInvite(notif);}} style={{ flex:2, padding:'9px', borderRadius:10, border:'none', background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')', color:'white', fontSize:13, fontWeight:800, cursor:'pointer' }}>✓ 수락하기</button>
                     </div>
-                    <div style={{ fontSize:13,color:'#374151',lineHeight:1.6 }}><CommentText text={r.text}/></div>
-                  </div>
-                </div>
-              ))}
-              {replyTo===c.id&&(
-                <div className="fu" style={{ marginTop:10,marginLeft:16 }}>
-                  <CommentInput members={members} accentColor={accentColor} placeholder={'@'+c.authorName+'에게 답글...'}
-                    onSubmit={(text)=>{onAddReply(c.id,text);setReplyTo(null);}}/>
-                </div>
-              )}
+                  )
+                )}
+                {isAccepted&&<div style={{ fontSize:13, fontWeight:700, color:'#059669', background:'#ECFDF5', borderRadius:8, padding:'8px 12px' }}>✓ 수락됨 — 워크스페이스에 참여했어요!</div>}
+                {isRejected&&<div style={{ fontSize:13, fontWeight:600, color:'#9CA3AF', background:'#F9FAFB', borderRadius:8, padding:'8px 12px' }}>거절됨</div>}
+              </div>
+              {!notif.read&&<div style={{ width:8, height:8, borderRadius:'50%', background:cfg.c, flexShrink:0, marginTop:4 }}/>}
             </div>
           </div>
+        );
+      })}
+
+      {/* 초대 코드 입력 모달 */}
+      {codeModal&&(
+        <div style={{ position:'fixed',inset:0,zIndex:990,background:'rgba(0,0,0,.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:24 }}
+          onClick={function(e){if(e.target===e.currentTarget){setCodeModal(null);}}}>
+          <div className="fu" style={{ background:'white',borderRadius:20,padding:'28px',width:'100%',maxWidth:380,boxShadow:'0 24px 64px rgba(0,0,0,.2)' }}>
+            {codeSuccess ? (
+              <div style={{ textAlign:'center', padding:'16px 0' }}>
+                <div style={{ fontSize:52, marginBottom:12 }}>🎉</div>
+                <div style={{ fontSize:18, fontWeight:900, color:'#059669' }}>참여 완료!</div>
+                <div style={{ fontSize:14, color:'#6B7280', marginTop:6 }}>워크스페이스에 성공적으로 참여했어요</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ textAlign:'center', marginBottom:20 }}>
+                  <div style={{ fontSize:36, marginBottom:10 }}>🔑</div>
+                  <div style={{ fontSize:18, fontWeight:900, color:'#111827', marginBottom:6 }}>초대 코드를 입력하세요!</div>
+                  <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6 }}>
+                    <span style={{ color:cfg.c, fontWeight:700 }}>{codeModal.fromName}</span>님이{' '}
+                    <span style={{ fontWeight:700 }}>'{codeModal.spaceName}'</span>에 초대했어요.<br/>
+                    받은 6자리 초대 코드를 입력해주세요.
+                  </div>
+                </div>
+                <input
+                  value={codeInput}
+                  onChange={function(e){setCodeInput(e.target.value.toUpperCase());setCodeError('');}}
+                  placeholder="예: ABC123"
+                  maxLength={6}
+                  onKeyDown={function(e){if(e.key==='Enter')submitCode();}}
+                  style={{ width:'100%',padding:'14px',fontSize:24,fontWeight:900,letterSpacing:8,textAlign:'center',border:'2px solid '+(codeError?'#EF4444':codeInput?cfg.c:'#E5E7EB'),borderRadius:12,fontFamily:'monospace',marginBottom:10,color:'#111827' }}
+                />
+                {codeError&&<div style={{ fontSize:13,color:'#EF4444',textAlign:'center',marginBottom:10,fontWeight:600 }}>{codeError}</div>}
+                <div style={{ display:'flex',gap:10 }}>
+                  <button onClick={function(){setCodeModal(null);}} style={{ flex:1,padding:'12px',borderRadius:11,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:14,fontWeight:600,cursor:'pointer' }}>취소</button>
+                  <button onClick={submitCode} disabled={codeInput.length!==6} style={{ flex:2,padding:'12px',borderRadius:11,border:'none',background:codeInput.length===6?'linear-gradient(135deg,'+cfg.c+','+cfg.d+')'  :'#E5E7EB',color:'white',fontSize:14,fontWeight:800,cursor:codeInput.length===6?'pointer':'default' }}>참여하기</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      ))}
-      <div style={{ marginTop:16,borderTop:'1px solid #F3F4F6',paddingTop:16 }}>
-        <CommentInput members={members} accentColor={accentColor} onSubmit={(text)=>onAddComment(text,null,null,null)}/>
-      </div>
+      )}
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   WORKSPACE SCREEN (Pro — 공유 할일/캘린더/댓글 포함)
-══════════════════════════════════════════════════════════ */
+
+const SPACE_TYPE_PRESETS = ['개인', '프로젝트', '회사', '마케팅', '스터디', '동아리', '가족', '팀'];
+const SPACE_TYPE_ICONS = { '개인':'✨', '프로젝트':'📊', '회사':'💼', '마케팅':'📢', '스터디':'📚', '동아리':'🎭', '가족':'🏠', '팀':'👥' };
+const genInviteCode = function() { return Math.random().toString(36).slice(2,8).toUpperCase(); };
+
 function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
   const cfg = WS.personal;
   const [view, setView] = useState('list');
   const [selSpace, setSelSpace] = useState(null);
-  const [form, setForm] = useState({ name:'', description:'', type:user.wsType });
+  const [form, setForm] = useState({ name:'', description:'', type:'개인' });
+  const [customType, setCustomType] = useState('');
+
+  // 이메일 초대 상태
   const [invEmail, setInvEmail] = useState('');
   const [invResult, setInvResult] = useState(null);
   const [showMsgInput, setShowMsgInput] = useState(false);
   const [invMsg, setInvMsg] = useState('');
   const [invSent, setInvSent] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [showCodeInvite, setShowCodeInvite] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+
   const [tab, setTab] = useState('members');
   const [showTodoForm, setShowTodoForm] = useState(false);
   const [todoForm, setTodoForm] = useState({ title:'', priority:'medium', dueDate:'', assigneeId:'' });
@@ -2398,80 +2357,122 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
   const [commentModal, setCommentModal] = useState(null);
 
   const updateSpace = (updated) => {
-    const all = spaces.map(s => s.id===updated.id ? updated : s);
+    const all = spaces.map(function(s) { return s.id===updated.id ? updated : s; });
     setSpaces(all); sv('wl_spaces', all); setSelSpace(updated);
   };
 
   const createSpace = () => {
     if (!form.name.trim()) return;
-    const space = { id:uid(), name:form.name.trim(), description:form.description, type:form.type, ownerId:user.id, members:[{ id:user.id, name:user.nickname||user.name, role:'owner' }], todos:[], events:[], comments:[], createdAt:new Date().toISOString() };
+    const spaceType = customType.trim() || form.type;
+    const code = genInviteCode();
+    const space = {
+      id:uid(), name:form.name.trim(), description:form.description,
+      type:spaceType, ownerId:user.id,
+      members:[{ id:user.id, name:user.nickname||user.name, role:'owner' }],
+      todos:[], events:[], comments:[],
+      inviteCode: code,
+      createdAt:new Date().toISOString(),
+    };
     const updated = [...spaces, space];
     setSpaces(updated); sv('wl_spaces', updated);
-    setForm({ name:'', description:'', type:user.wsType });
+    setForm({ name:'', description:'', type:'개인' }); setCustomType('');
     setSelSpace(space); setTab('members'); setView('detail');
   };
 
   const searchEmail = async () => {
     if (!invEmail.trim()) return;
-    setSearching(true); setInvResult(null); setShowMsgInput(false); setInvMsg('');
-    await new Promise(r => setTimeout(r, 400));
+    setSearching(true); setInvResult(null); setShowMsgInput(false);
+    setShowCodeInvite(false); setInvMsg('');
+    await new Promise(function(r) { return setTimeout(r, 400); });
     setSearching(false);
-    const found = accounts.find(a => a.email.toLowerCase()===invEmail.trim().toLowerCase()&&a.id!==user.id);
-    const space = spaces.find(s=>s.id===selSpace&&selSpace.id);
-    if (found && space&&space.members.find(m=>m.id===found.id)) setInvResult('already_member');
-    else setInvResult(found||'not_found');
+    const found = accounts.find(function(a) { return a.email.toLowerCase()===invEmail.trim().toLowerCase() && a.id!==user.id; });
+    const space = spaces.find(function(s) { return s.id===selSpace.id; });
+    if (found && space && space.members && space.members.find(function(m) { return m.id===found.id; })) {
+      setInvResult('already_member');
+    } else if (found) {
+      setInvResult(found);
+    } else {
+      setInvResult('not_found');
+      setShowCodeInvite(true);
+      // 미가입 이메일에 대한 pending invite 저장
+      const space2 = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
+      const pendingKey = 'wl_pending_' + invEmail.trim().toLowerCase();
+      const existing = ld(pendingKey, []);
+      const alreadyPending = existing.find(function(p) { return p.spaceId===space2.id; });
+      if (!alreadyPending) {
+        sv(pendingKey, [...existing, {
+          id:uid(), spaceId:space2.id, spaceName:space2.name,
+          inviteCode:space2.inviteCode||genInviteCode(),
+          fromId:user.id, fromName:user.nickname||user.name,
+          email:invEmail.trim().toLowerCase(), sentAt:new Date().toISOString()
+        }]);
+      }
+    }
   };
 
   const sendInvite = () => {
     if (!invResult||invResult==='not_found'||invResult==='already_member') return;
-    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
-    const notif = { id:uid(), type:'invite', fromId:user.id, fromName:user.nickname||user.name, spaceId:space.id, spaceName:space.name, spaceType:space.type, message:invMsg.trim(), status:'pending', read:false, createdAt:new Date().toISOString() };
+    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
+    const notif = {
+      id:uid(), type:'invite', fromId:user.id, fromName:user.nickname||user.name,
+      spaceId:space.id, spaceName:space.name, spaceType:space.type,
+      inviteCode:space.inviteCode, requiresCode:false,
+      message:invMsg.trim(), status:'pending', read:false,
+      createdAt:new Date().toISOString(),
+    };
     sv('wl_notifs_'+invResult.id, [...ld('wl_notifs_'+invResult.id,[]), notif]);
-    setInvSent(true); setInvEmail(''); setInvResult(null); setShowMsgInput(false); setInvMsg('');
-    setTimeout(()=>setInvSent(false), 3500);
+    setInvSent(true); setInvEmail(''); setInvResult(null);
+    setShowMsgInput(false); setInvMsg('');
+    setTimeout(function() { setInvSent(false); }, 3500);
+  };
+
+  const copyCode = (code) => {
+    try { navigator.clipboard.writeText(code); } catch(e) {}
+    setCodeCopied(true);
+    setTimeout(function() { setCodeCopied(false); }, 2000);
   };
 
   const addTodo = () => {
     if (!todoForm.title.trim()) return;
-    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
-    const assignee = space.members.find(m=>m.id===todoForm.assigneeId);
+    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
+    const assignee = space.members && space.members.find(function(m) { return m.id===todoForm.assigneeId; });
     const todo = { id:uid(), title:todoForm.title.trim(), status:'todo', priority:todoForm.priority, dueDate:todoForm.dueDate, assigneeId:todoForm.assigneeId, assigneeName:assignee&&assignee.name||'', createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
     updateSpace({ ...space, todos:[...(space.todos||[]), todo] });
     setTodoForm({ title:'', priority:'medium', dueDate:'', assigneeId:'' }); setShowTodoForm(false);
   };
   const cycleTodo = (id) => {
-    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
     const order = ['todo','progress','done'];
-    updateSpace({ ...space, todos:(space.todos||[]).map(t=>t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t) });
+    updateSpace({ ...space, todos:(space.todos||[]).map(function(t) { return t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t; }) });
   };
-  const delTodo = (id) => { const s=spaces.find(x=>x.id===selSpace.id)||selSpace; updateSpace({...s,todos:(s.todos||[]).filter(t=>t.id!==id)}); };
+  const delTodo = (id) => { const s=spaces.find(function(x){return x.id===selSpace.id;})||selSpace; updateSpace({...s,todos:(s.todos||[]).filter(function(t){return t.id!==id;})}); };
 
   const addEvent = () => {
     if (!eventForm.title.trim()) return;
-    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
     const ev = { id:uid(), ...eventForm, title:eventForm.title.trim(), createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
-    updateSpace({ ...space, events:[...(space.events||[]), ev].sort((a,b)=>a.date.localeCompare(b.date)) });
+    updateSpace({ ...space, events:[...(space.events||[]), ev].sort(function(a,b){return a.date.localeCompare(b.date);}) });
     setEventForm({ title:'', date:tod(), time:'', color:'#4F46E5' }); setShowEventForm(false);
   };
-  const delEvent = (id) => { const s=spaces.find(x=>x.id===selSpace.id)||selSpace; updateSpace({...s,events:(s.events||[]).filter(e=>e.id!==id)}); };
+  const delEvent = (id) => { const s=spaces.find(function(x){return x.id===selSpace.id;})||selSpace; updateSpace({...s,events:(s.events||[]).filter(function(e){return e.id!==id;})}); };
 
   const addComment = (text, linkedId, linkedType, linkedTitle) => {
-    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
     const c = { id:uid(), linkedId, linkedType, linkedTitle, authorId:user.id, authorName:user.nickname||user.name, text, replies:[], createdAt:new Date().toISOString() };
     updateSpace({ ...space, comments:[...(space.comments||[]), c] });
   };
   const addReply = (commentId, text) => {
-    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
     const r = { id:uid(), authorId:user.id, authorName:user.nickname||user.name, text, createdAt:new Date().toISOString() };
-    updateSpace({ ...space, comments:(space.comments||[]).map(c=>c.id===commentId?{...c,replies:[...(c.replies||[]),r]}:c) });
+    updateSpace({ ...space, comments:(space.comments||[]).map(function(c) { return c.id===commentId?{...c,replies:[...(c.replies||[]),r]}:c; }) });
   };
-  const delComment = (id) => { const s=spaces.find(x=>x.id===selSpace.id)||selSpace; updateSpace({...s,comments:(s.comments||[]).filter(c=>c.id!==id)}); };
+  const delComment = (id) => { const s=spaces.find(function(x){return x.id===selSpace.id;})||selSpace; updateSpace({...s,comments:(s.comments||[]).filter(function(c){return c.id!==id;})}); };
 
-  const mySpaces = spaces.filter(s=>s.members&&s.members.find(m=>m.id===user.id));
+  const mySpaces = spaces.filter(function(s) { return s.members && s.members.find(function(m) { return m.id===user.id; }); });
 
-  if (view==='detail'&&selSpace) {
-    const space = spaces.find(s=>s.id===selSpace.id)||selSpace;
-    const wCfg = WS.personal;
+  if (view==='detail' && selSpace) {
+    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
+    const spaceIcon = SPACE_TYPE_ICONS[space.type] || '📁';
     const isOwner = space.ownerId===user.id;
     const members = space.members||[];
     const todos = space.todos||[];
@@ -2481,73 +2482,132 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
     const COLS = ['todo','progress','done'];
     const TABS = [
       { id:'members', label:'👥 멤버', count:members.length },
-      { id:'todo', label:'✅ 할일', count:todos.filter(t=>t.status!=='done').length||0 },
+      { id:'todo', label:'✅ 할일', count:todos.filter(function(t){return t.status!=='done';}).length||0 },
       { id:'cal', label:'📅 캘린더', count:events.length||0 },
       { id:'comments', label:'💬 댓글', count:comments.length||0 },
     ];
+
     return (
       <div style={{ height:'100%',display:'flex',flexDirection:'column',overflow:'hidden' }}>
+        {/* 헤더 */}
         <div style={{ padding:'14px 20px',borderBottom:'1px solid #F3F4F6',flexShrink:0,display:'flex',alignItems:'center',gap:12,background:'white' }}>
-          <button onClick={()=>{setView('list');setInvResult(null);setInvEmail('');}} style={{ width:34,height:34,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>←</button>
+          <button onClick={function(){setView('list');setInvResult(null);setInvEmail('');}} style={{ width:34,height:34,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>←</button>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:17,fontWeight:900,color:'#111827' }}>{space.name}</div>
-            <div style={{ fontSize:12,color:'#9CA3AF' }}>{wCfg.icon} {wCfg.label}용 · {members.length}명</div>
+            <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+              <span style={{ fontSize:20 }}>{spaceIcon}</span>
+              <div style={{ fontSize:17,fontWeight:900,color:'#111827' }}>{space.name}</div>
+              <span style={{ fontSize:11,fontWeight:700,color:cfg.d,background:cfg.l,padding:'2px 8px',borderRadius:99 }}>{space.type}</span>
+            </div>
+            <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>{members.length}명 참여 중</div>
           </div>
           <div style={{ display:'flex',alignItems:'center',gap:5,background:'#ECFDF5',borderRadius:99,padding:'4px 10px' }}>
             <div style={{ width:6,height:6,borderRadius:'50%',background:'#059669',animation:'pulse 1.5s ease-in-out infinite' }}/>
             <span style={{ fontSize:11,fontWeight:700,color:'#059669' }}>실시간 동기화 중</span>
           </div>
         </div>
+
+        {/* 탭 바 */}
         <div style={{ display:'flex',borderBottom:'1px solid #F3F4F6',background:'white',flexShrink:0,padding:'0 16px',overflowX:'auto' }}>
-          {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:'11px 13px',border:'none',background:'none',fontWeight:tab===t.id?800:600,fontSize:13,color:tab===t.id?wCfg.c:'#6B7280',borderBottom:'2.5px solid '+(tab===t.id?wCfg.c:'transparent'),cursor:'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap' }}>
-              {t.label}
-              {t.count>0&&<span style={{ fontSize:11,fontWeight:800,background:tab===t.id?wCfg.l:'#F3F4F6',color:tab===t.id?wCfg.c:'#9CA3AF',borderRadius:99,padding:'1px 6px' }}>{t.count}</span>}
-            </button>
-          ))}
+          {TABS.map(function(t) {
+            return (
+              <button key={t.id} onClick={function(){setTab(t.id);}} style={{ padding:'11px 13px',border:'none',background:'none',fontWeight:tab===t.id?800:600,fontSize:13,color:tab===t.id?cfg.c:'#6B7280',borderBottom:'2.5px solid '+(tab===t.id?cfg.c:'transparent'),cursor:'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap' }}>
+                {t.label}
+                {t.count>0&&<span style={{ fontSize:11,fontWeight:800,background:tab===t.id?cfg.l:'#F3F4F6',color:tab===t.id?cfg.c:'#9CA3AF',borderRadius:99,padding:'1px 6px' }}>{t.count}</span>}
+              </button>
+            );
+          })}
         </div>
+
         <div style={{ flex:1,overflowY:'auto',padding:'20px' }}>
+
+          {/* ── 멤버 탭 ── */}
           {tab==='members'&&(
             <div>
+              {/* 멤버 목록 */}
               <div style={{ background:'white',borderRadius:14,padding:'16px',border:'1px solid #F3F4F6',marginBottom:16 }}>
                 <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>멤버 ({members.length}명)</div>
-                {members.map(m=>(
-                  <div key={m.id} style={{ display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #F9FAFB' }}>
-                    <div style={{ width:38,height:38,borderRadius:'50%',background:'linear-gradient(135deg,'+wCfg.c+','+wCfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:15,fontWeight:900,flexShrink:0 }}>{(m.name||'?')[0]}</div>
-                    <div style={{ flex:1 }}><div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{m.name}</div></div>
-                    <Badge color={m.role==='owner'?wCfg.d:'#6B7280'} bg={m.role==='owner'?wCfg.l:'#F3F4F6'}>{m.role==='owner'?'관리자':'멤버'}</Badge>
-                  </div>
-                ))}
+                {members.map(function(m) {
+                  return (
+                    <div key={m.id} style={{ display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #F9FAFB' }}>
+                      <div style={{ width:38,height:38,borderRadius:'50%',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:15,fontWeight:900,flexShrink:0 }}>{(m.name||'?')[0]}</div>
+                      <div style={{ flex:1 }}><div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{m.name}</div></div>
+                      <Badge color={m.role==='owner'?cfg.d:'#6B7280'} bg={m.role==='owner'?cfg.l:'#F3F4F6'}>{m.role==='owner' ? '관리자' : '멤버'}</Badge>
+                    </div>
+                  );
+                })}
               </div>
-              {isOwner&&(
-                <div style={{ background:'white',borderRadius:14,padding:'18px',border:'1px solid #F3F4F6' }}>
-                  <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:4 }}>📧 이메일로 초대</div>
-                  <div style={{ fontSize:12,color:'#9CA3AF',marginBottom:14 }}>Workly 가입된 이메일로만 초대 가능해요</div>
-                  {invSent&&<div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#059669',marginBottom:12 }}>✉️ 초대 전송됨!</div>}
-                  <div style={{ display:'flex',gap:8,marginBottom:10 }}>
-                    <input value={invEmail} onChange={e=>{setInvEmail(e.target.value);setInvResult(null);}} placeholder="이메일 주소" onKeyDown={e=>e.key==='Enter'&&searchEmail()} style={{ flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit' }}/>
-                    <button onClick={searchEmail} disabled={!invEmail.trim()||searching} style={{ padding:'10px 16px',borderRadius:10,border:'none',background:invEmail.trim()?wCfg.c:'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:'pointer',minWidth:64,display:'flex',alignItems:'center',justifyContent:'center' }}>
-                      {searching?<div style={{ width:13,height:13,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .6s linear infinite' }}/>:'검색'}
+
+              {/* 초대 코드 표시 (항상) */}
+              {space.inviteCode && (
+                <div style={{ background:'linear-gradient(135deg,'+cfg.l+',white)',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
+                  <div style={{ fontSize:13,fontWeight:800,color:cfg.d,marginBottom:10 }}>🔑 이 워크스페이스 초대 코드</div>
+                  <div style={{ display:'flex',alignItems:'center',gap:12 }}>
+                    <div style={{ flex:1,fontSize:28,fontWeight:900,letterSpacing:6,color:cfg.c,fontFamily:'monospace' }}>{space.inviteCode}</div>
+                    <button onClick={function(){copyCode(space.inviteCode);}} style={{ padding:'8px 16px',borderRadius:10,border:'none',background:codeCopied?'#059669':cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',transition:'background .2s' }}>
+                      {codeCopied ? '✓ 복사됨' : '복사'}
                     </button>
                   </div>
-                  {invResult==='not_found'&&<div className="fu" style={{ background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#DC2626' }}>❌ 등록된 이메일이 없습니다.</div>}
+                  <div style={{ fontSize:12,color:cfg.d,marginTop:8 }}>친구에게 이 코드를 알려주면 워크스페이스에 참여할 수 있어요</div>
+                </div>
+              )}
+
+              {/* 친구 초대하기 */}
+              {isOwner&&(
+                <div style={{ background:'white',borderRadius:14,padding:'18px',border:'1px solid #F3F4F6' }}>
+                  <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:4 }}>👋 친구 초대하기</div>
+                  <div style={{ fontSize:12,color:'#9CA3AF',marginBottom:14 }}>이메일로 친구를 찾거나, 초대 코드를 공유하세요</div>
+
+                  {invSent&&<div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#059669',marginBottom:12 }}>✉️ 초대 전송 완료!</div>}
+
+                  <div style={{ display:'flex',gap:8,marginBottom:10 }}>
+                    <input value={invEmail} onChange={function(e){setInvEmail(e.target.value);setInvResult(null);setShowCodeInvite(false);}} placeholder="친구 이메일 입력" onKeyDown={function(e){if(e.key==='Enter')searchEmail();}} style={{ flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit' }}/>
+                    <button onClick={searchEmail} disabled={!invEmail.trim()||searching} style={{ padding:'10px 16px',borderRadius:10,border:'none',background:invEmail.trim()?cfg.c:'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:'pointer',minWidth:64,display:'flex',alignItems:'center',justifyContent:'center' }}>
+                      {searching ? <div style={{ width:13,height:13,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .6s linear infinite' }}/> : '검색'}
+                    </button>
+                  </div>
+
+                  {/* 미가입 이메일 */}
+                  {invResult==='not_found'&&(
+                    <div className="fu">
+                      <div style={{ background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:10,padding:'12px 14px',marginBottom:12 }}>
+                        <div style={{ fontSize:13,fontWeight:700,color:'#DC2626',marginBottom:4 }}>❌ 등록된 이메일이 없어요</div>
+                        <div style={{ fontSize:12,color:'#6B7280' }}>코드를 보내 친구와 함께 작업하세요!</div>
+                      </div>
+                      {space.inviteCode&&(
+                        <div style={{ background:'#F0FDF4',border:'1.5px solid #BBF7D0',borderRadius:10,padding:'14px' }}>
+                          <div style={{ fontSize:12,fontWeight:700,color:'#059669',marginBottom:8 }}>📨 친구에게 이 코드를 보내주세요</div>
+                          <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:8 }}>
+                            <div style={{ fontSize:24,fontWeight:900,letterSpacing:4,color:'#059669',fontFamily:'monospace',flex:1 }}>{space.inviteCode}</div>
+                            <button onClick={function(){copyCode(space.inviteCode);}} style={{ padding:'7px 14px',borderRadius:9,border:'none',background:codeCopied?'#059669':'#22C55E',color:'white',fontSize:12,fontWeight:700,cursor:'pointer' }}>
+                              {codeCopied ? '✓ 복사됨' : '코드 복사'}
+                            </button>
+                          </div>
+                          <div style={{ fontSize:12,color:'#6B7280',lineHeight:1.6 }}>
+                            친구가 Workly에 가입하면 알림함에서 초대를 확인하고,<br/>이 코드를 입력해서 참여할 수 있어요!
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {invResult==='already_member'&&<div className="fu" style={{ background:'#FFFBEB',border:'1.5px solid #FDE68A',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#D97706' }}>ℹ️ 이미 멤버예요.</div>}
+
                   {invResult&&invResult!=='not_found'&&invResult!=='already_member'&&(
                     <div className="fu" style={{ background:'#F9FAFB',border:'1.5px solid #E5E7EB',borderRadius:12,overflow:'hidden' }}>
                       <div style={{ padding:'14px',display:'flex',alignItems:'center',gap:12 }}>
-                        <div style={{ width:44,height:44,borderRadius:'50%',background:'linear-gradient(135deg,'+wCfg.c+','+wCfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:19,fontWeight:900,flexShrink:0 }}>{(invResult.nickname||invResult.name||'?')[0]}</div>
+                        <div style={{ width:44,height:44,borderRadius:'50%',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:19,fontWeight:900,flexShrink:0 }}>{(invResult.nickname||invResult.name||'?')[0]}</div>
                         <div style={{ flex:1 }}>
                           <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>{invResult.nickname||invResult.name}</div>
                           <div style={{ fontSize:12,color:'#9CA3AF' }}>{invResult.email}</div>
                         </div>
-                        {!showMsgInput&&<button onClick={()=>setShowMsgInput(true)} style={{ padding:'8px 14px',borderRadius:99,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>초대</button>}
+                        {!showMsgInput&&<button onClick={function(){setShowMsgInput(true);}} style={{ padding:'8px 14px',borderRadius:99,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>초대</button>}
                       </div>
                       {showMsgInput&&(
                         <div style={{ padding:'0 14px 14px',borderTop:'1px solid #F3F4F6' }}>
-                          <textarea value={invMsg} onChange={e=>setInvMsg(e.target.value)} placeholder="초대 메시지 (선택)" rows={2} style={{ width:'100%',padding:'10px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:9,resize:'none',fontFamily:'inherit',marginTop:12,marginBottom:10 }}/>
+                          <textarea value={invMsg} onChange={function(e){setInvMsg(e.target.value);}} placeholder="초대 메시지 (선택)" rows={2} style={{ width:'100%',padding:'10px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:9,resize:'none',fontFamily:'inherit',marginTop:12,marginBottom:10 }}/>
                           <div style={{ display:'flex',gap:8 }}>
-                            <button onClick={()=>setShowMsgInput(false)} style={{ flex:1,padding:'9px',borderRadius:9,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer' }}>취소</button>
-                            <button onClick={sendInvite} style={{ flex:2,padding:'9px',borderRadius:9,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>✉️ 초대 보내기</button>
+                            <button onClick={function(){setShowMsgInput(false);}} style={{ flex:1,padding:'9px',borderRadius:9,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer' }}>취소</button>
+                            <button onClick={sendInvite} style={{ flex:2,padding:'9px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>✉️ 초대 보내기</button>
                           </div>
                         </div>
                       )}
@@ -2557,35 +2617,37 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
               )}
             </div>
           )}
+
+          {/* ── 할일 탭 ── */}
           {tab==='todo'&&(
             <div>
               <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
                 <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>공유 할일</div>
-                <button onClick={()=>setShowTodoForm(p=>!p)} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
+                <button onClick={function(){setShowTodoForm(function(p){return !p;});}} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
               </div>
               {showTodoForm&&(
-                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+wCfg.m,marginBottom:16 }}>
-                  <Field value={todoForm.title} onChange={v=>setTodoForm(p=>({...p,title:v}))} label="할일 제목" placeholder="할일을 입력하세요" required/>
+                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
+                  <Field value={todoForm.title} onChange={function(v){setTodoForm(function(p){return {...p,title:v};});}} label="할일 제목" placeholder="할일을 입력하세요" required/>
                   <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
-                    <Select label="우선순위" value={todoForm.priority} onChange={v=>setTodoForm(p=>({...p,priority:v}))} options={Object.entries(PRIO).map(([k,v])=>({value:k,label:v.l}))}/>
-                    <Field value={todoForm.dueDate} onChange={v=>setTodoForm(p=>({...p,dueDate:v}))} label="마감일" type="date"/>
+                    <Select label="우선순위" value={todoForm.priority} onChange={function(v){setTodoForm(function(p){return {...p,priority:v};});}} options={Object.entries(PRIO).map(function(e){return {value:e[0],label:e[1].l};})}/>
+                    <Field value={todoForm.dueDate} onChange={function(v){setTodoForm(function(p){return {...p,dueDate:v};});}} label="마감일" type="date"/>
                   </div>
                   <div style={{ marginBottom:14 }}>
                     <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em' }}>담당자</div>
-                    <select value={todoForm.assigneeId} onChange={e=>setTodoForm(p=>({...p,assigneeId:e.target.value}))} style={{ width:'100%',padding:'10px 13px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:10,background:'white' }}>
+                    <select value={todoForm.assigneeId} onChange={function(e){setTodoForm(function(p){return {...p,assigneeId:e.target.value};});}} style={{ width:'100%',padding:'10px 13px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:10,background:'white' }}>
                       <option value="">담당자 없음</option>
-                      {members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+                      {members.map(function(m){return <option key={m.id} value={m.id}>{m.name}</option>;})}
                     </select>
                   </div>
                   <div style={{ display:'flex',gap:8 }}>
-                    <Btn onClick={()=>setShowTodoForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-                    <Btn onClick={addTodo} bg={wCfg.c} disabled={!todoForm.title.trim()} style={{ flex:2 }}>추가</Btn>
+                    <Btn onClick={function(){setShowTodoForm(false);}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+                    <Btn onClick={addTodo} bg={cfg.c} disabled={!todoForm.title.trim()} style={{ flex:2 }}>추가</Btn>
                   </div>
                 </div>
               )}
               <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12 }}>
-                {COLS.map(col=>{
-                  const colTodos = todos.filter(t=>t.status===col);
+                {COLS.map(function(col) {
+                  const colTodos = todos.filter(function(t){return t.status===col;});
                   const S = STAT[col];
                   return (
                     <div key={col}>
@@ -2595,99 +2657,109 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
                         <span style={{ marginLeft:'auto',fontSize:11,fontWeight:700,color:S.c,background:'white',borderRadius:99,padding:'1px 6px' }}>{colTodos.length}</span>
                       </div>
                       {colTodos.length===0&&<div style={{ textAlign:'center',padding:'20px 8px',color:'#D1D5DB',fontSize:12 }}>없음</div>}
-                      {colTodos.map(t=>(
-                        <div key={t.id} style={{ background:'white',borderRadius:12,padding:'12px',border:'1px solid #F3F4F6',marginBottom:8,boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
-                          <div style={{ display:'flex',justifyContent:'space-between',gap:6,marginBottom:8 }}>
-                            <div style={{ fontSize:13,fontWeight:700,color:'#111827',lineHeight:1.4,textDecoration:t.status==='done'?'line-through':'none',opacity:t.status==='done'?0.6:1 }}>{t.title}</div>
-                            <button onClick={()=>delTodo(t.id)} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:12,flexShrink:0 }}>✕</button>
+                      {colTodos.map(function(t) {
+                        return (
+                          <div key={t.id} style={{ background:'white',borderRadius:12,padding:'12px',border:'1px solid #F3F4F6',marginBottom:8,boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+                            <div style={{ display:'flex',justifyContent:'space-between',gap:6,marginBottom:8 }}>
+                              <div style={{ fontSize:13,fontWeight:700,color:'#111827',lineHeight:1.4,textDecoration:t.status==='done' ? 'line-through':'none',opacity:t.status==='done' ? 0.6:1 }}>{t.title}</div>
+                              <button onClick={function(){delTodo(t.id);}} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:12,flexShrink:0 }}>✕</button>
+                            </div>
+                            <div style={{ display:'flex',gap:4,flexWrap:'wrap',marginBottom:8 }}>
+                              <Badge color={PRIO[t.priority]&&PRIO[t.priority].c} bg={PRIO[t.priority]&&PRIO[t.priority].bg}>{PRIO[t.priority]&&PRIO[t.priority].l}</Badge>
+                              {t.dueDate&&<Badge color="#6B7280" bg="#F9FAFB">{'📅 '+fmtD(t.dueDate)}</Badge>}
+                              {t.assigneeName&&<Badge color={cfg.d} bg={cfg.l}>{'👤 '+t.assigneeName}</Badge>}
+                            </div>
+                            <div style={{ display:'flex',gap:6 }}>
+                              <button onClick={function(){cycleTodo(t.id);}} style={{ flex:1,padding:'5px 8px',borderRadius:7,border:'1px solid '+cfg.m,background:cfg.l,color:cfg.d,fontSize:11,fontWeight:700,cursor:'pointer' }}>상태 변경</button>
+                              <button onClick={function(){setCommentModal({id:t.id,type:'todo',title:t.title});}} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:11,fontWeight:700,cursor:'pointer' }}>
+                                {'💬 '+(comments.filter(function(c){return c.linkedId===t.id;}).length||'')}
+                              </button>
+                            </div>
                           </div>
-                          <div style={{ display:'flex',gap:4,flexWrap:'wrap',marginBottom:8 }}>
-                            <Badge color={PRIO[t.priority]&&PRIO[t.priority].c} bg={PRIO[t.priority]&&PRIO[t.priority].bg}>{PRIO[t.priority]&&PRIO[t.priority].l}</Badge>
-                            {t.dueDate&&<Badge color="#6B7280" bg="#F9FAFB">📅 {fmtD(t.dueDate)}</Badge>}
-                            {t.assigneeName&&<Badge color={wCfg.d} bg={wCfg.l}>👤 {t.assigneeName}</Badge>}
-                          </div>
-                          <div style={{ display:'flex',gap:6 }}>
-                            <button onClick={()=>cycleTodo(t.id)} style={{ flex:1,padding:'5px 8px',borderRadius:7,border:'1px solid '+wCfg.m,background:wCfg.l,color:wCfg.d,fontSize:11,fontWeight:700,cursor:'pointer' }}>상태 변경</button>
-                            <button onClick={()=>setCommentModal({id:t.id,type:'todo',title:t.title})} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:11,fontWeight:700,cursor:'pointer' }}>
-                              {'💬 '+(comments.filter(c=>c.linkedId===t.id).length||'')}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
+
+          {/* ── 캘린더 탭 ── */}
           {tab==='cal'&&(
             <div>
               <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
                 <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>공유 일정</div>
-                <button onClick={()=>setShowEventForm(p=>!p)} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:wCfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
+                <button onClick={function(){setShowEventForm(function(p){return !p;});}} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
               </div>
               {showEventForm&&(
-                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+wCfg.m,marginBottom:16 }}>
-                  <Field value={eventForm.title} onChange={v=>setEventForm(p=>({...p,title:v}))} label="일정 제목" placeholder="일정 제목 입력" required/>
+                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
+                  <Field value={eventForm.title} onChange={function(v){setEventForm(function(p){return {...p,title:v};});}} label="일정 제목" placeholder="일정 제목 입력" required/>
                   <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
-                    <Field value={eventForm.date} onChange={v=>setEventForm(p=>({...p,date:v}))} label="날짜" type="date"/>
-                    <Field value={eventForm.time} onChange={v=>setEventForm(p=>({...p,time:v}))} label="시간" placeholder="14:00"/>
+                    <Field value={eventForm.date} onChange={function(v){setEventForm(function(p){return {...p,date:v};});}} label="날짜" type="date"/>
+                    <Field value={eventForm.time} onChange={function(v){setEventForm(function(p){return {...p,time:v};});}} label="시간" placeholder="14:00"/>
                   </div>
                   <div style={{ marginBottom:14 }}>
                     <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>색상</div>
                     <div style={{ display:'flex',gap:8 }}>
-                      {EV_COLORS.map(c=><button key={c} onClick={()=>setEventForm(p=>({...p,color:c}))} style={{ width:26,height:26,borderRadius:'50%',background:c,border:eventForm.color===c ? '3px solid #111827':'3px solid transparent',cursor:'pointer' }}/>)}
+                      {EV_COLORS.map(function(c){return <button key={c} onClick={function(){setEventForm(function(p){return {...p,color:c};});}} style={{ width:26,height:26,borderRadius:'50%',background:c,border:eventForm.color===c ? '3px solid #111827':'3px solid transparent',cursor:'pointer' }}/>;}) }
                     </div>
                   </div>
                   <div style={{ display:'flex',gap:8 }}>
-                    <Btn onClick={()=>setShowEventForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-                    <Btn onClick={addEvent} bg={wCfg.c} disabled={!eventForm.title.trim()} style={{ flex:2 }}>추가</Btn>
+                    <Btn onClick={function(){setShowEventForm(false);}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+                    <Btn onClick={addEvent} bg={cfg.c} disabled={!eventForm.title.trim()} style={{ flex:2 }}>추가</Btn>
                   </div>
                 </div>
               )}
               {events.length===0&&<Empty icon="📅" title="일정이 없어요" desc="+ 추가 버튼으로 팀 일정을 추가하세요"/>}
-              {events.map(ev=>(
-                <div key={ev.id} style={{ background:'white',borderRadius:13,padding:'14px 16px',border:'1px solid #F3F4F6',marginBottom:10,display:'flex',gap:12,alignItems:'center' }}>
-                  <div style={{ width:4,alignSelf:'stretch',borderRadius:2,background:ev.color||wCfg.c,flexShrink:0 }}/>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:14,fontWeight:700,color:'#111827',marginBottom:4 }}>{ev.title}</div>
-                    <div style={{ fontSize:12,color:'#6B7280' }}>{'📅 '+fmtFull(ev.date)+(ev.time ? ' · 🕐 '+ev.time:'')}</div>
-                    <div style={{ fontSize:11,color:'#9CA3AF',marginTop:2 }}>등록: {ev.createdByName}</div>
+              {events.map(function(ev) {
+                return (
+                  <div key={ev.id} style={{ background:'white',borderRadius:13,padding:'14px 16px',border:'1px solid #F3F4F6',marginBottom:10,display:'flex',gap:12,alignItems:'center' }}>
+                    <div style={{ width:4,alignSelf:'stretch',borderRadius:2,background:ev.color||cfg.c,flexShrink:0 }}/>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:14,fontWeight:700,color:'#111827',marginBottom:4 }}>{ev.title}</div>
+                      <div style={{ fontSize:12,color:'#6B7280' }}>{'📅 '+fmtFull(ev.date)+(ev.time ? ' · 🕐 '+ev.time:'')}</div>
+                      <div style={{ fontSize:11,color:'#9CA3AF',marginTop:2 }}>{'등록: '+ev.createdByName}</div>
+                    </div>
+                    <div style={{ display:'flex',gap:6 }}>
+                      <button onClick={function(){setCommentModal({id:ev.id,type:'event',title:ev.title});}} style={{ padding:'6px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:12,fontWeight:700,cursor:'pointer' }}>
+                        {'💬 '+(comments.filter(function(c){return c.linkedId===ev.id;}).length||'댓글')}
+                      </button>
+                      <button onClick={function(){delEvent(ev.id);}} style={{ padding:'6px 8px',borderRadius:8,border:'1px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,cursor:'pointer' }}>✕</button>
+                    </div>
                   </div>
-                  <div style={{ display:'flex',gap:6 }}>
-                    <button onClick={()=>setCommentModal({id:ev.id,type:'event',title:ev.title})} style={{ padding:'6px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:12,fontWeight:700,cursor:'pointer' }}>
-                      {'💬 '+(comments.filter(c=>c.linkedId===ev.id).length||'댓글')}
-                    </button>
-                    <button onClick={()=>delEvent(ev.id)} style={{ padding:'6px 8px',borderRadius:8,border:'1px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,cursor:'pointer' }}>✕</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
+
+          {/* ── 댓글 탭 ── */}
           {tab==='comments'&&(
             <div>
               <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:16 }}>전체 댓글</div>
-              <CommentSection comments={comments} members={members} user={user} onAddComment={addComment} onAddReply={addReply} onDelete={delComment} accentColor={wCfg.c}/>
+              <CommentSection comments={comments} members={members} user={user} onAddComment={addComment} onAddReply={addReply} onDelete={delComment} accentColor={cfg.c}/>
             </div>
           )}
         </div>
+
+        {/* 댓글 모달 */}
         {commentModal&&(
           <div style={{ position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.4)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center' }}
-            onClick={e=>e.target===e.currentTarget&&setCommentModal(null)}>
+            onClick={function(e){if(e.target===e.currentTarget)setCommentModal(null);}}>
             <div className="fu" style={{ background:'white',borderRadius:'20px 20px 0 0',width:'100%',maxWidth:640,maxHeight:'75vh',display:'flex',flexDirection:'column',boxShadow:'0 -8px 40px rgba(0,0,0,.15)' }}>
               <div style={{ padding:'16px 20px',borderBottom:'1px solid #F3F4F6',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
                 <div>
-                  <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:2 }}>{commentModal.type==='todo'?'✅ 할일':'📅 일정'}에 댓글</div>
+                  <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:2 }}>{commentModal.type==='todo' ? '✅ 할일':'📅 일정'}에 댓글</div>
                   <div style={{ fontSize:15,fontWeight:800,color:'#111827' }}>{commentModal.title}</div>
                 </div>
-                <button onClick={()=>setCommentModal(null)} style={{ width:30,height:30,borderRadius:8,border:'none',background:'#F9FAFB',color:'#6B7280',fontSize:14,cursor:'pointer' }}>✕</button>
+                <button onClick={function(){setCommentModal(null);}} style={{ width:30,height:30,borderRadius:8,border:'none',background:'#F9FAFB',color:'#6B7280',fontSize:14,cursor:'pointer' }}>✕</button>
               </div>
               <div style={{ flex:1,overflowY:'auto',padding:'16px 20px' }}>
                 <CommentSection
-                  comments={comments.filter(c=>c.linkedId===commentModal.id)}
+                  comments={comments.filter(function(c){return c.linkedId===commentModal.id;})}
                   members={members} user={user}
-                  onAddComment={(text)=>addComment(text,commentModal.id,commentModal.type,commentModal.title)}
-                  onAddReply={addReply} onDelete={delComment} accentColor={wCfg.c}/>
+                  onAddComment={function(text){addComment(text,commentModal.id,commentModal.type,commentModal.title);}}
+                  onAddReply={addReply} onDelete={delComment} accentColor={cfg.c}/>
               </div>
             </div>
           </div>
@@ -2696,49 +2768,73 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
     );
   }
 
+  // ── 워크스페이스 목록 ──
   return (
     <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
       <div className="fu" style={{ marginBottom:24 }}>
         <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>👥 협업 워크스페이스</div>
         <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>팀원들과 함께 작업하는 공간이에요</div>
       </div>
+
       {view!=='create'&&(
-        <button onClick={()=>setView('create')} style={{ width:'100%',padding:'20px',borderRadius:16,border:'2px dashed '+cfg.c,background:cfg.l,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',gap:14,textAlign:'left' }}>
+        <button onClick={function(){setView('create');}} style={{ width:'100%',padding:'20px',borderRadius:16,border:'2px dashed '+cfg.c,background:cfg.l,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',gap:14,textAlign:'left' }}>
           <div style={{ width:48,height:48,borderRadius:14,background:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,.08)' }}>＋</div>
           <div>
             <div style={{ fontSize:15,fontWeight:800,color:cfg.c }}>새 워크스페이스 만들기</div>
-            <div style={{ fontSize:12,color:cfg.d,marginTop:3 }}>팀을 만들고 이메일로 멤버를 초대해요</div>
+            <div style={{ fontSize:12,color:cfg.d,marginTop:3 }}>유형을 직접 만들고 이메일로 멤버를 초대해요</div>
           </div>
         </button>
       )}
+
       {view==='create'&&(
         <div className="fu" style={{ background:'white',borderRadius:16,padding:'20px',border:'1px solid #F3F4F6',marginBottom:20 }}>
           <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:16 }}>새 워크스페이스 만들기</div>
-          <Field value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} label="이름" placeholder="예: 3학년 2반, 마케팅팀" required/>
-          <Field value={form.description} onChange={v=>setForm(p=>({...p,description:v}))} label="설명" placeholder="설명 (선택)" rows={2}/>
-          <Select label="유형" value={form.type} onChange={v=>setForm(p=>({...p,type:v}))} options={Object.entries(WS).map(([k,v])=>({value:k,label:v.icon+' '+v.label+'용'}))}/>
+          <Field value={form.name} onChange={function(v){setForm(function(p){return {...p,name:v};});}} label="이름" placeholder="예: 우리 팀 프로젝트, 스터디 그룹" required/>
+          <Field value={form.description} onChange={function(v){setForm(function(p){return {...p,description:v};});}} label="설명" placeholder="설명 (선택)" rows={2}/>
+
+          {/* 커스텀 유형 선택 */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>유형 <span style={{ color:'#EF4444' }}>*</span></div>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginBottom:10 }}>
+              {SPACE_TYPE_PRESETS.map(function(t) {
+                const isSelected = (customType==='' && form.type===t) || customType===t;
+                return (
+                  <button key={t} onClick={function(){setForm(function(p){return {...p,type:t};});setCustomType('');}} style={{ padding:'7px 14px',borderRadius:99,border:'2px solid '+(isSelected ? cfg.c:'#E5E7EB'),background:isSelected ? cfg.l:'white',color:isSelected ? cfg.c:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer',transition:'all .15s' }}>
+                    {(SPACE_TYPE_ICONS[t]||'📁')+' '+t}
+                  </button>
+                );
+              })}
+            </div>
+            <input value={customType} onChange={function(e){setCustomType(e.target.value);}} placeholder="또는 직접 입력 (예: 마케팅, 동아리, 독서모임...)" style={{ width:'100%',padding:'10px 13px',fontSize:13,border:'1.5px solid '+(customType ? cfg.c:'#E5E7EB'),borderRadius:10,fontFamily:'inherit',color:'#1F2937' }}/>
+            {customType&&<div style={{ fontSize:12,color:cfg.d,marginTop:4 }}>유형: <strong>'{customType}'</strong> 으로 만들어요</div>}
+          </div>
+
           <div style={{ display:'flex',gap:10 }}>
-            <Btn onClick={()=>setView('list')} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-            <Btn onClick={createSpace} bg={cfg.c} disabled={!form.name.trim()} style={{ flex:2 }}>만들기</Btn>
+            <Btn onClick={function(){setView('list');}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={createSpace} bg={cfg.c} disabled={!form.name.trim()} style={{ flex:2 }}>만들기 🚀</Btn>
           </div>
         </div>
       )}
+
       {mySpaces.length>0&&(
         <>
           <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:12 }}>내 워크스페이스</div>
-          {mySpaces.map(s=>{
-            const wCfg=WS.personal;
+          {mySpaces.map(function(s) {
+            const spaceIcon = SPACE_TYPE_ICONS[s.type]||'📁';
             return (
-              <div key={s.id} onClick={()=>{setSelSpace(s);setTab('members');setView('detail');setInvResult(null);setInvEmail('');}}
+              <div key={s.id} onClick={function(){setSelSpace(s);setTab('members');setView('detail');setInvResult(null);setInvEmail('');}}
                 style={{ background:'white',borderRadius:14,padding:'16px 18px',border:'1px solid #F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',gap:14,marginBottom:10,boxShadow:'0 2px 8px rgba(0,0,0,.04)',transition:'all .15s' }}
-                onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)';e.currentTarget.style.transform='translateY(-1px)';}}
-                onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';e.currentTarget.style.transform='translateY(0)';}}>
-                <div style={{ width:46,height:46,borderRadius:13,background:wCfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0 }}>{wCfg.icon}</div>
+                onMouseEnter={function(e){e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)';e.currentTarget.style.transform='translateY(-1px)';}}
+                onMouseLeave={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';e.currentTarget.style.transform='translateY(0)';}}>
+                <div style={{ width:46,height:46,borderRadius:13,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,flexShrink:0 }}>{spaceIcon}</div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:3 }}>{s.name}</div>
+                  <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:3 }}>
+                    <div style={{ fontSize:15,fontWeight:800,color:'#111827' }}>{s.name}</div>
+                    <span style={{ fontSize:11,fontWeight:700,color:cfg.d,background:cfg.l,padding:'1px 7px',borderRadius:99 }}>{s.type}</span>
+                  </div>
                   <div style={{ fontSize:12,color:'#9CA3AF',display:'flex',gap:10 }}>
                     <span>{'👥 '+(s.members&&s.members.length||1)+'명'}</span>
-                    <span>{'✅ '+((s.todos||[]).filter(t=>t.status!=='done').length)+'개 진행중'}</span>
+                    <span>{'✅ '+((s.todos||[]).filter(function(t){return t.status!=='done';}).length)+'개 진행중'}</span>
                     {(s.comments||[]).length>0&&<span>{'💬 '+(s.comments||[]).length}</span>}
                   </div>
                 </div>
@@ -2748,10 +2844,13 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
           })}
         </>
       )}
+
       {mySpaces.length===0&&view!=='create'&&<Empty icon="👥" title="참여 중인 워크스페이스가 없어요" desc="새 워크스페이스를 만들거나 초대를 기다려보세요"/>}
     </div>
   );
 }
+
+
 /* ══════════════════════════════════════════════════════════
    PRO UPGRADE SCREEN
 ══════════════════════════════════════════════════════════ */
@@ -3787,6 +3886,24 @@ export default function App() {
     try { if (v) localStorage.setItem('wl_user', JSON.stringify({ id: v.id })); else localStorage.removeItem('wl_user'); } catch {}
   };
 
+  // pending invite 확인 (로그인/가입 시)
+  const checkPendingInvites = (userId, userEmail, userName) => {
+    const key = 'wl_pending_' + userEmail.toLowerCase();
+    const pending = ld(key, []);
+    if (!pending.length) return;
+    const existing = ld('wl_notifs_' + userId, []);
+    const newNotifs = pending.map(p => ({
+      id: uid(), type: 'invite',
+      fromId: p.fromId, fromName: p.fromName,
+      spaceId: p.spaceId, spaceName: p.spaceName,
+      inviteCode: p.inviteCode, requiresCode: true,
+      status: 'pending', read: false,
+      createdAt: p.sentAt || new Date().toISOString(),
+    }));
+    sv('wl_notifs_' + userId, [...existing, ...newNotifs]);
+    try { localStorage.removeItem(key); } catch {}
+  };
+
   const handleAuth = (acct) => {
     setUser(acct);
     setAccounts(prev => {
@@ -3794,6 +3911,7 @@ export default function App() {
       if (exists) return prev.map(a => a.id === acct.id ? acct : a);
       return [...prev, acct];
     });
+    checkPendingInvites(acct.id, acct.email, acct.nickname||acct.name);
   };
 
   const handleRegister = (acct) => setAccounts(prev => [...prev, acct]);
@@ -3802,6 +3920,7 @@ export default function App() {
     const updated = { ...user, nickname, wsType };
     setUser(updated);
     setAccounts(prev => prev.map(a => a.id === user.id ? { ...a, nickname, wsType } : a));
+    checkPendingInvites(user.id, user.email, nickname||user.name);
   };
 
   // Needs onboarding?
