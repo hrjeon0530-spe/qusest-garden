@@ -1,5 +1,124 @@
 import { useState, useEffect, useRef } from "react";
 
+/* ── Supabase 클라이언트 ── */
+const SUPA_URL = "https://ayfbirhubfuihbrbyoca.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5ZmJpcmh1YmZ1aWhicmJ5b2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NTQ3MTksImV4cCI6MjA5NzQzMDcxOX0.o7QBcum9Z-Cc9BSlIwOxViP_EvGwIkKM-CTCeh9znro";
+const supa = {
+  async query(table, options = {}) {
+    const { select = '*', eq, insert, update, upsert, del, order, limit } = options;
+    let url = SUPA_URL + '/rest/v1/' + table;
+    const headers = {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+    };
+    if (insert) headers['Prefer'] = 'return=representation';
+    if (upsert) headers['Prefer'] = 'resolution=merge-duplicates,return=representation';
+    if (update) headers['Prefer'] = 'return=representation';
+
+    let qs = '?select=' + (select || '*');
+    if (eq) Object.entries(eq).forEach(function([k,v]) { qs += '&' + k + '=eq.' + encodeURIComponent(v); });
+    if (order) qs += '&order=' + order;
+    if (limit) qs += '&limit=' + limit;
+
+    let method = 'GET', body;
+    if (insert) { method = 'POST'; body = JSON.stringify(Array.isArray(insert) ? insert : [insert]); }
+    else if (upsert) { method = 'POST'; body = JSON.stringify(Array.isArray(upsert) ? upsert : [upsert]); }
+    else if (update) { method = 'PATCH'; body = JSON.stringify(update); }
+    else if (del) { method = 'DELETE'; qs = qs.replace('?select=*',''); }
+
+    const res = await fetch(url + qs, { method, headers, body });
+    if (!res.ok) { const err = await res.text(); throw new Error(err); }
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
+  },
+  from(table) {
+    return {
+      select: (cols = '*') => supa.query(table, { select: cols }),
+      eq: (col, val) => ({
+        select: (cols = '*') => supa.query(table, { select: cols, eq: { [col]: val } }),
+        order: (ord) => ({ select: (cols = '*') => supa.query(table, { select: cols, eq: { [col]: val }, order: ord }) }),
+        delete: () => supa.query(table, { del: true, eq: { [col]: val } }),
+        update: (data) => supa.query(table, { update: data, eq: { [col]: val } }),
+      }),
+      insert: (data) => supa.query(table, { insert: data }),
+      upsert: (data) => supa.query(table, { upsert: data }),
+      delete: () => ({ eq: (col, val) => supa.query(table, { del: true, eq: { [col]: val } }) }),
+    };
+  }
+};
+
+/* Supabase 헬퍼 함수들 */
+const db = {
+  // 계정
+  async getAccount(email) {
+    const res = await supa.query('accounts', { eq: { email }, limit: 1 });
+    return res[0] || null;
+  },
+  async saveAccount(acct) {
+    const row = { id: acct.id, name: acct.name, email: acct.email, password: acct.password, nickname: acct.nickname||null, ws_type: acct.wsType||'personal', is_pro: acct.isPro||false, avatar: acct.avatar||null, theme: acct.theme||'default', icon_set: acct.iconSet||'default', created_at: acct.createdAt||new Date().toISOString() };
+    await supa.query('accounts', { upsert: row });
+  },
+  async searchAccountByEmail(email) {
+    const res = await supa.query('accounts', { eq: { email }, limit: 1 });
+    return res[0] || null;
+  },
+  dbToAcct(row) {
+    if (!row) return null;
+    return { id: row.id, name: row.name, email: row.email, password: row.password, nickname: row.nickname, wsType: row.ws_type, isPro: row.is_pro, avatar: row.avatar, theme: row.theme, iconSet: row.icon_set, createdAt: row.created_at, onboardingDone: !!(row.nickname) };
+  },
+  // 할일
+  async getTodos(userId) {
+    const rows = await supa.query('todos', { eq: { user_id: userId }, order: 'created_at.desc' });
+    return rows.map(r => ({ id: r.id, title: r.title, status: r.status, priority: r.priority, dueDate: r.due_date, category: r.category, notes: r.notes, createdAt: r.created_at }));
+  },
+  async saveTodo(userId, todo) {
+    await supa.query('todos', { upsert: { id: todo.id, user_id: userId, title: todo.title, status: todo.status||'todo', priority: todo.priority||'medium', due_date: todo.dueDate||null, category: todo.category||null, notes: todo.notes||null, created_at: todo.createdAt||new Date().toISOString() } });
+  },
+  async deleteTodo(id) { await supa.query('todos', { del: true, eq: { id } }); },
+  async syncTodos(userId, todos) {
+    if (!todos.length) return;
+    await supa.query('todos', { upsert: todos.map(t => ({ id: t.id, user_id: userId, title: t.title, status: t.status||'todo', priority: t.priority||'medium', due_date: t.dueDate||null, category: t.category||null, notes: t.notes||null, created_at: t.createdAt||new Date().toISOString() })) });
+  },
+  // 이벤트
+  async getEvents(userId) {
+    const rows = await supa.query('events', { eq: { user_id: userId }, order: 'date.asc' });
+    return rows.map(r => ({ id: r.id, title: r.title, date: r.date, time: r.time, color: r.color, notes: r.notes, createdAt: r.created_at }));
+  },
+  async saveEvent(userId, ev) {
+    await supa.query('events', { upsert: { id: ev.id, user_id: userId, title: ev.title, date: ev.date, time: ev.time||null, color: ev.color||null, notes: ev.notes||null, created_at: ev.createdAt||new Date().toISOString() } });
+  },
+  async deleteEvent(id) { await supa.query('events', { del: true, eq: { id } }); },
+  // 시험
+  async getExams(userId) {
+    const rows = await supa.query('exams', { eq: { user_id: userId }, order: 'date.asc' });
+    return rows.map(r => ({ id: r.id, subject: r.subject, date: r.date, type: r.type, memo: r.memo, createdAt: r.created_at }));
+  },
+  async saveExam(userId, exam) {
+    await supa.query('exams', { upsert: { id: exam.id, user_id: userId, subject: exam.subject, date: exam.date, type: exam.type||null, memo: exam.memo||null, created_at: exam.createdAt||new Date().toISOString() } });
+  },
+  async deleteExam(id) { await supa.query('exams', { del: true, eq: { id } }); },
+  // 일기
+  async getJournals(userId) {
+    const rows = await supa.query('journals', { eq: { user_id: userId }, order: 'date.desc' });
+    return rows.map(r => ({ id: r.id, title: r.title, date: r.date, canvasData: r.canvas_data, createdAt: r.created_at }));
+  },
+  async saveJournal(userId, j) {
+    await supa.query('journals', { upsert: { id: j.id, user_id: userId, title: j.title, date: j.date, canvas_data: j.canvasData||null, created_at: j.createdAt||new Date().toISOString() } });
+  },
+  async deleteJournal(id) { await supa.query('journals', { del: true, eq: { id } }); },
+  // 알림
+  async getNotifs(userId) {
+    const rows = await supa.query('notifications', { eq: { user_id: userId }, order: 'created_at.desc' });
+    return rows.map(r => ({ id: r.id, type: r.type, fromId: r.from_id, fromName: r.from_name, spaceId: r.space_id, spaceName: r.space_name, inviteCode: r.invite_code, requiresCode: r.requires_code, message: r.message, status: r.status, read: r.read, createdAt: r.created_at }));
+  },
+  async saveNotif(userId, notif) {
+    await supa.query('notifications', { upsert: { id: notif.id, user_id: userId, type: notif.type, from_id: notif.fromId||null, from_name: notif.fromName||null, space_id: notif.spaceId||null, space_name: notif.spaceName||null, invite_code: notif.inviteCode||null, requires_code: notif.requiresCode||false, message: notif.message||null, status: notif.status||'pending', read: notif.read||false, created_at: notif.createdAt||new Date().toISOString() } });
+  },
+  async updateNotif(id, data) { await supa.query('notifications', { update: data, eq: { id } }); },
+};
+
+
 /* ══════════════════════════════════════════════════════════
    WORKSPACE TYPE CONFIG
 ══════════════════════════════════════════════════════════ */
@@ -330,151 +449,92 @@ function ProGateModal({ onClose, onUpgrade }) {
 /* ══════════════════════════════════════════════════════════
    AUTH SCREEN
 ══════════════════════════════════════════════════════════ */
-function AuthScreen({ accounts, onAuth, onRegister }) {
-  const [mode, setMode] = useState('login');
+function AuthScreen({ onAuth, onRegister, accounts, setAccounts }) {
+  const [tab, setTab] = useState('login');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
-  const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState('');
 
-  const [signupToast, setSignupToast] = useState(false);
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
-  const submit = async () => {
-    setErr('');
-    if (!email.includes('@')) { setErr('올바른 이메일 주소를 입력해주세요.'); return; }
-    if (pw.length < 6) { setErr('비밀번호는 6자 이상이어야 해요.'); return; }
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 700));
-    setLoading(false);
-    if (mode === 'login') {
-      const acct = accounts.find(a => a.email === email.trim());
-      if (!acct) { setErr('등록되지 않은 이메일이에요.'); return; }
-      if (acct.pw !== pw) { setErr('비밀번호가 올바르지 않아요.'); return; }
-      onAuth(acct);
-    } else {
-      if (!name.trim()) { setErr('이름을 입력해주세요.'); return; }
-      if (accounts.find(a => a.email === email.trim())) { setErr('이미 가입된 이메일이에요.'); return; }
-      const acct = { id: uid(), email: email.trim(), pw, name: name.trim(), nickname: '', wsType: '', isPro: false, avatar: null, createdAt: new Date().toISOString() };
-      onRegister(acct);
-      // ── 가입 환영 메일 발송 ──
-      // EmailJS 연동: https://www.emailjs.com 에서 계정 생성 후 아래 값을 교체하세요
-      // public/index.html의 <head>에 아래 스크립트 추가 필요:
-      // <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-      // <script>emailjs.init("YOUR_PUBLIC_KEY")</script>
+  const handleLogin = async () => {
+    if (!email.trim() || !pw.trim()) { setErr('이메일과 비밀번호를 입력해주세요'); return; }
+    setLoading(true); setErr('');
+    try {
+      let found = null;
       try {
-        if (window.emailjs) {
-          await window.emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', {
-            to_email: email.trim(),
-            to_name: name.trim(),
-            message: `안녕하세요 ${name.trim()}님, Workly에 가입해주셔서 감사해요! 🌿`,
-          });
-        }
-      } catch(e) { /* EmailJS 미설정 시 무시 */ }
-      setSignupToast(true);
-      await new Promise(r => setTimeout(r, 2000));
-      setSignupToast(false);
-      onAuth(acct);
-    }
+        const row = await db.getAccount(email.trim().toLowerCase());
+        if (row) found = db.dbToAcct(row);
+      } catch(e) {
+        // Supabase 실패 → localStorage fallback
+        const localAccts = ld('wl_accounts', []);
+        found = localAccts.find(a => a.email.toLowerCase() === email.trim().toLowerCase()) || null;
+      }
+      if (!found || found.password !== pw) {
+        setErr('이메일 또는 비밀번호가 올바르지 않아요'); setLoading(false); return;
+      }
+      await onAuth(found);
+    } catch(e) { setErr('로그인 중 오류가 발생했어요: ' + e.message); }
+    setLoading(false);
+  };
+
+  const handleRegister = async () => {
+    if (!name.trim() || !email.trim() || !pw.trim()) { setErr('모든 항목을 입력해주세요'); return; }
+    if (pw.length < 6) { setErr('비밀번호는 6자 이상이어야 해요'); return; }
+    setLoading(true); setErr('');
+    try {
+      let emailExists = false;
+      try {
+        const existing = await db.getAccount(email.trim().toLowerCase());
+        emailExists = !!existing;
+      } catch(e) {
+        // Supabase 연결 실패 시 localStorage fallback
+        emailExists = ld('wl_accounts', []).some(a => a.email.toLowerCase() === email.trim().toLowerCase());
+      }
+      if (emailExists) { setErr('이미 사용 중인 이메일이에요'); setLoading(false); return; }
+      const newUser = { id: uid(), name: name.trim(), email: email.trim().toLowerCase(), password: pw, nickname: null, wsType: 'personal', isPro: false, avatar: null, theme: 'default', iconSet: 'default', createdAt: new Date().toISOString(), onboardingDone: false };
+      await onRegister(newUser);
+      showToast('🎉 가입 완료! 로그인해주세요');
+      setTab('login'); setName(''); setPw(''); setErr('');
+    } catch(e) { setErr('가입 중 오류: ' + e.message); }
+    setLoading(false);
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', background: '#FAFAFA' }}>
-      {/* Left panel */}
-      <div style={{ width: '45%', background: 'linear-gradient(160deg, #1E1B4B 0%, #312E81 50%, #1E40AF 100%)', padding: '48px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(99,102,241,.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(59,130,246,.2) 0%, transparent 50%)' }} />
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 64 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,.15)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🌿</div>
-            <div style={{ fontWeight: 900, fontSize: 22, color: 'white', letterSpacing: '-.5px' }}>Workly</div>
-          </div>
-          <h2 style={{ fontSize: 36, fontWeight: 900, color: 'white', lineHeight: 1.25, marginBottom: 20, letterSpacing: '-.5px' }}>
-            모두를 위한<br />스마트한<br />워크스페이스
-          </h2>
-          <p style={{ fontSize: 15, color: 'rgba(255,255,255,.7)', lineHeight: 1.7, marginBottom: 40 }}>
-            학교, 회사, 개인 — 어떤 용도에도<br />최적화된 협업 공간을 경험하세요.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {['📚 학교 — 과제, 노트, 일정 관리', '💼 회사 — 업무, 회의, 프로젝트', '✨ 개인 — 목표, 습관, 일기'].map(f => (
-              <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'rgba(255,255,255,.85)', fontSize: 14, fontWeight: 600 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#60A5FA', flexShrink: 0 }} />
-                {f}
-              </div>
+    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#EEF2FF 0%,#F5F3FF 50%,#EDE9FE 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+      {toast && <div className="pp" style={{ position:'fixed', top:20, left:'50%', transform:'translateX(-50%)', background:'#111827', color:'white', borderRadius:12, padding:'12px 24px', fontSize:14, fontWeight:700, zIndex:999, whiteSpace:'nowrap' }}>{toast}</div>}
+      <div style={{ width:'100%', maxWidth:420 }}>
+        <div style={{ textAlign:'center', marginBottom:32 }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>🌿</div>
+          <h1 style={{ fontSize:28, fontWeight:900, color:'#111827', margin:0 }}>Workly</h1>
+          <p style={{ fontSize:14, color:'#6B7280', marginTop:8 }}>스마트한 나만의 워크스페이스</p>
+        </div>
+        <div className="fu" style={{ background:'white', borderRadius:20, padding:28, boxShadow:'0 8px 32px rgba(0,0,0,.08)' }}>
+          <div style={{ display:'flex', background:'#F3F4F6', borderRadius:12, padding:4, marginBottom:24 }}>
+            {['login','register'].map(t => (
+              <button key={t} onClick={() => { setTab(t); setErr(''); }} style={{ flex:1, padding:'9px', borderRadius:9, border:'none', background:tab===t?'white':'transparent', color:tab===t?'#111827':'#6B7280', fontSize:14, fontWeight:tab===t?700:500, cursor:'pointer', boxShadow:tab===t?'0 1px 4px rgba(0,0,0,.1)':'none', transition:'all .2s' }}>
+                {t==='login' ? '로그인':'회원가입'}
+              </button>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
-        <div style={{ width: '100%', maxWidth: 400 }}>
-          {signupToast && (
-            <div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:14,padding:'14px 18px',marginBottom:20,display:'flex',alignItems:'center',gap:12 }}>
-              <span style={{ fontSize:22 }}>📧</span>
-              <div>
-                <div style={{ fontSize:14,fontWeight:800,color:'#059669' }}>가입을 환영해요!</div>
-                <div style={{ fontSize:12,color:'#6B7280',marginTop:2 }}>{email}로 가입 확인 메일이 전송되었어요.</div>
-              </div>
-            </div>
-          )}
-          <div className="fu" style={{ marginBottom: 32 }}>
-            <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111827', marginBottom: 6 }}>
-              {mode === 'login' ? '다시 오셨군요! 👋' : '시작해볼까요! 🚀'}
-            </h1>
-            <p style={{ fontSize: 14, color: '#6B7280' }}>
-              {mode === 'login' ? '워크스페이스로 돌아가세요.' : '무료로 나만의 워크스페이스를 만들어요.'}
-            </p>
-          </div>
-
-          <div className="fu" style={{ animationDelay: '.05s' }}>
-            {/* Social login (decorative) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-              {[{ label: 'Google', color: '#EA4335', icon: 'G' }, { label: 'Naver', color: '#03C75A', icon: 'N' }].map(({ label, color, icon }) => (
-                <button key={label} title="준비 중" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 10, border: '1.5px solid #E5E7EB', background: 'white', fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'not-allowed', opacity: 0.55 }}>
-                  <span style={{ width: 18, height: 18, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: 'white' }}>{icon}</span>
-                  {label}로 계속
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-              <div style={{ flex: 1, height: 1, background: '#F3F4F6' }} />
-              <span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600 }}>이메일로 계속</span>
-              <div style={{ flex: 1, height: 1, background: '#F3F4F6' }} />
-            </div>
-
-            {mode === 'signup' && <Field value={name} onChange={setName} label="이름" placeholder="홍길동" required />}
-            <Field value={email} onChange={setEmail} label="이메일" placeholder="name@gmail.com" type="email" required />
-            <Field value={pw} onChange={setPw} label="비밀번호" placeholder={mode === 'signup' ? '6자 이상 입력' : '비밀번호 입력'} type="password" required
-              hint={mode === 'signup' ? '영문, 숫자를 조합하면 더 안전해요' : undefined} />
-
-            {err && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 9, padding: '9px 12px', fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 12, textAlign: 'center' }}>{err}</div>}
-
-            <button onClick={submit} disabled={loading} style={{
-              width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-              background: 'linear-gradient(135deg, #1E1B4B, #2563EB)', color: 'white',
-              fontSize: 15, fontWeight: 700, cursor: loading ? 'default' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              opacity: loading ? 0.75 : 1,
-            }}>
-              {loading ? <><div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} /> 잠시만요...</> : (mode === 'login' ? '로그인' : '무료로 시작하기 →')}
-            </button>
-
-            <div style={{ textAlign: 'center', marginTop: 18 }}>
-              <span style={{ fontSize: 13, color: '#6B7280' }}>{mode === 'login' ? '처음이신가요? ' : '이미 계정이 있으신가요? '}</span>
-              <button onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setErr(''); }} style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: '#2563EB', textDecoration: 'underline', cursor: 'pointer' }}>
-                {mode === 'login' ? '가입하기' : '로그인'}
-              </button>
-            </div>
-          </div>
+          {tab==='register' && <Field value={name} onChange={setName} label="이름" placeholder="이름을 입력하세요" required/>}
+          <Field value={email} onChange={setEmail} label="이메일" placeholder="name@gmail.com" type="email" required/>
+          <Field value={pw} onChange={setPw} label="비밀번호" placeholder={tab==='register' ? '6자 이상':'비밀번호'} type="password" required/>
+          {err && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:9, padding:'10px 14px', fontSize:13, color:'#DC2626', marginBottom:14, fontWeight:600 }}>{err}</div>}
+          <button onClick={tab==='login' ? handleLogin : handleRegister} disabled={loading}
+            style={{ width:'100%', padding:'13px', borderRadius:12, border:'none', background:loading?'#E5E7EB':'linear-gradient(135deg,#4F46E5,#7C3AED)', color:'white', fontSize:15, fontWeight:700, cursor:loading?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+            {loading ? <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,.3)', borderTopColor:'white', borderRadius:'50%', animation:'spin .7s linear infinite' }}/> 처리 중...</> : tab==='login' ? '로그인 →':'가입하기 →'}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   ONBOARDING
-══════════════════════════════════════════════════════════ */
+
 function OnboardingScreen({ user, onDone }) {
   const [nick, setNick] = useState(user.name || '');
   return (
@@ -705,11 +765,12 @@ function TodoScreen({ todos, setTodos, wsType }) {
           <Field value={form.dueDate} onChange={v => setForm(p => ({ ...p, dueDate: v }))} label="마감일" type="date" />
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>카테고리</div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:6,marginBottom:8 }}>
               {CATS.map(cat=>(
                 <button key={cat} onClick={()=>setForm(p=>({...p,category:cat}))} style={{ padding:'6px 12px',borderRadius:99,border:'2px solid '+(form.category===cat?cfg.c:'#E5E7EB'),background:form.category===cat?cfg.l:'white',color:form.category===cat?cfg.c:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer' }}>{cat}</button>
               ))}
             </div>
+            <input value={CATS.includes(form.category||'')?'':(form.category||'')} onChange={e=>setForm(p=>({...p,category:e.target.value}))} placeholder="또는 직접 입력 (예: 운동, 독서...)" style={{ width:'100%',padding:'8px 12px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit' }}/>
           </div>
           <Field value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} label="메모" placeholder="추가 설명 (선택)" rows={2} />
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
@@ -730,11 +791,12 @@ function TodoScreen({ todos, setTodos, wsType }) {
           <Field value={editTodo.dueDate||''} onChange={v=>setEditTodo(p=>({...p,dueDate:v}))} label="마감일" type="date"/>
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>카테고리</div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:6,marginBottom:8 }}>
               {CATS.map(cat=>(
                 <button key={cat} onClick={()=>setEditTodo(p=>({...p,category:cat}))} style={{ padding:'6px 12px',borderRadius:99,border:'2px solid '+((editTodo.category||'')=== cat?cfg.c:'#E5E7EB'),background:(editTodo.category||'')=== cat?cfg.l:'white',color:(editTodo.category||'')=== cat?cfg.c:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer' }}>{cat}</button>
               ))}
             </div>
+            <input value={CATS.includes(editTodo.category||'') ? '' : (editTodo.category||'')} onChange={e=>setEditTodo(p=>({...p,category:e.target.value}))} placeholder="또는 직접 입력" style={{ width:'100%',padding:'8px 12px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit' }}/>
           </div>
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>상태</div>
@@ -1209,7 +1271,7 @@ ${inputText}
 이 회의 파일을 분석한 샘플 요약을 JSON으로 생성해주세요 (실제 음성 파일은 텍스트로 변환 후 분석이 필요합니다):
 {"summary":"음성 파일이 업로드되었습니다. 회의 내용을 텍스트로 입력하시면 AI가 자동으로 분석합니다.","decisions":["텍스트 입력창에 회의 내용을 붙여넣어 주세요"],"todos":["회의 내용 텍스트 변환 후 재분석"],"keywords":["회의","분석","할일"],"duration":"분석 대기 중"}`;
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/chat', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
@@ -1766,13 +1828,43 @@ function JournalScreen({ journals, setJournals }) {
     if (isDrawing) { setIsDrawing(false); setSavedImageData(null); autoSave(); }
   };
 
+  var [textLayers, setTextLayers] = useState([]);
+  var [selLayer, setSelLayer] = useState(null);
+  var [dragging, setDragging] = useState(null);
+  var [resizing, setResizing] = useState(null);
+
   var placeText = function() {
     if (!pendingText.trim()||!textClickPos) return;
-    var ctx = canvasRef.current.getContext('2d');
-    ctx.font=(textBold?'bold ':'')+textSize+'px '+textFont;
-    ctx.fillStyle=color;
-    ctx.fillText(pendingText, textClickPos.x, textClickPos.y);
+    var canvas = canvasRef.current;
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = rect.width / canvas.width;
+    var newLayer = {
+      id: uid(), text: pendingText, x: textClickPos.x * scaleX, y: (textClickPos.y - textSize) * (rect.height/canvas.height),
+      fontSize: textSize, bold: textBold, font: textFont, color: color, width: 200
+    };
+    setTextLayers(function(p) { return [...p, newLayer]; });
+    setSelLayer(newLayer.id);
     setShowTextPanel(false); setPendingText(''); setTextClickPos(null);
+  };
+
+  var renderLayersToCanvas = function() {
+    if (!canvasRef.current) return;
+    var canvas = canvasRef.current;
+    var ctx = canvas.getContext('2d');
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    textLayers.forEach(function(l) {
+      ctx.font = (l.bold ? 'bold ':'') + Math.round(l.fontSize*scaleY) + 'px ' + l.font;
+      ctx.fillStyle = l.color;
+      ctx.fillText(l.text, l.x * scaleX, (l.y + l.fontSize) * scaleY);
+    });
+  };
+
+  var flattenToCanvas = function() {
+    renderLayersToCanvas();
+    setTextLayers([]);
+    setSelLayer(null);
     autoSave();
   };
 
@@ -1952,6 +2044,46 @@ function JournalScreen({ journals, setJournals }) {
               <canvas ref={canvasRef} width={900} height={560}
                 style={{display:'block',cursor:tool==='eraser'?'cell':tool==='text'?'text':'crosshair',maxWidth:'calc(100vw - 320px)',maxHeight:'calc(100vh - 240px)',background:'white'}}
                 onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={endDraw} onMouseLeave={endDraw}/>
+
+              {/* 텍스트 레이어 오버레이 - 드래그/크기조절 가능 */}
+              {textLayers.map(function(l) {
+                var isSelected = selLayer === l.id;
+                return (
+                  <div key={l.id} style={{ position:'absolute', left:l.x, top:l.y, cursor:'move', userSelect:'none', border: isSelected ? '1.5px dashed #4F46E5' : '1.5px solid transparent', borderRadius:4, padding:'2px 4px' }}
+                    onClick={function(e){e.stopPropagation();setSelLayer(l.id);}}
+                    onMouseDown={function(e){
+                      e.stopPropagation();
+                      var startX=e.clientX-l.x, startY=e.clientY-l.y;
+                      var onMove=function(me){setTextLayers(function(p){return p.map(function(x){return x.id===l.id?{...x,x:me.clientX-startX,y:me.clientY-startY}:x;});});};
+                      var onUp=function(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
+                      document.addEventListener('mousemove',onMove);
+                      document.addEventListener('mouseup',onUp);
+                    }}>
+                    <span style={{ fontSize:l.fontSize+'px', fontFamily:l.font, fontWeight:l.bold?'bold':'normal', color:l.color, whiteSpace:'nowrap', lineHeight:1 }}>{l.text}</span>
+                    {isSelected && (
+                      <>
+                        {/* 삭제 */}
+                        <button onClick={function(e){e.stopPropagation();setTextLayers(function(p){return p.filter(function(x){return x.id!==l.id;});});setSelLayer(null);}} style={{ position:'absolute',top:-10,right:-10,width:18,height:18,borderRadius:'50%',background:'#EF4444',border:'none',color:'white',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1 }}>✕</button>
+                        {/* 크기 조절 핸들 */}
+                        <div style={{ position:'absolute',bottom:-6,right:-6,width:12,height:12,background:'#4F46E5',borderRadius:2,cursor:'se-resize' }}
+                          onMouseDown={function(e){
+                            e.stopPropagation();
+                            var startY=e.clientY, startSize=l.fontSize;
+                            var onMove=function(me){var delta=me.clientY-startY;setTextLayers(function(p){return p.map(function(x){return x.id===l.id?{...x,fontSize:Math.max(8,Math.min(120,startSize+delta*0.5))}:x;});});};
+                            var onUp=function(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
+                            document.addEventListener('mousemove',onMove);
+                            document.addEventListener('mouseup',onUp);
+                          }}/>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              {textLayers.length > 0 && (
+                <button onClick={flattenToCanvas} style={{ position:'absolute',bottom:8,right:8,padding:'6px 12px',borderRadius:8,border:'none',background:'#4F46E5',color:'white',fontSize:12,fontWeight:700,cursor:'pointer' }}>
+                  텍스트 확정 (캔버스에 합치기)
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2345,8 +2477,18 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
     setSearching(true);setInvResult(null);setShowMsgInput(false);setInvMsg('');
     await new Promise(r=>setTimeout(r,400));
     setSearching(false);
-    const allAccounts=ld('wl_accounts',[]);
-    const found=allAccounts.find(a=>a.email&&a.email.toLowerCase()===invEmail.trim().toLowerCase()&&a.id!==user.id);
+    // Supabase에서 직접 검색 (어느 기기에서 가입했든 찾을 수 있음)
+    let found = null;
+    try {
+      const rows = await supa.query('accounts', { eq: { email: invEmail.trim().toLowerCase() }, limit: 1 });
+      if (rows && rows[0] && rows[0].id !== user.id) {
+        found = db.dbToAcct(rows[0]);
+      }
+    } catch(e) {
+      // fallback to local
+      const allAccounts=ld('wl_accounts',[]).concat(accounts).filter((a,i,arr)=>arr.findIndex(x=>x.id===a.id)===i);
+      found=allAccounts.find(a=>a.email&&a.email.toLowerCase()===invEmail.trim().toLowerCase()&&a.id!==user.id)||null;
+    }
     const space=spaces.find(s=>s.id===selSpace.id)||selSpace;
     if(found&&space.members&&space.members.find(m=>m.id===found.id)){setInvResult('already_member');}
     else if(found){setInvResult(found);}
@@ -2722,6 +2864,7 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
   const cfg=WS.personal;
   const [editNick,setEditNick]=useState(false);
   const [nick,setNick]=useState(user.nickname||user.name||'');
+  const [showDeleteConfirm,setShowDeleteConfirm]=useState(false);
   const fileRef=useRef(null);
   const handleImgChange=e=>{
     const file=e.target.files[0]; if(!file) return;
@@ -2764,7 +2907,21 @@ function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, i
         ))}
       </div>
       <button onClick={onLogout} style={{width:'100%',padding:'13px',borderRadius:12,border:'1.5px solid #E5E7EB',background:'white',color:'#374151',fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:10}}>로그아웃</button>
-      <button onClick={()=>{if(window.confirm('정말 탈퇴하시겠어요? 모든 데이터가 삭제돼요.'))onDeleteAccount();}} style={{width:'100%',padding:'13px',borderRadius:12,border:'1.5px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:14,fontWeight:700,cursor:'pointer'}}>회원 탈퇴</button>
+      <button onClick={()=>setShowDeleteConfirm(true)} style={{width:'100%',padding:'13px',borderRadius:12,border:'1.5px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:14,fontWeight:700,cursor:'pointer'}}>회원 탈퇴</button>
+
+      {showDeleteConfirm&&(
+        <div style={{position:'fixed',inset:0,zIndex:999,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
+          <div style={{background:'white',borderRadius:20,padding:28,width:'100%',maxWidth:360,textAlign:'center'}}>
+            <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+            <div style={{fontSize:18,fontWeight:900,color:'#111827',marginBottom:8}}>정말 탈퇴할까요?</div>
+            <div style={{fontSize:14,color:'#6B7280',marginBottom:24}}>모든 데이터가 삭제되고 복구할 수 없어요.</div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setShowDeleteConfirm(false)} style={{flex:1,padding:'12px',borderRadius:11,border:'1.5px solid #E5E7EB',background:'white',color:'#374151',fontSize:14,fontWeight:600,cursor:'pointer'}}>취소</button>
+              <button onClick={()=>{setShowDeleteConfirm(false);onDeleteAccount();}} style={{flex:1,padding:'12px',borderRadius:11,border:'none',background:'#EF4444',color:'white',fontSize:14,fontWeight:700,cursor:'pointer'}}>탈퇴하기</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2971,7 +3128,7 @@ function AIChatScreen({ user, todos, events, goals, habits, grades, journals, ti
       .filter(function(m) { return m.id !== 'welcome'; })
       .map(function(m) { return { role: m.role, content: m.content }; });
 
-    fetch('https://api.anthropic.com/v1/messages', {
+    fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3207,7 +3364,7 @@ function TemplateScreen({ user, onUpdate }) {
 /* ══════════════════════════════════════════════════════════
    MAIN APP LAYOUT
 ══════════════════════════════════════════════════════════ */
-function MainApp({ user, setUser, accounts, setAccounts }) {
+function MainApp({ user, setUser, accounts, setAccounts, updateUser, logout, deleteAccount }) {
   const cfg = WS.personal;
   const [screen, setScreen] = useState('home');
   const [showPro, setShowPro] = useState(false);
@@ -3216,49 +3373,101 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
   const [isProUser, setIsProUser] = useState(user.isPro || false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Data
-  const [todos, setTodosRaw] = useState(() => ld(`wl_todos_${user.id}`, []));
-  const [events, setEventsRaw] = useState(() => ld(`wl_events_${user.id}`, []));
-  const [assigns, setAssignsRaw] = useState(() => ld(`wl_assigns_${user.id}`, []));
-  const [notes, setNotesRaw] = useState(() => ld(`wl_notes_${user.id}`, []));
-  const [meetings, setMeetingsRaw] = useState(() => ld(`wl_meetings_${user.id}`, []));
-  const [projects, setProjectsRaw] = useState(() => ld(`wl_projects_${user.id}`, []));
-  const [goals, setGoalsRaw] = useState(() => ld(`wl_goals_${user.id}`, []));
-  const [journals, setJournalsRaw] = useState(() => ld(`wl_journals_${user.id}`, []));
-  const [spaces, setSpacesRaw] = useState(() => ld('wl_spaces', []));
-  const [habits, setHabitsRaw] = useState(() => ld(`wl_habits_${user.id}`, []));
-  const [grades, setGradesRaw] = useState(() => ld(`wl_grades_${user.id}`, []));
-  const [attend, setAttendRaw] = useState(() => ld(`wl_attend_${user.id}`, {}));
-  const [timeLogs, setTimeLogsRaw] = useState(() => ld(`wl_time_${user.id}`, []));
-  // 이 유저에게 온 알림 (초대 등)
-  const [notifs, setNotifsRaw] = useState(() => ld(`wl_notifs_${user.id}`, []));
-  const [exams, setExamsRaw] = useState(() => ld(`wl_exams_${user.id}`, []));
+  // Data - Supabase 기반
+  const [todos, setTodosRaw] = useState([]);
+  const [events, setEventsRaw] = useState([]);
+  const [journals, setJournalsRaw] = useState([]);
+  const [spaces, setSpacesRaw] = useState([]);
+  const [notifs, setNotifsRaw] = useState([]);
+  const [exams, setExamsRaw] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  const setTodos = (v) => { setTodosRaw(v); sv(`wl_todos_${user.id}`, typeof v==='function'?v(todos):v); };
-  const setEvents = (v) => { setEventsRaw(v); sv(`wl_events_${user.id}`, typeof v==='function'?v(events):v); };
-  const setAssigns = (v) => { setAssignsRaw(v); sv(`wl_assigns_${user.id}`, typeof v==='function'?v(assigns):v); };
-  const setNotes = (v) => { setNotesRaw(v); sv(`wl_notes_${user.id}`, typeof v==='function'?v(notes):v); };
-  const setMeetings = (v) => { setMeetingsRaw(v); sv(`wl_meetings_${user.id}`, typeof v==='function'?v(meetings):v); };
-  const setProjects = (v) => { setProjectsRaw(v); sv(`wl_projects_${user.id}`, typeof v==='function'?v(projects):v); };
-  const setGoals = (v) => { setGoalsRaw(v); sv(`wl_goals_${user.id}`, typeof v==='function'?v(goals):v); };
-  const setJournals = (v) => { setJournalsRaw(v); sv(`wl_journals_${user.id}`, typeof v==='function'?v(journals):v); };
-  const setHabits = (v) => { const val=typeof v==='function'?v(habits):v; setHabitsRaw(val); sv(`wl_habits_${user.id}`,val); };
-  const setGrades = (v) => { const val=typeof v==='function'?v(grades):v; setGradesRaw(val); sv(`wl_grades_${user.id}`,val); };
-  const setAttend = (v) => { const val=typeof v==='function'?v(attend):v; setAttendRaw(val); sv(`wl_attend_${user.id}`,val); };
-  const setTimeLogs = (v) => { const val=typeof v==='function'?v(timeLogs):v; setTimeLogsRaw(val); sv(`wl_time_${user.id}`,val); };
-  const setSpaces = (v) => {
-    const val = typeof v==='function'?v(spaces):v;
+  // 초기 데이터 로드 (Supabase)
+  useEffect(() => {
+    let mounted = true;
+    const loadAll = async () => {
+      try {
+        const [t, ev, j, n, ex] = await Promise.all([
+          db.getTodos(user.id).catch(() => []),
+          db.getEvents(user.id).catch(() => []),
+          db.getJournals(user.id).catch(() => []),
+          db.getNotifs(user.id).catch(() => []),
+          db.getExams(user.id).catch(() => []),
+        ]);
+        if (!mounted) return;
+        setTodosRaw(t); setEventsRaw(ev); setJournalsRaw(j);
+        setNotifsRaw(n); setExamsRaw(ex);
+        // 워크스페이스 로드
+        const spRows = await supa.query('spaces').catch(() => []);
+        const memberRows = await supa.query('space_members').catch(() => []);
+        const mySpaceIds = memberRows.filter(m => m.user_id === user.id).map(m => m.space_id);
+        const mySpaces = spRows.filter(s => s.owner_id === user.id || mySpaceIds.includes(s.id));
+        const stRows = await supa.query('space_todos').catch(() => []);
+        const seRows = await supa.query('space_events').catch(() => []);
+        const hydrated = mySpaces.map(s => ({
+          id: s.id, name: s.name, description: s.description, type: s.type,
+          ownerId: s.owner_id, inviteCode: s.invite_code, createdAt: s.created_at,
+          members: memberRows.filter(m => m.space_id === s.id).map(m => ({ id: m.user_id, name: m.member_name || m.user_id, role: m.role })),
+          todos: stRows.filter(t => t.space_id === s.id).map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.due_date, assigneeId: t.assignee_id, assigneeName: t.assignee_name, createdByName: t.created_by_name, createdAt: t.created_at })),
+          events: seRows.filter(e => e.space_id === s.id).map(e => ({ id: e.id, title: e.title, date: e.date, time: e.time, color: e.color, createdByName: e.created_by_name, createdAt: e.created_at })),
+          comments: ld('wl_comments_' + s.id, []),
+        }));
+        if (mounted) setSpacesRaw(hydrated);
+      } catch(e) { console.error('Data load error:', e); }
+      if (mounted) setDataLoaded(true);
+    };
+    loadAll();
+    // 폴링으로 알림 + 워크스페이스 갱신
+    const poll = setInterval(async () => {
+      try {
+        const n = await db.getNotifs(user.id);
+        if (mounted) setNotifsRaw(n);
+      } catch {}
+    }, 3000);
+    return () => { mounted = false; clearInterval(poll); };
+  }, [user.id]);
+
+  const setTodos = async (v) => {
+    const val = typeof v === 'function' ? v(todos) : v;
+    setTodosRaw(val);
+    try { await db.syncTodos(user.id, val); } catch(e) { sv('wl_todos_' + user.id, val); }
+  };
+  const setEvents = async (v) => {
+    const val = typeof v === 'function' ? v(events) : v;
+    setEventsRaw(val);
+    try { for (const ev of val) await db.saveEvent(user.id, ev); } catch(e) { sv('wl_events_' + user.id, val); }
+  };
+  const setJournals = async (v) => {
+    const val = typeof v === 'function' ? v(journals) : v;
+    setJournalsRaw(val);
+  };
+  const setExams = async (v) => {
+    const val = typeof v === 'function' ? v(exams) : v;
+    setExamsRaw(val);
+    try { for (const ex of val) await db.saveExam(user.id, ex); } catch(e) { sv('wl_exams_' + user.id, val); }
+  };
+  const setNotifs = async (v) => {
+    const val = typeof v === 'function' ? v(notifs) : v;
+    setNotifsRaw(val);
+    try { for (const n of val) await db.saveNotif(user.id, n); } catch {}
+  };
+  const setSpaces = async (v) => {
+    const val = typeof v === 'function' ? v(spaces) : v;
     setSpacesRaw(val);
     sv('wl_spaces', val);
-    if (window.__worklyBC) window.__worklyBC.postMessage('spaces');
   };
-  const setExams = (v) => { const val=typeof v==='function'?v(exams):v; setExamsRaw(val); sv(`wl_exams_${user.id}`,val); };
-  const setNotifs = (v) => {
-    const val=typeof v==='function'?v(notifs):v;
-    setNotifsRaw(val);
-    sv('wl_notifs_'+user.id, val);
-    if (window.__worklyBC) window.__worklyBC.postMessage('notif_'+user.id);
-  };
+
+  // 사용하지 않는 legacy setters (호환성)
+  const setAssigns = (v) => {};
+  const setNotes = (v) => {};
+  const setMeetings = (v) => {};
+  const setProjects = (v) => {};
+  const setGoals = (v) => {};
+  const setHabits = (v) => {};
+  const setGrades = (v) => {};
+  const setAttend = (v) => {};
+  const setTimeLogs = (v) => {};
+  const assigns = [], notes = [], meetings = [], projects = [], goals = [], habits = [], grades = [], attend = {}, timeLogs = [];
 
   // ── 실시간 동기화 ──
   // 1) storage 이벤트: 다른 탭에서 localStorage 변경 시 즉시 반영
@@ -3318,18 +3527,6 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
     headerBg: 'white', headerBorder: '#F3F4F6', textPrimary: '#111827', textSecondary: '#6B7280',
   };
 
-  const updateUser = (patch) => {
-    const updated = { ...user, ...patch };
-    setUser(updated);
-    setAccounts(prev => prev.map(a => a.id === user.id ? { ...a, ...patch } : a));
-  };
-
-  const logout = () => { setUser(null); try { localStorage.removeItem('wl_user'); } catch {} };
-  const deleteAccount = () => {
-    ['todos','events','assigns','notes','meetings','projects','goals','journals'].forEach(k => { try { localStorage.removeItem(`wl_${k}_${user.id}`); } catch {} });
-    setAccounts(prev => prev.filter(a => a.id !== user.id));
-    setUser(null);
-  };
 
   // 테마 & 아이콘셋 적용
   const themeObj = THEMES[user.theme || 'default'] || THEMES.default;
@@ -3518,73 +3715,87 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
    APP ROOT
 ══════════════════════════════════════════════════════════ */
 export default function App() {
-  const [accounts, setAccountsRaw] = useState(() => ld('wl_accounts', []));
   const [user, setUserRaw] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('wl_user') || 'null');
-      if (!saved) return null;
-      const acct = ld('wl_accounts', []).find(a => a.id === saved.id);
-      return acct || null;
+      const saved = localStorage.getItem('wl_current_user');
+      return saved ? JSON.parse(saved) : null;
     } catch { return null; }
   });
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const setAccounts = (v) => {
-    const val = typeof v === 'function' ? v(accounts) : v;
-    setAccountsRaw(val);
-    sv('wl_accounts', val);
+  const setUser = (u) => {
+    setUserRaw(u);
+    if (u) localStorage.setItem('wl_current_user', JSON.stringify(u));
+    else localStorage.removeItem('wl_current_user');
   };
 
-  const setUser = (v) => {
-    setUserRaw(v);
-    try { if (v) localStorage.setItem('wl_user', JSON.stringify({ id: v.id })); else localStorage.removeItem('wl_user'); } catch {}
+  const checkPendingInvites = async (userId, userEmail, userName) => {
+    try {
+      // localStorage pending (미가입자 초대코드)
+      const key = 'wl_pending_' + userEmail.toLowerCase();
+      const pending = ld(key, []);
+      if (pending.length > 0) {
+        for (const p of pending) {
+          await db.saveNotif(userId, {
+            id: uid(), type: 'invite', fromId: p.fromId, fromName: p.fromName,
+            spaceId: p.spaceId, spaceName: p.spaceName,
+            inviteCode: p.inviteCode, requiresCode: true,
+            status: 'pending', read: false, createdAt: p.sentAt || new Date().toISOString()
+          });
+        }
+        try { localStorage.removeItem(key); } catch {}
+      }
+    } catch(e) {}
   };
 
-  // pending invite 확인 (로그인/가입 시)
-  const checkPendingInvites = (userId, userEmail, userName) => {
-    const key = 'wl_pending_' + userEmail.toLowerCase();
-    const pending = ld(key, []);
-    if (!pending.length) return;
-    const existing = ld('wl_notifs_' + userId, []);
-    const newNotifs = pending.map(p => ({
-      id: uid(), type: 'invite',
-      fromId: p.fromId, fromName: p.fromName,
-      spaceId: p.spaceId, spaceName: p.spaceName,
-      inviteCode: p.inviteCode, requiresCode: true,
-      status: 'pending', read: false,
-      createdAt: p.sentAt || new Date().toISOString(),
-    }));
-    sv('wl_notifs_' + userId, [...existing, ...newNotifs]);
-    try { localStorage.removeItem(key); } catch {}
-  };
-
-  const handleAuth = (acct) => {
+  const handleAuth = async (acct) => {
+    setLoading(true);
+    try { await db.saveAccount(acct); } catch(e) { console.warn('Supabase sync failed:', e.message); }
     setUser(acct);
-    setAccounts(prev => {
-      const exists = prev.find(a => a.id === acct.id);
-      if (exists) return prev.map(a => a.id === acct.id ? acct : a);
-      return [...prev, acct];
-    });
-    checkPendingInvites(acct.id, acct.email, acct.nickname||acct.name);
+    setLoading(false);
+    checkPendingInvites(acct.id, acct.email, acct.nickname || acct.name);
   };
 
-  const handleRegister = (acct) => setAccounts(prev => [...prev, acct]);
+  const handleRegister = async (acct) => {
+    try { await db.saveAccount(acct); } catch(e) {
+      console.warn('Supabase 저장 실패, localStorage로 대체:', e.message);
+      sv('wl_accounts', [...ld('wl_accounts', []), acct]);
+    }
+    setAccounts(p => [...p, acct]);
+  };
 
-  const handleOnboardingDone = ({ nickname, wsType }) => {
-    const updated = { ...user, nickname, wsType };
+  const handleOnboardingDone = async ({ nickname, wsType }) => {
+    const updated = { ...user, nickname, wsType, onboardingDone: true };
     setUser(updated);
-    setAccounts(prev => prev.map(a => a.id === user.id ? { ...a, nickname, wsType } : a));
-    checkPendingInvites(user.id, user.email, nickname||user.name);
+    try { await db.saveAccount(updated); } catch(e) {}
+    await checkPendingInvites(user.id, user.email, nickname || user.name);
   };
 
-  // Needs onboarding?
-  const needsOnboarding = user && (!user.wsType || !user.nickname);
+  const updateUser = async (patch) => {
+    const updated = { ...user, ...patch };
+    setUser(updated);
+    try { await db.saveAccount(updated); } catch(e) {}
+  };
 
-  return (
-    <>
-      <Styles isDark={user&&user.darkMode || false} />
-      {!user && <AuthScreen accounts={accounts} onAuth={handleAuth} onRegister={handleRegister} />}
-      {user && needsOnboarding && <OnboardingScreen user={user} onDone={handleOnboardingDone} />}
-      {user && !needsOnboarding && <MainApp user={user} setUser={setUser} accounts={accounts} setAccounts={setAccounts} />}
-    </>
+  const logout = () => { setUser(null); };
+
+  const deleteAccount = async () => {
+    try { await supa.query('accounts', { del: true, eq: { id: user.id } }); } catch(e) {}
+    // localStorage도 정리
+    try { localStorage.removeItem('wl_current_user'); } catch {}
+    try { localStorage.removeItem('wl_accounts'); } catch {}
+    setUser(null);
+  };
+
+  if (loading) return (
+    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16 }}>
+      <div style={{ width:40, height:40, border:'3px solid #E5E7EB', borderTopColor:'#4F46E5', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
+      <div style={{ fontSize:14, color:'#6B7280' }}>잠시만요...</div>
+    </div>
   );
+
+  if (!user) return <AuthScreen onAuth={handleAuth} onRegister={handleRegister} accounts={accounts} setAccounts={setAccounts} />;
+  if (!user.onboardingDone) return <OnboardingScreen user={user} onDone={handleOnboardingDone} />;
+  return <MainApp user={user} setUser={setUser} accounts={accounts} setAccounts={setAccounts} updateUser={updateUser} logout={logout} deleteAccount={deleteAccount} />;
 }
