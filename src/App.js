@@ -13,8 +13,6 @@ const WS = {
       { id:'todo',  e:'✅', n:'할일' },
       { id:'cal',   e:'📅', n:'캘린더' },
       { id:'exam',  e:'📋', n:'시험' },
-      { id:'habits',e:'🔥', n:'습관' },
-      { id:'goals', e:'🎯', n:'목표' },
       { id:'jour',  e:'📖', n:'일기' },
     ],
   },
@@ -597,12 +595,21 @@ function TodoScreen({ todos, setTodos, wsType }) {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: '', priority: 'medium', dueDate: '', category: '', notes: '' });
   const [filter, setFilter] = useState('all');
+  const [editTodo, setEditTodo] = useState(null); // 더블클릭 수정용
+
+  const CATS = ['업무', '학교', '개인', '쇼핑', '건강', '기타'];
 
   const add = () => {
     if (!form.title.trim()) return;
     setTodos(p => [...p, { id: uid(), ...form, title: form.title.trim(), status: 'todo', createdAt: new Date().toISOString() }]);
     setForm({ title: '', priority: 'medium', dueDate: '', category: '', notes: '' });
     setShowModal(false);
+  };
+
+  const saveEdit = () => {
+    if (!editTodo || !editTodo.title.trim()) return;
+    setTodos(p => p.map(t => t.id === editTodo.id ? { ...t, ...editTodo } : t));
+    setEditTodo(null);
   };
 
   const cycle = (id) => {
@@ -615,6 +622,18 @@ function TodoScreen({ todos, setTodos, wsType }) {
   };
 
   const del = (id) => setTodos(p => p.filter(t => t.id !== id));
+
+  // 라디오 버튼 컴포넌트
+  const PriorityRadio = ({ value, onChange }) => (
+    <div style={{ display:'flex', gap:8 }}>
+      {Object.entries(PRIO).map(([k, v]) => (
+        <label key={k} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', padding:'7px 14px', borderRadius:10, border:'2px solid '+(value===k?v.c:'#E5E7EB'), background:value===k?v.bg:'white', transition:'all .15s' }}>
+          <input type="radio" name="priority" value={k} checked={value===k} onChange={()=>onChange(k)} style={{ display:'none' }}/>
+          <span style={{ fontSize:13, fontWeight:700, color:value===k?v.c:'#6B7280' }}>{v.l}</span>
+        </label>
+      ))}
+    </div>
+  );
 
   const filtered = filter === 'all' ? todos : todos.filter(t => t.status === filter);
   const cols = ['todo', 'progress', 'done'];
@@ -655,7 +674,7 @@ function TodoScreen({ todos, setTodos, wsType }) {
                   ? <div style={{ textAlign: 'center', padding: '32px 12px', color: '#D1D5DB', fontSize: 13, fontWeight: 600 }}>없음</div>
                   : items.map(t => (
                     <div key={t.id} style={{ background: 'white', borderRadius: 13, padding: '14px', border: '1px solid #F3F4F6', boxShadow: '0 2px 6px rgba(0,0,0,.04)', cursor: 'pointer' }}
-                      onClick={() => cycle(t.id)}>
+                      onClick={() => cycle(t.id)} onDoubleClick={() => setEditTodo({...t})}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', lineHeight: 1.4, textDecoration: t.status === 'done' ? 'line-through' : 'none', opacity: t.status === 'done' ? 0.55 : 1 }}>{t.title}</div>
                         <button onClick={e => { e.stopPropagation(); del(t.id); }} style={{ background: 'none', border: 'none', color: '#D1D5DB', fontSize: 13, flexShrink: 0, cursor: 'pointer' }}>✕</button>
@@ -679,14 +698,57 @@ function TodoScreen({ todos, setTodos, wsType }) {
       {showModal && (
         <Modal title={wsType === 'company' ? '업무 추가' : '할일 추가'} onClose={() => setShowModal(false)}>
           <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="제목" placeholder="할일을 입력하세요" required />
-          <Select label="우선순위" value={form.priority} onChange={v => setForm(p => ({ ...p, priority: v }))}
-            options={Object.entries(PRIO).map(([k, v]) => ({ value: k, label: v.l }))} />
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>우선순위</div>
+            <PriorityRadio value={form.priority} onChange={v=>setForm(p=>({...p,priority:v}))}/>
+          </div>
           <Field value={form.dueDate} onChange={v => setForm(p => ({ ...p, dueDate: v }))} label="마감일" type="date" />
-          <Field value={form.category} onChange={v => setForm(p => ({ ...p, category: v }))} label={wsType === 'school' ? '과목' : wsType === 'company' ? '프로젝트' : '카테고리'} placeholder="선택 사항" />
-          <Field value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} label="메모" placeholder="추가 설명 (선택)" rows={3} />
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>카테고리</div>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+              {CATS.map(cat=>(
+                <button key={cat} onClick={()=>setForm(p=>({...p,category:cat}))} style={{ padding:'6px 12px',borderRadius:99,border:'2px solid '+(form.category===cat?cfg.c:'#E5E7EB'),background:form.category===cat?cfg.l:'white',color:form.category===cat?cfg.c:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer' }}>{cat}</button>
+              ))}
+            </div>
+          </div>
+          <Field value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} label="메모" placeholder="추가 설명 (선택)" rows={2} />
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
             <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>추가하기</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* 더블클릭 수정 모달 */}
+      {editTodo && (
+        <Modal title="할일 수정 ✏️" onClose={()=>setEditTodo(null)}>
+          <Field value={editTodo.title} onChange={v=>setEditTodo(p=>({...p,title:v}))} label="제목" required/>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>우선순위</div>
+            <PriorityRadio value={editTodo.priority||'medium'} onChange={v=>setEditTodo(p=>({...p,priority:v}))}/>
+          </div>
+          <Field value={editTodo.dueDate||''} onChange={v=>setEditTodo(p=>({...p,dueDate:v}))} label="마감일" type="date"/>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>카테고리</div>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+              {CATS.map(cat=>(
+                <button key={cat} onClick={()=>setEditTodo(p=>({...p,category:cat}))} style={{ padding:'6px 12px',borderRadius:99,border:'2px solid '+((editTodo.category||'')=== cat?cfg.c:'#E5E7EB'),background:(editTodo.category||'')=== cat?cfg.l:'white',color:(editTodo.category||'')=== cat?cfg.c:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer' }}>{cat}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>상태</div>
+            <div style={{ display:'flex',gap:8 }}>
+              {Object.entries(STAT).map(([k,v])=>(
+                <button key={k} onClick={()=>setEditTodo(p=>({...p,status:k}))} style={{ flex:1,padding:'8px',borderRadius:10,border:'2px solid '+(editTodo.status===k?v.c:'#E5E7EB'),background:editTodo.status===k?v.bg:'white',color:editTodo.status===k?v.c:'#6B7280',fontSize:12,fontWeight:700,cursor:'pointer' }}>{v.icon} {v.l}</button>
+              ))}
+            </div>
+          </div>
+          <Field value={editTodo.notes||''} onChange={v=>setEditTodo(p=>({...p,notes:v}))} label="메모" rows={2}/>
+          <div style={{ display:'flex',gap:8,marginTop:4 }}>
+            <Btn onClick={()=>setEditTodo(null)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+            <Btn onClick={()=>{del(editTodo.id);setEditTodo(null);}} outline color="#EF4444" style={{ flex:1 }}>삭제</Btn>
+            <Btn onClick={saveEdit} bg={cfg.c} style={{ flex:2 }}>저장</Btn>
           </div>
         </Modal>
       )}
@@ -1151,7 +1213,7 @@ ${inputText}
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
+          model:'claude-sonnet-4-6',
           max_tokens:1000,
           messages:[{ role:'user', content:prompt }]
         })
@@ -1576,201 +1638,386 @@ function GoalsScreen({ goals, setGoals }) {
 ══════════════════════════════════════════════════════════ */
 function JournalScreen({ journals, setJournals }) {
   const cfg = WS.personal;
-  const [showModal, setShowModal] = useState(false);
-  const [sel, setSel] = useState(null);
-  const [form, setForm] = useState({ title: '', content: '', mood: 3, date: tod() });
+  const canvasRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-  const add = () => {
-    if (!form.content.trim()) return;
-    const entry = { id: uid(), ...form, title: form.title || `${fmtFull(form.date)} 일기`, date: form.date };
-    setJournals(p => [entry, ...p]);
-    setForm({ title: '', content: '', mood: 3, date: tod() });
-    setShowModal(false);
-    setSel(entry);
+  const [selId, setSelId] = useState(null);
+  const [entryTitle, setEntryTitle] = useState('');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [lastPos, setLastPos] = useState(null);
+  const [startPos, setStartPos] = useState(null);
+  const [savedImageData, setSavedImageData] = useState(null);
+
+  // 도구
+  const [tool, setTool] = useState('brush');
+  const [brushSize, setBrushSize] = useState(6);
+  const [brushStyle, setBrushStyle] = useState('round');
+  const [color, setColor] = useState('#1a1a1a');
+  const [shapeType, setShapeType] = useState('rect');
+
+  // 텍스트 도구
+  const [textSize, setTextSize] = useState(20);
+  const [textBold, setTextBold] = useState(false);
+  const [textFont, setTextFont] = useState('sans-serif');
+  const [pendingText, setPendingText] = useState('');
+  const [textClickPos, setTextClickPos] = useState(null);
+  const [showTextPanel, setShowTextPanel] = useState(false);
+
+  const PALETTE = ['#1a1a1a','#EF4444','#F97316','#EAB308','#22C55E','#3B82F6','#8B5CF6','#EC4899','#06B6D4','#ffffff','#aaaaaa','#6B4C2A'];
+
+  useEffect(function() {
+    var canvas = canvasRef.current;
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (selId) {
+      var entry = journals.find(function(j) { return j.id === selId; });
+      if (entry && entry.canvasData) {
+        var img = new Image();
+        img.onload = function() { ctx.drawImage(img, 0, 0); };
+        img.src = entry.canvasData;
+      }
+    }
+  }, [selId]);
+
+  var getPos = function(e) {
+    var canvas = canvasRef.current;
+    var rect = canvas.getBoundingClientRect();
+    var sx = canvas.width / rect.width;
+    var sy = canvas.height / rect.height;
+    return { x:(e.clientX-rect.left)*sx, y:(e.clientY-rect.top)*sy };
   };
 
-  const del = (id) => { setJournals(p => p.filter(j => j.id !== id)); if (sel&&sel.id === id) setSel(null); };
+  var autoSave = function() {
+    if (!selId || !canvasRef.current) return;
+    var data = canvasRef.current.toDataURL('image/jpeg', 0.75);
+    setJournals(function(p) { return p.map(function(j) { return j.id===selId ? {...j,canvasData:data} : j; }); });
+  };
+
+  var startDraw = function(e) {
+    var pos = getPos(e);
+    if (tool==='text') {
+      setTextClickPos(pos);
+      setShowTextPanel(true);
+      setPendingText('');
+      return;
+    }
+    setIsDrawing(true);
+    setLastPos(pos);
+    setStartPos(pos);
+    if (tool==='shape') {
+      var ctx = canvasRef.current.getContext('2d');
+      setSavedImageData(ctx.getImageData(0,0,canvasRef.current.width,canvasRef.current.height));
+    }
+    if (tool==='brush') {
+      var ctx2 = canvasRef.current.getContext('2d');
+      ctx2.beginPath();
+      ctx2.arc(pos.x,pos.y,brushSize/2,0,Math.PI*2);
+      ctx2.fillStyle = color;
+      ctx2.fill();
+    }
+  };
+
+  var doDraw = function(e) {
+    if (!isDrawing) return;
+    var canvas = canvasRef.current;
+    var ctx = canvas.getContext('2d');
+    var pos = getPos(e);
+    if (tool==='brush'||tool==='eraser') {
+      ctx.beginPath();
+      ctx.moveTo(lastPos.x,lastPos.y);
+      ctx.lineTo(pos.x,pos.y);
+      ctx.strokeStyle = tool==='eraser' ? '#FFFFFF' : color;
+      ctx.lineWidth = brushSize;
+      ctx.lineCap = brushStyle==='square' ? 'square' : 'round';
+      ctx.lineJoin = 'round';
+      if (brushStyle==='chalk') { ctx.globalAlpha=0.55+Math.random()*0.45; }
+      else if (brushStyle==='watercolor') { ctx.globalAlpha=0.25; ctx.lineWidth=brushSize*2.5; }
+      else { ctx.globalAlpha=1; }
+      ctx.stroke();
+      ctx.globalAlpha=1;
+    } else if (tool==='shape') {
+      if (savedImageData) ctx.putImageData(savedImageData,0,0);
+      ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=brushSize; ctx.lineCap='round';
+      var w=pos.x-startPos.x, h=pos.y-startPos.y;
+      ctx.beginPath();
+      if (shapeType==='rect') {
+        ctx.strokeRect(startPos.x,startPos.y,w,h);
+      } else if (shapeType==='circle') {
+        var rx=Math.abs(w)/2,ry=Math.abs(h)/2,cx=startPos.x+w/2,cy=startPos.y+h/2;
+        ctx.ellipse(cx,cy,Math.max(rx,1),Math.max(ry,1),0,0,Math.PI*2); ctx.stroke();
+      } else if (shapeType==='line') {
+        ctx.moveTo(startPos.x,startPos.y); ctx.lineTo(pos.x,pos.y); ctx.stroke();
+      } else if (shapeType==='arrow') {
+        ctx.moveTo(startPos.x,startPos.y); ctx.lineTo(pos.x,pos.y); ctx.stroke();
+        var ang=Math.atan2(pos.y-startPos.y,pos.x-startPos.x), hs=brushSize*4;
+        ctx.beginPath();
+        ctx.moveTo(pos.x,pos.y);
+        ctx.lineTo(pos.x-hs*Math.cos(ang-0.45),pos.y-hs*Math.sin(ang-0.45));
+        ctx.lineTo(pos.x-hs*Math.cos(ang+0.45),pos.y-hs*Math.sin(ang+0.45));
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    setLastPos(pos);
+  };
+
+  var endDraw = function() {
+    if (isDrawing) { setIsDrawing(false); setSavedImageData(null); autoSave(); }
+  };
+
+  var placeText = function() {
+    if (!pendingText.trim()||!textClickPos) return;
+    var ctx = canvasRef.current.getContext('2d');
+    ctx.font=(textBold?'bold ':'')+textSize+'px '+textFont;
+    ctx.fillStyle=color;
+    ctx.fillText(pendingText, textClickPos.x, textClickPos.y);
+    setShowTextPanel(false); setPendingText(''); setTextClickPos(null);
+    autoSave();
+  };
+
+  var clearCanvas = function() {
+    var canvas=canvasRef.current; var ctx=canvas.getContext('2d');
+    ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    autoSave();
+  };
+
+  var handleImageUpload = function(e) {
+    var file=e.target.files[0]; if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var canvas=canvasRef.current, ctx=canvas.getContext('2d');
+        var mw=canvas.width*0.65, mh=canvas.height*0.65;
+        var w=img.width, h=img.height;
+        if(w>mw){h=h*mw/w;w=mw;} if(h>mh){w=w*mh/h;h=mh;}
+        ctx.drawImage(img,30,30,w,h);
+        autoSave();
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value='';
+  };
+
+  var newEntry = function() {
+    var id=uid(), today=tod();
+    var entry={id,title:'일기 '+today,date:today,canvasData:null};
+    setJournals(function(p){return [entry,...p];});
+    setSelId(id); setEntryTitle(entry.title);
+  };
+
+  var deleteEntry = function(id) {
+    setJournals(function(p){return p.filter(function(j){return j.id!==id;});});
+    if(selId===id){setSelId(null);setEntryTitle('');}
+  };
+
+  var saveTitle = function() {
+    if (!selId) return;
+    setJournals(function(p){return p.map(function(j){return j.id===selId?{...j,title:entryTitle}:j;});});
+  };
+
+  var TOOLS = [
+    {id:'brush',icon:'✏️',label:'붓'},
+    {id:'eraser',icon:'◻️',label:'지우개'},
+    {id:'text',icon:'T',label:'텍스트'},
+    {id:'shape',icon:'△',label:'도형'},
+  ];
 
   return (
-    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>📖 개인 일기</div>
-        <Btn onClick={() => setShowModal(true)} bg={cfg.c}>+ 일기 쓰기</Btn>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, flex: 1, minHeight: 0 }}>
-        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {journals.length === 0
-            ? <Empty icon="📖" title="일기가 없어요" desc="오늘의 일기를 써보세요" />
-            : journals.map(j => (
-              <div key={j.id} onClick={() => setSel(j)} style={{ background: sel&&sel.id === j.id ? cfg.l : 'white', border: `1.5px solid ${sel&&sel.id === j.id ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', transition: 'all .12s' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{j.title}</div>
-                  <span style={{ fontSize: 16 }}>{MOOD[j.mood - 1]}</span>
-                </div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{fmtFull(j.date)}</div>
-              </div>
-            ))
-          }
+    <div style={{height:'100%',display:'flex',overflow:'hidden'}}>
+      {/* 왼쪽 목록 */}
+      <div style={{width:240,flexShrink:0,borderRight:'1px solid #F3F4F6',display:'flex',flexDirection:'column',background:'white'}}>
+        <div style={{padding:'12px',borderBottom:'1px solid #F3F4F6'}}>
+          <button onClick={newEntry} style={{width:'100%',padding:'10px',borderRadius:11,border:'none',background:cfg.c,color:'white',fontSize:14,fontWeight:700,cursor:'pointer'}}>+ 새 일기</button>
         </div>
-        <div style={{ background: 'white', borderRadius: 16, padding: '20px', border: '1px solid #F3F4F6', overflowY: 'auto' }}>
-          {sel ? (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                    <span style={{ fontSize: 28 }}>{MOOD[sel.mood - 1]}</span>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{sel.title}</div>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>{fmtFull(sel.date)}</div>
+        <div style={{flex:1,overflowY:'auto',padding:'8px'}}>
+          {journals.length===0&&<div style={{textAlign:'center',padding:40,color:'#D1D5DB',fontSize:13}}>아직 일기가 없어요</div>}
+          {journals.map(function(j){
+            return (
+              <div key={j.id} onClick={function(){setSelId(j.id);setEntryTitle(j.title);}}
+                style={{borderRadius:12,padding:'10px 12px',marginBottom:4,cursor:'pointer',background:selId===j.id?cfg.l:'transparent',border:'1.5px solid '+(selId===j.id?cfg.c:'transparent'),display:'flex',alignItems:'center',gap:8}}>
+                {j.canvasData&&<div style={{width:36,height:36,borderRadius:6,overflow:'hidden',flexShrink:0,border:'1px solid #E5E7EB'}}><img src={j.canvasData} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/></div>}
+                <div style={{flex:1,overflow:'hidden'}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'#111827',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.title}</div>
+                  <div style={{fontSize:11,color:'#9CA3AF',marginTop:2}}>{fmtFull(j.date)}</div>
                 </div>
-                <button onClick={() => del(sel.id)} style={{ background: '#FEF2F2', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: '#EF4444', fontWeight: 700, cursor: 'pointer' }}>삭제</button>
+                <button onClick={function(e){e.stopPropagation();deleteEntry(j.id);}} style={{background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13,padding:2,flexShrink:0}}>✕</button>
               </div>
-              <div style={{ fontSize: 15, color: '#374151', lineHeight: 1.9, whiteSpace: 'pre-wrap' }}>{sel.content}</div>
-            </>
-          ) : <Empty icon="📝" title="일기를 선택하세요" desc="왼쪽에서 일기를 선택하면 내용이 표시됩니다" />}
+            );
+          })}
         </div>
       </div>
-      {showModal && (
-        <Modal title="일기 쓰기" onClose={() => setShowModal(false)}>
-          <Field value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))} label="날짜" type="date" />
-          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="제목" placeholder="제목 (비우면 날짜로 자동 설정)" />
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>오늘의 기분</div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              {MOOD.map((m, i) => (
-                <button key={i} onClick={() => setForm(p => ({ ...p, mood: i + 1 }))} style={{ fontSize: 26, background: form.mood === i + 1 ? cfg.l : 'white', border: `2px solid ${form.mood === i + 1 ? cfg.c : '#F3F4F6'}`, borderRadius: 12, padding: '8px', cursor: 'pointer', transition: 'all .15s' }}>{m}</button>
-              ))}
+
+      {/* 오른쪽 그림판 */}
+      {!selId ? (
+        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,color:'#D1D5DB'}}>
+          <div style={{fontSize:52}}>🎨</div>
+          <div style={{fontSize:16,fontWeight:700}}>일기를 선택하거나 새로 만드세요</div>
+        </div>
+      ) : (
+        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          {/* 제목 */}
+          <div style={{padding:'10px 16px',borderBottom:'1px solid #F3F4F6',background:'white',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+            <input value={entryTitle} onChange={function(e){setEntryTitle(e.target.value);}} onBlur={saveTitle} style={{flex:1,fontSize:16,fontWeight:800,border:'none',outline:'none',color:'#111827',background:'transparent'}}/>
+            <span style={{fontSize:12,color:'#9CA3AF'}}>{journals.find(function(j){return j.id===selId;})?journals.find(function(j){return j.id===selId;}).date:''}</span>
+          </div>
+
+          {/* 툴바 */}
+          <div style={{background:'white',borderBottom:'1px solid #F3F4F6',padding:'7px 12px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',flexShrink:0}}>
+            {/* 도구 */}
+            <div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:10,padding:3}}>
+              {TOOLS.map(function(t){
+                return <button key={t.id} onClick={function(){setTool(t.id);setShowTextPanel(false);}} title={t.label} style={{padding:'5px 10px',borderRadius:7,border:'none',background:tool===t.id?'white':'transparent',color:tool===t.id?cfg.c:'#6B7280',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:tool===t.id?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{t.icon}</button>;
+              })}
+            </div>
+
+            {/* 이미지 업로드 */}
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{display:'none'}}/>
+            <button onClick={function(){if(fileInputRef.current)fileInputRef.current.click();}} title="이미지 삽입" style={{padding:'5px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',cursor:'pointer',fontSize:14}}>🖼️</button>
+
+            <div style={{width:1,height:24,background:'#E5E7EB',flexShrink:0}}/>
+
+            {/* 크기 */}
+            <div style={{display:'flex',alignItems:'center',gap:5}}>
+              <span style={{fontSize:11,color:'#6B7280',fontWeight:600,whiteSpace:'nowrap'}}>크기</span>
+              <input type="range" min={tool==='text'?8:1} max={tool==='text'?72:50}
+                value={tool==='text'?textSize:brushSize}
+                onChange={function(e){tool==='text'?setTextSize(Number(e.target.value)):setBrushSize(Number(e.target.value));}}
+                style={{width:60}}/>
+              <span style={{fontSize:11,color:'#374151',fontWeight:700,minWidth:18}}>{tool==='text'?textSize:brushSize}</span>
+            </div>
+
+            {/* 붓 스타일 */}
+            {tool==='brush'&&(
+              <div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:8,padding:2}}>
+                {[['round','●'],['square','■'],['chalk','〰'],['watercolor','≈']].map(function(s){
+                  return <button key={s[0]} onClick={function(){setBrushStyle(s[0]);}} style={{padding:'3px 8px',borderRadius:6,border:'none',background:brushStyle===s[0]?'white':'transparent',color:brushStyle===s[0]?cfg.c:'#9CA3AF',fontSize:12,fontWeight:700,cursor:'pointer',boxShadow:brushStyle===s[0]?'0 1px 3px rgba(0,0,0,.1)':'none'}}>{s[1]}</button>;
+                })}
+              </div>
+            )}
+
+            {/* 도형 타입 */}
+            {tool==='shape'&&(
+              <div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:8,padding:2}}>
+                {[['rect','□'],['circle','○'],['line','—'],['arrow','→']].map(function(s){
+                  return <button key={s[0]} onClick={function(){setShapeType(s[0]);}} style={{padding:'3px 9px',borderRadius:6,border:'none',background:shapeType===s[0]?'white':'transparent',color:shapeType===s[0]?cfg.c:'#9CA3AF',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:shapeType===s[0]?'0 1px 3px rgba(0,0,0,.1)':'none'}}>{s[1]}</button>;
+                })}
+              </div>
+            )}
+
+            {/* 텍스트 옵션 */}
+            {tool==='text'&&(
+              <>
+                <button onClick={function(){setTextBold(function(p){return !p;});}} style={{padding:'4px 10px',borderRadius:8,border:'1.5px solid '+(textBold?cfg.c:'#E5E7EB'),background:textBold?cfg.l:'white',color:textBold?cfg.c:'#374151',fontSize:13,fontWeight:900,cursor:'pointer'}}>B</button>
+                <select value={textFont} onChange={function(e){setTextFont(e.target.value);}} style={{padding:'4px 8px',borderRadius:8,border:'1px solid #E5E7EB',fontSize:12}}>
+                  <option value="sans-serif">고딕</option>
+                  <option value="serif">바탕</option>
+                  <option value="monospace">코드체</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="cursive">필기체</option>
+                </select>
+              </>
+            )}
+
+            <div style={{width:1,height:24,background:'#E5E7EB',flexShrink:0}}/>
+
+            {/* 색상 팔레트 */}
+            <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+              {PALETTE.map(function(c){
+                return <button key={c} onClick={function(){setColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,border:'2.5px solid '+(color===c?cfg.c:'#E5E7EB'),cursor:'pointer',flexShrink:0,boxShadow:color===c?'0 0 0 2px '+cfg.l:'none'}}/>;
+              })}
+              <input type="color" value={color} onChange={function(e){setColor(e.target.value);}} style={{width:22,height:22,border:'2px solid #E5E7EB',borderRadius:'50%',cursor:'pointer',padding:0,flexShrink:0}}/>
+            </div>
+
+            <div style={{marginLeft:'auto'}}>
+              <button onClick={clearCanvas} style={{padding:'5px 12px',borderRadius:8,border:'1.5px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,fontWeight:700,cursor:'pointer'}}>전체 지우기</button>
             </div>
           </div>
-          <Field value={form.content} onChange={v => setForm(p => ({ ...p, content: v }))} label="내용" placeholder="오늘 어땠나요 ? " rows={7} />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
-            <Btn onClick={add} bg={cfg.c} style={{ flex: 2 }}>저장하기</Btn>
+
+          {/* 텍스트 입력 패널 */}
+          {showTextPanel&&(
+            <div className="fu" style={{background:'#EEF2FF',borderBottom:'1px solid '+cfg.m,padding:'8px 14px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+              <span style={{fontSize:12,fontWeight:700,color:cfg.d,whiteSpace:'nowrap'}}>📝 텍스트 입력 후 캔버스에 클릭</span>
+              <input autoFocus value={pendingText} onChange={function(e){setPendingText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')placeText();if(e.key==='Escape')setShowTextPanel(false);}} placeholder="입력 후 Enter 또는 캔버스 클릭" style={{flex:1,padding:'6px 12px',fontSize:14,border:'1.5px solid '+cfg.c,borderRadius:9,fontFamily:textFont,fontWeight:textBold?'bold':'normal',color:color}}/>
+              <Btn onClick={placeText} bg={cfg.c} sm>배치</Btn>
+              <Btn onClick={function(){setShowTextPanel(false);}} outline color="#9CA3AF" sm>취소</Btn>
+            </div>
+          )}
+
+          {/* 캔버스 */}
+          <div style={{flex:1,overflow:'hidden',background:'#F1F5F9',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
+            <div style={{boxShadow:'0 8px 32px rgba(0,0,0,.15)',borderRadius:4}}>
+              <canvas ref={canvasRef} width={900} height={560}
+                style={{display:'block',cursor:tool==='eraser'?'cell':tool==='text'?'text':'crosshair',maxWidth:'calc(100vw - 320px)',maxHeight:'calc(100vh - 240px)',background:'white'}}
+                onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={endDraw} onMouseLeave={endDraw}/>
+            </div>
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   HABITS SCREEN (Personal) — 습관 트래커 + 스트릭
-══════════════════════════════════════════════════════════ */
-function HabitsScreen({ habits, setHabits }) {
+
+/* ══════ EXAM SCREEN ══════ */
+const SPACE_TYPE_PRESETS = ['개인', '프로젝트', '회사', '마케팅', '스터디', '동아리', '가족', '팀'];
+const SPACE_TYPE_ICONS = { '개인':'✨', '프로젝트':'📊', '회사':'💼', '마케팅':'📢', '스터디':'📚', '동아리':'🎭', '가족':'🏠', '팀':'👥' };
+const genInviteCode = function() { return Math.random().toString(36).slice(2,8).toUpperCase(); };
+
+function ExamScreen({ exams, setExams }) {
   const cfg = WS.personal;
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name:'', icon:'🔥', frequency:'daily', target:1 });
-  const todayKey = tod();
-  const ICONS = ['🔥','💪','📚','🏃','🧘','💧','🥗','😴','🎸','✍️','🌿','☀️'];
-
-  const addHabit = () => {
-    if (!form.name.trim()) return;
-    setHabits(p => [...p, { id:uid(), name:form.name.trim(), icon:form.icon, frequency:form.frequency, target:form.target, log:{}, createdAt:new Date().toISOString() }]);
-    setForm({ name:'', icon:'🔥', frequency:'daily', target:1 });
-    setShowForm(false);
+  const [form, setForm] = useState({ subject:'', date:'', type:'중간고사', memo:'' });
+  const addExam = () => {
+    if (!form.subject.trim()||!form.date) return;
+    setExams(p=>[...p,{id:uid(),...form,subject:form.subject.trim(),createdAt:new Date().toISOString()}].sort((a,b)=>a.date.localeCompare(b.date)));
+    setForm({subject:'',date:'',type:'중간고사',memo:''}); setShowForm(false);
   };
-
-  const toggleDay = (id, key) => {
-    setHabits(p => p.map(h => {
-      if (h.id !== id) return h;
-      const log = { ...h.log };
-      log[key] = !log[key];
-      return { ...h, log };
-    }));
-  };
-
-  const getStreak = (habit) => {
-    let streak = 0;
-    let d = new Date();
-    while (true) {
-      const key = d.toISOString().split('T')[0];
-      if (!habit.log[key]) break;
-      streak++;
-      d.setDate(d.getDate() - 1);
-    }
-    return streak;
-  };
-
-  const getLast7 = () => {
-    const days = [];
-    for (let i=6; i>=0; i--) {
-      const d = new Date(); d.setDate(d.getDate()-i);
-      days.push(d.toISOString().split('T')[0]);
-    }
-    return days;
-  };
-
-  const last7 = getLast7();
-  const dayLabels = ['일','월','화','수','목','금','토'];
-
+  const getDday = d=>{var t=new Date();t.setHours(0,0,0,0);return Math.ceil((new Date(d+'T00:00:00')-t)/86400000);};
+  const ddayColor=d=>d<=0?'#DC2626':d<=3?'#D97706':d<=7?'#2563EB':'#059669';
+  const ddayBg=d=>d<=0?'#FEF2F2':d<=3?'#FFFBEB':d<=7?'#EFF6FF':'#ECFDF5';
+  const ddayLabel=d=>d<0?'D+'+Math.abs(d):d===0 ? 'D-Day!':'D-'+d;
+  const typeColors={'중간고사':'#7C3AED','기말고사':'#DC2626','모의고사':'#2563EB','수행평가':'#059669','쪽지시험':'#D97706'};
   return (
-    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
-      <div className="fu" style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
-        <div>
-          <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>🔥 습관 트래커</div>
-          <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>매일 쌓아가는 나만의 루틴</div>
-        </div>
-        <button onClick={()=>setShowForm(p=>!p)} style={{ padding:'9px 16px',borderRadius:10,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 습관 추가</button>
+    <div style={{padding:'24px',height:'100%',overflowY:'auto'}}>
+      <div className="fu" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
+        <div><div style={{fontSize:20,fontWeight:900,color:'#111827'}}>📋 시험 관리</div><div style={{fontSize:13,color:'#6B7280',marginTop:2}}>시험 날짜를 등록하면 D-day가 상단에 표시돼요</div></div>
+        <button onClick={()=>setShowForm(p=>!p)} style={{padding:'9px 16px',borderRadius:10,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>+ 시험 추가</button>
       </div>
-
       {showForm&&(
-        <div className="fu" style={{ background:'white',borderRadius:16,padding:'18px',border:'1.5px solid '+cfg.m,marginBottom:20 }}>
-          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>새 습관 만들기</div>
-          <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>아이콘</div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
-              {ICONS.map(ic=><button key={ic} onClick={()=>setForm(p=>({...p,icon:ic}))} style={{ width:38,height:38,borderRadius:10,border:'2px solid '+(form.icon===ic?cfg.c:'#E5E7EB'),background:form.icon===ic?cfg.l:'white',fontSize:20,cursor:'pointer' }}>{ic}</button>)}
-            </div>
+        <div className="fu" style={{background:'white',borderRadius:16,padding:'18px',border:'1.5px solid '+cfg.m,marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:800,color:'#111827',marginBottom:14}}>새 시험 등록</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <Field value={form.subject} onChange={v=>setForm(p=>({...p,subject:v}))} label="과목" placeholder="예: 수학, 영어" required/>
+            <Select label="유형" value={form.type} onChange={v=>setForm(p=>({...p,type:v}))} options={['중간고사','기말고사','모의고사','수행평가','쪽지시험'].map(v=>({value:v,label:v}))}/>
           </div>
-          <Field value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} label="습관 이름" placeholder="예: 매일 운동하기, 물 2L 마시기" required/>
-          <div style={{ display:'flex',gap:8 }}>
-            <Btn onClick={()=>setShowForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-            <Btn onClick={addHabit} bg={cfg.c} disabled={!form.name.trim()} style={{ flex:2 }}>추가하기</Btn>
+          <Field value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} label="시험 날짜" type="date" required/>
+          <Field value={form.memo} onChange={v=>setForm(p=>({...p,memo:v}))} label="메모" placeholder="시험 범위 등 (선택)"/>
+          <div style={{display:'flex',gap:8}}>
+            <Btn onClick={()=>setShowForm(false)} outline color="#6B7280" style={{flex:1}}>취소</Btn>
+            <Btn onClick={addExam} bg={cfg.c} disabled={!form.subject.trim()||!form.date} style={{flex:2}}>등록하기</Btn>
           </div>
         </div>
       )}
-
-      {habits.length===0&&<Empty icon="🔥" title="습관이 없어요" desc="작은 습관이 큰 변화를 만들어요. 첫 번째 습관을 추가해보세요!"/>}
-
-      {habits.map(h=>{
-        const streak = getStreak(h);
-        const todayDone = !!h.log[todayKey];
+      {exams.length===0&&<Empty icon="📋" title="등록된 시험이 없어요" desc="시험을 추가하면 D-day가 상단 오른쪽에 항상 표시돼요"/>}
+      {exams.map(e=>{
+        const d=getDday(e.date);
         return (
-          <div key={h.id} className="fu" style={{ background:'white',borderRadius:18,padding:'18px 20px',border:'1px solid #F3F4F6',marginBottom:14,boxShadow:'0 2px 8px rgba(0,0,0,.04)' }}>
-            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
-              <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-                <div style={{ width:48,height:48,borderRadius:14,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24 }}>{h.icon}</div>
-                <div>
-                  <div style={{ fontSize:16,fontWeight:800,color:'#111827' }}>{h.name}</div>
-                  {streak>0&&<div style={{ fontSize:12,fontWeight:700,color:'#D97706',marginTop:2 }}>🔥 {streak}일 연속 달성 중!</div>}
-                </div>
-              </div>
-              <div style={{ display:'flex',gap:8,alignItems:'center' }}>
-                <button onClick={()=>toggleDay(h.id, todayKey)} style={{ padding:'9px 18px',borderRadius:99,border:'none',background:todayDone?cfg.c:cfg.l,color:todayDone ? 'white':cfg.d,fontSize:13,fontWeight:800,cursor:'pointer',transition:'all .2s' }}>
-                  {todayDone ? '✓ 완료':'오늘 체크'}
-                </button>
-                <button onClick={()=>setHabits(p=>p.filter(x=>x.id!==h.id))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:14 }}>✕</button>
-              </div>
+          <div key={e.id} className="fu" style={{background:'white',borderRadius:16,padding:'18px 20px',border:'1px solid #F3F4F6',marginBottom:12,display:'flex',alignItems:'center',gap:16,opacity:d<-1?0.6:1,boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}>
+            <div style={{width:70,height:70,borderRadius:16,background:ddayBg(d),display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <div style={{fontSize:20,fontWeight:900,color:ddayColor(d)}}>{ddayLabel(d)}</div>
             </div>
-            {/* 최근 7일 그래프 */}
-            <div>
-              <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:8 }}>최근 7일</div>
-              <div style={{ display:'flex',gap:6 }}>
-                {last7.map((day,i)=>{
-                  const done = !!h.log[day];
-                  const isToday = day===todayKey;
-                  const dow = new Date(day+'T00:00:00').getDay();
-                  return (
-                    <div key={day} style={{ flex:1,textAlign:'center' }}>
-                      <div style={{ fontSize:10,fontWeight:600,color:isToday?cfg.c:'#9CA3AF',marginBottom:4 }}>{dayLabels[dow]}</div>
-                      <button onClick={()=>toggleDay(h.id,day)} style={{ width:'100%',aspectRatio:'1',borderRadius:8,border:'none',background:done?cfg.c:isToday?cfg.l:'#F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,transition:'all .15s' }}>
-                        {done&&<span style={{ color:'white',fontWeight:900 }}>✓</span>}
-                      </button>
-                    </div>
-                  );
-                })}
+            <div style={{flex:1}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                <span style={{fontSize:16,fontWeight:900,color:'#111827'}}>{e.subject}</span>
+                <span style={{fontSize:11,fontWeight:700,color:typeColors[e.type]||cfg.c,background:'#F3F4F6',padding:'2px 8px',borderRadius:99}}>{e.type}</span>
               </div>
+              <div style={{fontSize:13,color:'#6B7280'}}>📅 {e.date}{d===0 ? ' · 오늘!':''}</div>
+              {e.memo&&<div style={{fontSize:12,color:'#9CA3AF',marginTop:4}}>{e.memo}</div>}
             </div>
+            <button onClick={()=>setExams(p=>p.filter(x=>x.id!==e.id))} style={{background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:16}}>✕</button>
           </div>
         );
       })}
@@ -1778,264 +2025,75 @@ function HabitsScreen({ habits, setHabits }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   GRADES SCREEN (School) — 성적 트래커
-══════════════════════════════════════════════════════════ */
-function GradesScreen({ grades, setGrades }) {
-  const cfg = WS.personal;
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ subject:'', exam:'', score:'', maxScore:'100', date:tod() });
-  const [showExam, setShowExam] = useState(false);
-  const [examForm, setExamForm] = useState({ subject:'', name:'', date:'', type:'중간고사' });
-  const [exams, setExams] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('wl_exams_user')||'[]'); } catch { return []; }
-  });
-
-  const saveExams = (v) => { setExams(v); try { localStorage.setItem('wl_exams_user', JSON.stringify(v)); } catch {} };
-
-  const addGrade = () => {
-    if (!form.subject.trim()||!form.score) return;
-    const pct = Math.round((Number(form.score)/Number(form.maxScore||100))*100);
-    setGrades(p=>[...p, { id:uid(), ...form, score:Number(form.score), maxScore:Number(form.maxScore||100), pct }]);
-    setForm({ subject:'', exam:'', score:'', maxScore:'100', date:tod() });
-    setShowForm(false);
+/* ══════ HABITS SCREEN ══════ */
+function HabitsScreen({ habits, setHabits }) {
+  const cfg=WS.personal;
+  const [showForm,setShowForm]=useState(false);
+  const [form,setForm]=useState({name:'',icon:'🔥'});
+  const todayKey=tod();
+  const ICONS=['🔥','💪','📚','🏃','🧘','💧','🥗','😴','🎸','✍️','🌿','☀️','🎯','🎨','🏊','🚴'];
+  const addHabit=()=>{
+    if(!form.name.trim()) return;
+    setHabits(p=>[...p,{id:uid(),name:form.name.trim(),icon:form.icon,log:{},createdAt:new Date().toISOString()}]);
+    setForm({name:'',icon:'🔥'}); setShowForm(false);
   };
-
-  const addExam = () => {
-    if (!examForm.subject.trim()||!examForm.date) return;
-    const diff = Math.ceil((new Date(examForm.date+' 00:00:00')-new Date())/(1000*60*60*24));
-    saveExams([...exams, { id:uid(), ...examForm, dday:diff }]);
-    setExamForm({ subject:'', name:'', date:'', type:'중간고사' });
-    setShowExam(false);
-  };
-
-  // 과목별 평균
-  const subjectMap = {};
-  grades.forEach(g => {
-    if (!subjectMap[g.subject]) subjectMap[g.subject] = [];
-    subjectMap[g.subject].push(g.pct);
-  });
-  const subjects = Object.entries(subjectMap).map(([s,pcts])=>({ subject:s, avg:Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length), count:pcts.length }));
-  const totalAvg = subjects.length ? Math.round(subjects.reduce((a,b)=>a+b.avg,0)/subjects.length) : null;
-
-  const getGrade = (pct) => pct>=90?{l:'A+',c:'#059669'}:pct>=80?{l:'B+',c:'#2563EB'}:pct>=70?{l:'C+',c:'#D97706'}:pct>=60?{l:'D',c:'#DC2626'}:{l:'F',c:'#6B7280'};
-  const ddayColor = (d) => d<=3 ? '#DC2626':d<=7 ? '#D97706':'#059669';
-
+  const toggleDay=(id,key)=>setHabits(p=>p.map(h=>h.id!==id?h:{...h,log:{...h.log,[key]:!h.log[key]}}));
+  const getStreak=h=>{let s=0,d=new Date();while(h.log&&h.log[d.toISOString().split('T')[0]]){s++;d.setDate(d.getDate()-1);}return s;};
+  const last7=()=>{const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d.toISOString().split('T')[0]);}return days;};
+  const days=last7();
+  const dayLabels=['일','월','화','수','목','금','토'];
   return (
-    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
-      <div className="fu" style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
-        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>🏆 성적 & 시험 관리</div>
-        <div style={{ display:'flex',gap:8 }}>
-          <button onClick={()=>setShowExam(p=>!p)} style={{ padding:'8px 12px',borderRadius:9,border:'1.5px solid '+cfg.c,background:'white',color:cfg.c,fontSize:12,fontWeight:700,cursor:'pointer' }}>📅 시험 등록</button>
-          <button onClick={()=>setShowForm(p=>!p)} style={{ padding:'8px 12px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:12,fontWeight:700,cursor:'pointer' }}>+ 성적 입력</button>
-        </div>
+    <div style={{padding:'24px',height:'100%',overflowY:'auto'}}>
+      <div className="fu" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+        <div><div style={{fontSize:20,fontWeight:900,color:'#111827'}}>🔥 습관 트래커</div><div style={{fontSize:13,color:'#6B7280',marginTop:2}}>매일 쌓아가는 나만의 루틴</div></div>
+        <button onClick={()=>setShowForm(p=>!p)} style={{padding:'9px 16px',borderRadius:10,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>+ 습관 추가</button>
       </div>
-
-      {/* 시험 D-day */}
-      {exams.length>0&&(
-        <div style={{ marginBottom:20 }}>
-          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10 }}>시험 D-day</div>
-          <div style={{ display:'flex',gap:10,overflowX:'auto',paddingBottom:4 }}>
-            {exams.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(e=>{
-              const diff = Math.ceil((new Date(e.date+' 00:00:00')-new Date())/(1000*60*60*24));
-              const past = diff < 0;
-              return (
-                <div key={e.id} style={{ background:'white',borderRadius:16,padding:'14px 16px',border:'1.5px solid '+(past ? '#F3F4F6':'#E5E7EB'),flexShrink:0,minWidth:130,position:'relative' }}>
-                  <button onClick={()=>saveExams(exams.filter(x=>x.id!==e.id))} style={{ position:'absolute',top:6,right:8,background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:11 }}>✕</button>
-                  <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:4 }}>{e.type}</div>
-                  <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:6 }}>{e.subject}</div>
-                  <div style={{ fontSize:24,fontWeight:900,color:past ? '#9CA3AF':ddayColor(diff) }}>
-                    {past ? '종료':`D-${diff}`}
-                  </div>
-                  <div style={{ fontSize:11,color:'#9CA3AF',marginTop:4 }}>{e.date}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {showExam&&(
-        <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
-          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>시험 등록</div>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
-            <Field value={examForm.subject} onChange={v=>setExamForm(p=>({...p,subject:v}))} label="과목" placeholder="예: 수학"/>
-            <Select label="유형" value={examForm.type} onChange={v=>setExamForm(p=>({...p,type:v}))} options={['중간고사','기말고사','쪽지시험','수행평가','모의고사'].map(v=>({value:v,label:v}))}/>
-          </div>
-          <Field value={examForm.date} onChange={v=>setExamForm(p=>({...p,date:v}))} label="시험 날짜" type="date" required/>
-          <div style={{ display:'flex',gap:8 }}>
-            <Btn onClick={()=>setShowExam(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-            <Btn onClick={addExam} bg={cfg.c} disabled={!examForm.subject.trim()||!examForm.date} style={{ flex:2 }}>등록</Btn>
-          </div>
-        </div>
-      )}
-
       {showForm&&(
-        <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
-          <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:12 }}>성적 입력</div>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
-            <Field value={form.subject} onChange={v=>setForm(p=>({...p,subject:v}))} label="과목" placeholder="예: 수학"/>
-            <Field value={form.exam} onChange={v=>setForm(p=>({...p,exam:v}))} label="시험명" placeholder="예: 1차 중간고사"/>
+        <div className="fu" style={{background:'white',borderRadius:16,padding:'18px',border:'1.5px solid '+cfg.m,marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:800,color:'#111827',marginBottom:12}}>새 습관 만들기</div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8}}>아이콘</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+              {ICONS.map(ic=><button key={ic} onClick={()=>setForm(p=>({...p,icon:ic}))} style={{width:36,height:36,borderRadius:9,border:'2px solid '+(form.icon===ic?cfg.c:'#E5E7EB'),background:form.icon===ic?cfg.l:'white',fontSize:18,cursor:'pointer'}}>{ic}</button>)}
+            </div>
           </div>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10 }}>
-            <Field value={form.score} onChange={v=>setForm(p=>({...p,score:v}))} label="점수" placeholder="85" type="number"/>
-            <Field value={form.maxScore} onChange={v=>setForm(p=>({...p,maxScore:v}))} label="만점" placeholder="100" type="number"/>
-            <Field value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} label="날짜" type="date"/>
-          </div>
-          <div style={{ display:'flex',gap:8 }}>
-            <Btn onClick={()=>setShowForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-            <Btn onClick={addGrade} bg={cfg.c} disabled={!form.subject.trim()||!form.score} style={{ flex:2 }}>입력</Btn>
+          <Field value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} label="습관 이름" placeholder="예: 매일 운동하기" required/>
+          <div style={{display:'flex',gap:8}}>
+            <Btn onClick={()=>setShowForm(false)} outline color="#6B7280" style={{flex:1}}>취소</Btn>
+            <Btn onClick={addHabit} bg={cfg.c} disabled={!form.name.trim()} style={{flex:2}}>추가하기</Btn>
           </div>
         </div>
       )}
-
-      {/* 과목 평균 요약 */}
-      {subjects.length>0&&(
-        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16 }}>
-          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
-            <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>과목별 평균</div>
-            {totalAvg!==null&&<div style={{ fontSize:20,fontWeight:900,color:getGrade(totalAvg).c }}>전체 {totalAvg}점 ({getGrade(totalAvg).l})</div>}
-          </div>
-          {subjects.map(s=>{
-            const g = getGrade(s.avg);
-            return (
-              <div key={s.subject} style={{ marginBottom:12 }}>
-                <div style={{ display:'flex',justifyContent:'space-between',marginBottom:5 }}>
-                  <div style={{ fontSize:13,fontWeight:700,color:'#374151' }}>{s.subject}</div>
-                  <div style={{ fontSize:13,fontWeight:800,color:g.c }}>{s.avg}점 ({g.l})</div>
-                </div>
-                <div style={{ height:8,background:'#F3F4F6',borderRadius:99,overflow:'hidden' }}>
-                  <div style={{ height:'100%',width:s.avg+'%',background:'linear-gradient(90deg,'+cfg.c+','+cfg.d+')',borderRadius:99,transition:'width .5s' }}/>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 성적 기록 */}
-      {grades.length===0&&subjects.length===0&&<Empty icon="🏆" title="성적이 없어요" desc="성적을 입력하고 과목별 분석을 확인해보세요"/>}
-      {grades.length>0&&(
-        <div>
-          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10 }}>성적 기록</div>
-          {[...grades].reverse().map(g=>{
-            const gr = getGrade(g.pct);
-            return (
-              <div key={g.id} style={{ background:'white',borderRadius:12,padding:'13px 16px',border:'1px solid #F3F4F6',marginBottom:8,display:'flex',alignItems:'center',gap:12 }}>
-                <div style={{ width:44,height:44,borderRadius:12,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                  <span style={{ fontSize:18,fontWeight:900,color:gr.c }}>{gr.l}</span>
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{g.subject} {g.exam&&'— '+g.exam}</div>
-                  <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>📅 {fmtFull(g.date)}</div>
-                </div>
-                <div style={{ textAlign:'right' }}>
-                  <div style={{ fontSize:20,fontWeight:900,color:gr.c }}>{g.score}</div>
-                  <div style={{ fontSize:11,color:'#9CA3AF' }}>/{g.maxScore} ({g.pct}%)</div>
-                </div>
-                <button onClick={()=>setGrades(p=>p.filter(x=>x.id!==g.id))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13 }}>✕</button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════
-   ATTENDANCE SCREEN (School) — 출석 체크
-══════════════════════════════════════════════════════════ */
-function AttendanceScreen({ attend, setAttend }) {
-  const cfg = WS.personal;
-  const [subjects, setSubjects] = useState(() => { try { return JSON.parse(localStorage.getItem('wl_attend_subjects')||'[]'); } catch { return []; } });
-  const [showAdd, setShowAdd] = useState(false);
-  const [newSubject, setNewSubject] = useState('');
-  const todayKey = tod();
-  const dayNames2 = ['일','월','화','수','목','금','토'];
-
-  const saveSubjects = (v) => { setSubjects(v); try { localStorage.setItem('wl_attend_subjects', JSON.stringify(v)); } catch {} };
-
-  const getLast14 = () => {
-    const days = [];
-    for (let i=13; i>=0; i--) {
-      const d = new Date(); d.setDate(d.getDate()-i);
-      days.push(d.toISOString().split('T')[0]);
-    }
-    return days;
-  };
-
-  const toggleAttend = (subject, day, status) => {
-    const key = subject+'|'+day;
-    setAttend(p => {
-      const next = {...p};
-      if (next[key]===status) delete next[key];
-      else next[key] = status;
-      return next;
-    });
-  };
-
-  const getStats = (subject) => {
-    const days = getLast14();
-    let present=0, absent=0, late=0;
-    days.forEach(d => {
-      const v = attend[subject+'|'+d];
-      if (v==='O') present++;
-      else if (v==='X') absent++;
-      else if (v==='△') late++;
-    });
-    return { present, absent, late, total:days.length };
-  };
-
-  const last14 = getLast14();
-
-  return (
-    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
-      <div className="fu" style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
-        <div>
-          <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>📋 출석 체크</div>
-          <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>O 출석 · X 결석 · △ 지각</div>
-        </div>
-        <button onClick={()=>setShowAdd(p=>!p)} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 과목 추가</button>
-      </div>
-
-      {showAdd&&(
-        <div className="fu" style={{ background:'white',borderRadius:12,padding:'14px',border:'1.5px solid '+cfg.m,marginBottom:16,display:'flex',gap:8 }}>
-          <input value={newSubject} onChange={e=>setNewSubject(e.target.value)} placeholder="과목명 입력 (예: 수학)" onKeyDown={e=>e.key==='Enter'&&newSubject.trim()&&(saveSubjects([...subjects,newSubject.trim()]),setNewSubject(''),setShowAdd(false))} style={{ flex:1,padding:'9px 12px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:9,fontFamily:'inherit' }}/>
-          <Btn onClick={()=>{if(newSubject.trim()){saveSubjects([...subjects,newSubject.trim()]);setNewSubject('');setShowAdd(false);}}} bg={cfg.c} sm>추가</Btn>
-        </div>
-      )}
-
-      {subjects.length===0&&<Empty icon="📋" title="과목이 없어요" desc="과목을 추가하고 출석을 체크해보세요"/>}
-
-      {subjects.map(subject=>{
-        const stats = getStats(subject);
-        const rate = Math.round((stats.present/(stats.present+stats.absent+stats.late||1))*100);
+      {habits.length===0&&<Empty icon="🔥" title="습관이 없어요" desc="작은 습관이 큰 변화를 만들어요!"/>}
+      {habits.map(h=>{
+        const streak=getStreak(h);
+        const todayDone=!!(h.log&&h.log[todayKey]);
         return (
-          <div key={subject} style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',marginBottom:16,boxShadow:'0 2px 8px rgba(0,0,0,.04)' }}>
-            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
-              <div style={{ fontSize:15,fontWeight:800,color:'#111827' }}>{subject}</div>
-              <div style={{ display:'flex',gap:10,alignItems:'center' }}>
-                <span style={{ fontSize:12,fontWeight:700,color:'#059669' }}>출{stats.present}</span>
-                <span style={{ fontSize:12,fontWeight:700,color:'#DC2626' }}>결{stats.absent}</span>
-                <span style={{ fontSize:12,fontWeight:700,color:'#D97706' }}>지{stats.late}</span>
-                <span style={{ fontSize:13,fontWeight:800,color:rate>=90 ? '#059669':rate>=80 ? '#2563EB':'#DC2626' }}>{rate}%</span>
-                <button onClick={()=>saveSubjects(subjects.filter(s=>s!==subject))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13 }}>✕</button>
+          <div key={h.id} className="fu" style={{background:'white',borderRadius:18,padding:'18px 20px',border:'1px solid #F3F4F6',marginBottom:14,boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:48,height:48,borderRadius:14,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>{h.icon}</div>
+                <div>
+                  <div style={{fontSize:16,fontWeight:800,color:'#111827'}}>{h.name}</div>
+                  {streak>0&&<div style={{fontSize:12,fontWeight:700,color:'#D97706',marginTop:2}}>🔥 {streak}일 연속 달성 중!</div>}
+                </div>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <button onClick={()=>toggleDay(h.id,todayKey)} style={{padding:'9px 18px',borderRadius:99,border:'none',background:todayDone?cfg.c:cfg.l,color:todayDone?'white':cfg.d,fontSize:13,fontWeight:800,cursor:'pointer'}}>{todayDone ? '✓ 완료':'오늘 체크'}</button>
+                <button onClick={()=>setHabits(p=>p.filter(x=>x.id!==h.id))} style={{background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:14}}>✕</button>
               </div>
             </div>
-            <div style={{ display:'flex',gap:4,overflowX:'auto' }}>
-              {last14.map(day=>{
-                const v = attend[subject+'|'+day];
-                const isToday = day===todayKey;
-                const dow = new Date(day+'T00:00:00').getDay();
+            <div style={{display:'flex',gap:6}}>
+              {days.map((day,i)=>{
+                const done=!!(h.log&&h.log[day]);
+                const isToday=day===todayKey;
+                const dow=new Date(day+'T00:00:00').getDay();
                 return (
-                  <div key={day} style={{ flexShrink:0,textAlign:'center',minWidth:32 }}>
-                    <div style={{ fontSize:9,color:isToday?cfg.c:'#9CA3AF',marginBottom:3,fontWeight:600 }}>{dayNames2[dow]}</div>
-                    <div style={{ display:'flex',flexDirection:'column',gap:2 }}>
-                      {['O','△','X'].map(s=>(
-                        <button key={s} onClick={()=>toggleAttend(subject,day,s)} style={{ width:30,height:20,borderRadius:5,border:'none',background:v===s?(s==='O'?'#059669':s==='X'?'#DC2626':'#D97706'):(isToday?cfg.l:'#F3F4F6'),color:v===s ? 'white':(isToday?cfg.c:'#9CA3AF'),fontSize:10,fontWeight:700,cursor:'pointer' }}>{s}</button>
-                      ))}
-                    </div>
+                  <div key={day} style={{flex:1,textAlign:'center'}}>
+                    <div style={{fontSize:10,fontWeight:600,color:isToday?cfg.c:'#9CA3AF',marginBottom:4}}>{dayLabels[dow]}</div>
+                    <button onClick={()=>toggleDay(h.id,day)} style={{width:'100%',aspectRatio:'1',borderRadius:8,border:'none',background:done?cfg.c:isToday?cfg.l:'#F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>
+                      {done&&<span style={{color:'white',fontWeight:900}}>✓</span>}
+                    </button>
                   </div>
                 );
               })}
@@ -2047,276 +2105,110 @@ function AttendanceScreen({ attend, setAttend }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   TIME TRACKER SCREEN (Company) — 업무 시간 기록
-══════════════════════════════════════════════════════════ */
-function TimeTrackerScreen({ timeLogs, setTimeLogs }) {
-  const cfg = WS.personal;
-  const [running, setRunning] = useState(null); // { taskName, startTime }
-  const [elapsed, setElapsed] = useState(0);
-  const [taskName, setTaskName] = useState('');
-  const [showReport, setShowReport] = useState(false);
-
-  useEffect(() => {
-    if (!running) return;
-    const iv = setInterval(() => setElapsed(Math.floor((Date.now()-running.startTime)/1000)), 1000);
-    return () => clearInterval(iv);
-  }, [running]);
-
-  const startTimer = () => {
-    if (!taskName.trim()) return;
-    setRunning({ taskName:taskName.trim(), startTime:Date.now() });
-    setElapsed(0);
-  };
-
-  const stopTimer = () => {
-    if (!running) return;
-    const duration = Math.floor((Date.now()-running.startTime)/1000);
-    if (duration > 5) {
-      setTimeLogs(p=>[...p, { id:uid(), task:running.taskName, duration, date:todayKey, startTime:new Date(running.startTime).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}), createdAt:new Date().toISOString() }]);
-    }
-    setRunning(null); setElapsed(0); setTaskName('');
-  };
-
-  const todayKey = tod();
-  const fmt = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${m}:${String(sec).padStart(2,'0')}`; };
-  const fmtH = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0 ? `${h}시간 ${m}분`:`${m}분`; };
-
-  const todayLogs = timeLogs.filter(l=>l.date===todayKey);
-  const todayTotal = todayLogs.reduce((a,b)=>a+b.duration,0);
-
-  // 주간 리포트
-  const weekDays = [];
-  for (let i=6;i>=0;i--) { const d=new Date();d.setDate(d.getDate()-i);weekDays.push(d.toISOString().split('T')[0]); }
-  const weekData = weekDays.map(d=>({ date:d, total:timeLogs.filter(l=>l.date===d).reduce((a,b)=>a+b.duration,0) }));
-  const maxWeek = Math.max(...weekData.map(d=>d.total), 1);
-  const dayLabels3 = ['일','월','화','수','목','금','토'];
-
-  return (
-    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
-      <div className="fu" style={{ marginBottom:20 }}>
-        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>⏱️ 타임트래커</div>
-        <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>업무 시간을 기록하고 분석해요</div>
-      </div>
-
-      {/* 타이머 */}
-      <div className="fu" style={{ background:'white',borderRadius:18,padding:'24px',border:'1px solid #F3F4F6',marginBottom:20,textAlign:'center',boxShadow:'0 4px 16px rgba(0,0,0,.06)' }}>
-        {running ? (
-          <>
-            <div style={{ fontSize:13,fontWeight:700,color:'#9CA3AF',marginBottom:6 }}>기록 중</div>
-            <div style={{ fontSize:14,fontWeight:800,color:cfg.c,marginBottom:12,background:cfg.l,padding:'6px 16px',borderRadius:99,display:'inline-block' }}>{running.taskName}</div>
-            <div style={{ fontSize:52,fontWeight:900,color:'#111827',fontVariantNumeric:'tabular-nums',letterSpacing:-2,marginBottom:20 }}>{fmt(elapsed)}</div>
-            <button onClick={stopTimer} style={{ padding:'12px 32px',borderRadius:12,border:'none',background:'#EF4444',color:'white',fontSize:15,fontWeight:800,cursor:'pointer' }}>■ 정지</button>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize:52,fontWeight:900,color:'#D1D5DB',marginBottom:16 }}>00:00</div>
-            <div style={{ display:'flex',gap:8,maxWidth:360,margin:'0 auto' }}>
-              <input value={taskName} onChange={e=>setTaskName(e.target.value)} placeholder="업무 이름 입력" onKeyDown={e=>e.key==='Enter'&&startTimer()} style={{ flex:1,padding:'11px 14px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:11,fontFamily:'inherit' }}/>
-              <button onClick={startTimer} disabled={!taskName.trim()} style={{ padding:'11px 24px',borderRadius:11,border:'none',background:taskName.trim()?cfg.c:'#E5E7EB',color:'white',fontSize:14,fontWeight:700,cursor:taskName.trim() ? 'pointer':'default' }}>▶ 시작</button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* 오늘 합계 + 주간 그래프 */}
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 2fr',gap:16,marginBottom:20 }}>
-        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6',textAlign:'center' }}>
-          <div style={{ fontSize:12,fontWeight:700,color:'#9CA3AF',marginBottom:6 }}>오늘 총 업무</div>
-          <div style={{ fontSize:28,fontWeight:900,color:cfg.c }}>{fmtH(todayTotal)}</div>
-          <div style={{ fontSize:12,color:'#9CA3AF',marginTop:4 }}>{todayLogs.length}개 업무</div>
-        </div>
-        <div style={{ background:'white',borderRadius:16,padding:'18px',border:'1px solid #F3F4F6' }}>
-          <div style={{ fontSize:12,fontWeight:700,color:'#9CA3AF',marginBottom:10 }}>이번 주</div>
-          <div style={{ display:'flex',gap:4,alignItems:'flex-end',height:60 }}>
-            {weekData.map((d,i)=>{
-              const isToday = d.date===todayKey;
-              const h = d.total>0 ? Math.max(4, Math.round((d.total/maxWeek)*56)) : 2;
-              const dow = new Date(d.date+'T00:00:00').getDay();
-              return (
-                <div key={d.date} style={{ flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4 }}>
-                  <div title={fmtH(d.total)} style={{ width:'100%',height:h,borderRadius:4,background:isToday?cfg.c:d.total>0?cfg.m:'#F3F4F6',transition:'height .3s' }}/>
-                  <div style={{ fontSize:9,color:isToday?cfg.c:'#9CA3AF',fontWeight:isToday?800:500 }}>{dayLabels3[dow]}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* 오늘 기록 */}
-      {todayLogs.length>0&&(
-        <div>
-          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10 }}>오늘 기록</div>
-          {[...todayLogs].reverse().map(l=>(
-            <div key={l.id} style={{ background:'white',borderRadius:12,padding:'13px 16px',border:'1px solid #F3F4F6',marginBottom:8,display:'flex',alignItems:'center',gap:12 }}>
-              <div style={{ width:40,height:40,borderRadius:11,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0 }}>⏱️</div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{l.task}</div>
-                <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>시작: {l.startTime}</div>
-              </div>
-              <div style={{ fontSize:16,fontWeight:900,color:cfg.c }}>{fmtH(l.duration)}</div>
-              <button onClick={()=>setTimeLogs(p=>p.filter(x=>x.id!==l.id))} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:13 }}>✕</button>
-            </div>
-          ))}
-        </div>
-      )}
-      {timeLogs.length===0&&<Empty icon="⏱️" title="기록된 업무가 없어요" desc="업무 이름을 입력하고 타이머를 시작해보세요"/>}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════
-   NOTIF SCREEN — 알림함 (워크스페이스 초대 수락/거절)
-══════════════════════════════════════════════════════════ */
+/* ══════ NOTIF SCREEN ══════ */
 function NotifScreen({ user, spaces, setSpaces, notifs, setNotifs }) {
-  const cfg = WS.personal;
-  const [codeModal, setCodeModal] = useState(null); // {notif}
-  const [codeInput, setCodeInput] = useState('');
-  const [codeError, setCodeError] = useState('');
-  const [codeSuccess, setCodeSuccess] = useState(false);
+  const cfg=WS.personal;
+  const [codeModal,setCodeModal]=useState(null);
+  const [codeInput,setCodeInput]=useState('');
+  const [codeError,setCodeError]=useState('');
+  const [codeSuccess,setCodeSuccess]=useState(false);
 
-  const acceptInvite = (notif) => {
-    const updated = spaces.map(function(s) {
-      if (s.id !== notif.spaceId) return s;
-      if (s.members && s.members.find(function(m) { return m.id === user.id; })) return s;
-      return { ...s, members: [...(s.members||[]), { id: user.id, name: user.nickname||user.name, role: 'member' }] };
+  const acceptInvite=(notif)=>{
+    const updated=spaces.map(s=>{
+      if(s.id!==notif.spaceId) return s;
+      if(s.members&&s.members.find(m=>m.id===user.id)) return s;
+      return{...s,members:[...(s.members||[]),{id:user.id,name:user.nickname||user.name,role:'member'}]};
     });
-    setSpaces(updated); sv('wl_spaces', updated);
-    setNotifs(notifs.map(function(n) { return n.id===notif.id ? {...n, status:'accepted', read:true} : n; }));
+    setSpaces(updated); sv('wl_spaces',updated);
+    setNotifs(notifs.map(n=>n.id===notif.id?{...n,status:'accepted',read:true}:n));
   };
 
-  const rejectInvite = (notif) => {
-    setNotifs(notifs.map(function(n) { return n.id===notif.id ? {...n, status:'rejected', read:true} : n; }));
-  };
+  const rejectInvite=(notif)=>setNotifs(notifs.map(n=>n.id===notif.id?{...n,status:'rejected',read:true}:n));
 
-  const openCodeModal = (notif) => {
-    setCodeModal(notif);
-    setCodeInput('');
-    setCodeError('');
-    setCodeSuccess(false);
-  };
-
-  const submitCode = () => {
-    if (!codeModal) return;
-    const space = spaces.find(function(s) { return s.id === codeModal.spaceId; });
-    if (!space) { setCodeError('워크스페이스를 찾을 수 없어요.'); return; }
-    const inputCode = codeInput.trim().toUpperCase();
-    const spaceCode = (space.inviteCode||'').toUpperCase();
-    if (inputCode === spaceCode) {
-      // 코드 일치 → 워크스페이스 참여
-      const updated = spaces.map(function(s) {
-        if (s.id !== space.id) return s;
-        if (s.members && s.members.find(function(m) { return m.id === user.id; })) return s;
-        return { ...s, members: [...(s.members||[]), { id: user.id, name: user.nickname||user.name, role: 'member' }] };
+  const submitCode=()=>{
+    if(!codeModal) return;
+    const space=spaces.find(s=>s.id===codeModal.spaceId);
+    if(!space){setCodeError('워크스페이스를 찾을 수 없어요.'); return;}
+    if(codeInput.trim().toUpperCase()===(space.inviteCode||'').toUpperCase()){
+      const updated=spaces.map(s=>{
+        if(s.id!==space.id) return s;
+        if(s.members&&s.members.find(m=>m.id===user.id)) return s;
+        return{...s,members:[...(s.members||[]),{id:user.id,name:user.nickname||user.name,role:'member'}]};
       });
-      setSpaces(updated); sv('wl_spaces', updated);
-      setNotifs(notifs.map(function(n) { return n.id===codeModal.id ? {...n, status:'accepted', read:true} : n; }));
+      setSpaces(updated); sv('wl_spaces',updated);
+      setNotifs(notifs.map(n=>n.id===codeModal.id?{...n,status:'accepted',read:true}:n));
       setCodeSuccess(true);
-      setTimeout(function() { setCodeModal(null); setCodeSuccess(false); }, 1800);
+      setTimeout(()=>{setCodeModal(null);setCodeSuccess(false);},1800);
     } else {
       setCodeError('코드가 일치하지 않아요. 다시 확인해주세요.');
     }
   };
 
-  const sorted = [...notifs].sort(function(a,b) { return new Date(b.createdAt)-new Date(a.createdAt); });
-  const unread = sorted.filter(function(n) { return !n.read; }).length;
+  const sorted=[...notifs].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const unread=sorted.filter(n=>!n.read).length;
 
-  const markRead = (id) => {
-    setNotifs(notifs.map(function(n) { return n.id===id ? {...n,read:true} : n; }));
-  };
-
-  if (sorted.length === 0) return (
-    <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <Empty icon="🔔" title="알림이 없어요" desc="초대나 활동 알림이 여기 표시돼요"/>
-    </div>
-  );
+  if(sorted.length===0) return <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}><Empty icon="🔔" title="알림이 없어요" desc="초대나 활동 알림이 여기 표시돼요"/></div>;
 
   return (
-    <div style={{ padding:'24px', height:'100%', overflowY:'auto' }}>
-      <div className="fu" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-        <div>
-          <div style={{ fontSize:20, fontWeight:900, color:'#111827' }}>🔔 알림</div>
-          {unread>0&&<div style={{ fontSize:13, color:cfg.c, fontWeight:700, marginTop:2 }}>읽지 않은 알림 {unread}개</div>}
-        </div>
-        {unread>0&&<button onClick={function(){setNotifs(notifs.map(function(n){return {...n,read:true};}));}} style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid #E5E7EB', background:'white', color:'#6B7280', fontSize:12, fontWeight:600, cursor:'pointer' }}>전체 읽음</button>}
+    <div style={{padding:'24px',height:'100%',overflowY:'auto'}}>
+      <div className="fu" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+        <div><div style={{fontSize:20,fontWeight:900,color:'#111827'}}>🔔 알림</div>{unread>0&&<div style={{fontSize:13,color:cfg.c,fontWeight:700,marginTop:2}}>읽지 않은 알림 {unread}개</div>}</div>
+        {unread>0&&<button onClick={()=>setNotifs(notifs.map(n=>({...n,read:true})))} style={{padding:'7px 12px',borderRadius:8,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:12,fontWeight:600,cursor:'pointer'}}>전체 읽음</button>}
       </div>
-
-      {sorted.map(function(notif) {
-        const isPending = notif.status === 'pending';
-        const isAccepted = notif.status === 'accepted';
-        const isRejected = notif.status === 'rejected';
-        const requiresCode = notif.requiresCode;
-
+      {sorted.map(notif=>{
+        const isPending=notif.status==='pending';
+        const isAccepted=notif.status==='accepted';
         return (
-          <div key={notif.id} onClick={function(){if(!notif.read)markRead(notif.id);}} className="fu" style={{ background: notif.read ? 'white' : cfg.l, border:'1.5px solid '+(notif.read ? '#F3F4F6':cfg.m), borderRadius:16, padding:'16px', marginBottom:12, transition:'all .2s' }}>
-            <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-              <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
-                {notif.type==='invite' ? '👥' : '🔔'}
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:14, fontWeight:800, color:'#111827', marginBottom:3, lineHeight:1.5 }}>
-                  <span style={{ color:cfg.c }}>{notif.fromName}</span>님이{' '}
-                  <span style={{ fontWeight:900 }}>'{notif.spaceName}'</span>에 당신을 초대했습니다.
+          <div key={notif.id} className="fu" style={{background:notif.read ? 'white':cfg.l,border:'1.5px solid '+(notif.read ? '#F3F4F6':cfg.m),borderRadius:16,padding:'16px',marginBottom:12}}>
+            <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+              <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>👥</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:800,color:'#111827',marginBottom:3,lineHeight:1.5}}>
+                  <span style={{color:cfg.c}}>{notif.fromName}</span>님이 <span style={{fontWeight:900}}>'{notif.spaceName}'</span>에 당신을 초대했습니다.
                 </div>
-                {notif.message&&<div style={{ fontSize:13, color:'#6B7280', marginBottom:8, background:'#F9FAFB', borderRadius:8, padding:'8px 10px' }}>"{notif.message}"</div>}
-                <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:isPending?12:0 }}>{fmtFull(notif.createdAt&&notif.createdAt.split('T')[0]||'')}</div>
-
+                {notif.message&&<div style={{fontSize:13,color:'#6B7280',marginBottom:8,background:'#F9FAFB',borderRadius:8,padding:'8px 10px'}}>"{notif.message}"</div>}
+                <div style={{fontSize:11,color:'#9CA3AF',marginBottom:isPending?12:0}}>{fmtFull((notif.createdAt||'').split('T')[0]||'')}</div>
                 {isPending&&(
-                  requiresCode ? (
-                    <button onClick={function(e){e.stopPropagation();openCodeModal(notif);}} style={{ width:'100%', padding:'10px', borderRadius:10, border:'none', background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')', color:'white', fontSize:13, fontWeight:800, cursor:'pointer' }}>
-                      🔑 초대 코드 입력하고 참여하기
-                    </button>
+                  notif.requiresCode ? (
+                    <button onClick={e=>{e.stopPropagation();setCodeModal(notif);setCodeInput('');setCodeError('');setCodeSuccess(false);}} style={{width:'100%',padding:'10px',borderRadius:10,border:'none',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:13,fontWeight:800,cursor:'pointer'}}>🔑 초대 코드 입력하고 참여하기</button>
                   ) : (
-                    <div style={{ display:'flex', gap:8 }}>
-                      <button onClick={function(e){e.stopPropagation();rejectInvite(notif);}} style={{ flex:1, padding:'9px', borderRadius:10, border:'1.5px solid #E5E7EB', background:'white', color:'#6B7280', fontSize:13, fontWeight:700, cursor:'pointer' }}>거절</button>
-                      <button onClick={function(e){e.stopPropagation();acceptInvite(notif);}} style={{ flex:2, padding:'9px', borderRadius:10, border:'none', background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')', color:'white', fontSize:13, fontWeight:800, cursor:'pointer' }}>✓ 수락하기</button>
+                    <div style={{display:'flex',gap:8}}>
+                      <button onClick={e=>{e.stopPropagation();rejectInvite(notif);}} style={{flex:1,padding:'9px',borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer'}}>거절</button>
+                      <button onClick={e=>{e.stopPropagation();acceptInvite(notif);}} style={{flex:2,padding:'9px',borderRadius:10,border:'none',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:13,fontWeight:800,cursor:'pointer'}}>✓ 수락하기</button>
                     </div>
                   )
                 )}
-                {isAccepted&&<div style={{ fontSize:13, fontWeight:700, color:'#059669', background:'#ECFDF5', borderRadius:8, padding:'8px 12px' }}>✓ 수락됨 — 워크스페이스에 참여했어요!</div>}
-                {isRejected&&<div style={{ fontSize:13, fontWeight:600, color:'#9CA3AF', background:'#F9FAFB', borderRadius:8, padding:'8px 12px' }}>거절됨</div>}
+                {isAccepted&&<div style={{fontSize:13,fontWeight:700,color:'#059669',background:'#ECFDF5',borderRadius:8,padding:'8px 12px'}}>✓ 수락됨 — 워크스페이스에 참여했어요!</div>}
+                {notif.status==='rejected'&&<div style={{fontSize:13,fontWeight:600,color:'#9CA3AF',background:'#F9FAFB',borderRadius:8,padding:'8px 12px'}}>거절됨</div>}
               </div>
-              {!notif.read&&<div style={{ width:8, height:8, borderRadius:'50%', background:cfg.c, flexShrink:0, marginTop:4 }}/>}
+              {!notif.read&&<div style={{width:8,height:8,borderRadius:'50%',background:cfg.c,flexShrink:0,marginTop:4}}/>}
             </div>
           </div>
         );
       })}
 
-      {/* 초대 코드 입력 모달 */}
       {codeModal&&(
-        <div style={{ position:'fixed',inset:0,zIndex:990,background:'rgba(0,0,0,.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:24 }}
-          onClick={function(e){if(e.target===e.currentTarget){setCodeModal(null);}}}>
-          <div className="fu" style={{ background:'white',borderRadius:20,padding:'28px',width:'100%',maxWidth:380,boxShadow:'0 24px 64px rgba(0,0,0,.2)' }}>
+        <div style={{position:'fixed',inset:0,zIndex:990,background:'rgba(0,0,0,.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:24}}
+          onClick={e=>{if(e.target===e.currentTarget)setCodeModal(null);}}>
+          <div className="fu" style={{background:'white',borderRadius:20,padding:'28px',width:'100%',maxWidth:380,boxShadow:'0 24px 64px rgba(0,0,0,.2)'}}>
             {codeSuccess ? (
-              <div style={{ textAlign:'center', padding:'16px 0' }}>
-                <div style={{ fontSize:52, marginBottom:12 }}>🎉</div>
-                <div style={{ fontSize:18, fontWeight:900, color:'#059669' }}>참여 완료!</div>
-                <div style={{ fontSize:14, color:'#6B7280', marginTop:6 }}>워크스페이스에 성공적으로 참여했어요</div>
+              <div style={{textAlign:'center',padding:'16px 0'}}>
+                <div style={{fontSize:52,marginBottom:12}}>🎉</div>
+                <div style={{fontSize:18,fontWeight:900,color:'#059669'}}>참여 완료!</div>
               </div>
             ) : (
               <>
-                <div style={{ textAlign:'center', marginBottom:20 }}>
-                  <div style={{ fontSize:36, marginBottom:10 }}>🔑</div>
-                  <div style={{ fontSize:18, fontWeight:900, color:'#111827', marginBottom:6 }}>초대 코드를 입력하세요!</div>
-                  <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6 }}>
-                    <span style={{ color:cfg.c, fontWeight:700 }}>{codeModal.fromName}</span>님이{' '}
-                    <span style={{ fontWeight:700 }}>'{codeModal.spaceName}'</span>에 초대했어요.<br/>
-                    받은 6자리 초대 코드를 입력해주세요.
-                  </div>
+                <div style={{textAlign:'center',marginBottom:20}}>
+                  <div style={{fontSize:36,marginBottom:10}}>🔑</div>
+                  <div style={{fontSize:18,fontWeight:900,color:'#111827',marginBottom:6}}>초대 코드를 입력하세요!</div>
+                  <div style={{fontSize:13,color:'#6B7280',lineHeight:1.6}}><span style={{color:cfg.c,fontWeight:700}}>{codeModal.fromName}</span>님이 <span style={{fontWeight:700}}>'{codeModal.spaceName}'</span>에 초대했어요.</div>
                 </div>
-                <input
-                  value={codeInput}
-                  onChange={function(e){setCodeInput(e.target.value.toUpperCase());setCodeError('');}}
-                  placeholder="예: ABC123"
-                  maxLength={6}
-                  onKeyDown={function(e){if(e.key==='Enter')submitCode();}}
-                  style={{ width:'100%',padding:'14px',fontSize:24,fontWeight:900,letterSpacing:8,textAlign:'center',border:'2px solid '+(codeError?'#EF4444':codeInput?cfg.c:'#E5E7EB'),borderRadius:12,fontFamily:'monospace',marginBottom:10,color:'#111827' }}
-                />
-                {codeError&&<div style={{ fontSize:13,color:'#EF4444',textAlign:'center',marginBottom:10,fontWeight:600 }}>{codeError}</div>}
-                <div style={{ display:'flex',gap:10 }}>
-                  <button onClick={function(){setCodeModal(null);}} style={{ flex:1,padding:'12px',borderRadius:11,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:14,fontWeight:600,cursor:'pointer' }}>취소</button>
-                  <button onClick={submitCode} disabled={codeInput.length!==6} style={{ flex:2,padding:'12px',borderRadius:11,border:'none',background:codeInput.length===6?'linear-gradient(135deg,'+cfg.c+','+cfg.d+')'  :'#E5E7EB',color:'white',fontSize:14,fontWeight:800,cursor:codeInput.length===6?'pointer':'default' }}>참여하기</button>
+                <input value={codeInput} onChange={e=>{setCodeInput(e.target.value.toUpperCase());setCodeError('');}} placeholder="예: ABC123" maxLength={6} onKeyDown={e=>{if(e.key==='Enter')submitCode();}}
+                  style={{width:'100%',padding:'14px',fontSize:24,fontWeight:900,letterSpacing:8,textAlign:'center',border:'2px solid '+(codeError?'#EF4444':codeInput?cfg.c:'#E5E7EB'),borderRadius:12,fontFamily:'monospace',marginBottom:10,color:'#111827'}}/>
+                {codeError&&<div style={{fontSize:13,color:'#EF4444',textAlign:'center',marginBottom:10,fontWeight:600}}>{codeError}</div>}
+                <div style={{display:'flex',gap:10}}>
+                  <button onClick={()=>setCodeModal(null)} style={{flex:1,padding:'12px',borderRadius:11,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:14,fontWeight:600,cursor:'pointer'}}>취소</button>
+                  <button onClick={submitCode} disabled={codeInput.length!==6} style={{flex:2,padding:'12px',borderRadius:11,border:'none',background:codeInput.length===6 ? 'linear-gradient(135deg,'+cfg.c+','+cfg.d+')':'#E5E7EB',color:'white',fontSize:14,fontWeight:800,cursor:codeInput.length===6 ? 'pointer':'default'}}>참여하기</button>
                 </div>
               </>
             )}
@@ -2327,439 +2219,391 @@ function NotifScreen({ user, spaces, setSpaces, notifs, setNotifs }) {
   );
 }
 
+/* ══════ COMMENT COMPONENTS ══════ */
+function CommentText({ text, members }) {
+  const parts = text.split(/(@\S+)/g);
+  return <span>{parts.map((p,i)=>{const m=members&&members.find(mb=>('@'+mb.name)===p);return m?<span key={i} style={{color:WS.personal.c,fontWeight:700}}>{p}</span>:<span key={i}>{p}</span>;})}</span>;
+}
+function CommentInput({ onSubmit, members, placeholder='댓글 입력...', accentColor }) {
+  const [v,setV]=useState('');
+  const [showMention,setShowMention]=useState(false);
+  const [mentionQ,setMentionQ]=useState('');
+  const ref=useRef(null);
+  const c=accentColor||WS.personal.c;
+  const handleChange=e=>{
+    const val=e.target.value; setV(val);
+    const atIdx=val.lastIndexOf('@');
+    if(atIdx!==-1&&atIdx===val.length-1){setShowMention(true);setMentionQ('');}
+    else if(atIdx!==-1&&val.slice(atIdx+1).match(/^\w*$/)){setShowMention(true);setMentionQ(val.slice(atIdx+1));}
+    else setShowMention(false);
+  };
+  const insertMention=name=>{
+    const atIdx=v.lastIndexOf('@');
+    setV(v.slice(0,atIdx)+'@'+name+' ');
+    setShowMention(false);
+    if(ref.current) ref.current.focus();
+  };
+  const filteredMembers=(members||[]).filter(m=>m.name.toLowerCase().includes(mentionQ.toLowerCase()));
+  return (
+    <div style={{position:'relative'}}>
+      {showMention&&filteredMembers.length>0&&(
+        <div style={{position:'absolute',bottom:'100%',left:0,background:'white',borderRadius:10,boxShadow:'0 4px 16px rgba(0,0,0,.12)',border:'1px solid #E5E7EB',zIndex:100,minWidth:160}}>
+          {filteredMembers.map(m=><button key={m.id} onClick={()=>insertMention(m.name)} style={{display:'block',width:'100%',padding:'8px 14px',border:'none',background:'none',textAlign:'left',cursor:'pointer',fontSize:13,fontWeight:700,color:'#374151'}}>{m.name}</button>)}
+        </div>
+      )}
+      <div style={{display:'flex',gap:8}}>
+        <input ref={ref} value={v} onChange={handleChange} placeholder={placeholder} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&v.trim()){e.preventDefault();onSubmit(v.trim());setV('');setShowMention(false);}}}
+          style={{flex:1,padding:'9px 12px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit'}}/>
+        <button onClick={()=>{if(v.trim()){onSubmit(v.trim());setV('');setShowMention(false);}}} style={{padding:'9px 16px',borderRadius:10,border:'none',background:c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>전송</button>
+      </div>
+    </div>
+  );
+}
+function CommentSection({ comments, members, user, onAddComment, onAddReply, onDelete, accentColor }) {
+  const [replyTo,setReplyTo]=useState(null);
+  const c=accentColor||WS.personal.c;
+  return (
+    <div>
+      {comments.length===0&&<div style={{textAlign:'center',padding:'20px',color:'#D1D5DB',fontSize:13}}>첫 번째 댓글을 남겨보세요!</div>}
+      {comments.map(cm=>(
+        <div key={cm.id} style={{marginBottom:16}}>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+            <div style={{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,'+c+',#2563EB)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:13,fontWeight:900,flexShrink:0}}>{(cm.authorName||'?')[0]}</div>
+            <div style={{flex:1}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                <span style={{fontSize:13,fontWeight:700,color:'#111827'}}>{cm.authorName}</span>
+                <span style={{fontSize:11,color:'#9CA3AF'}}>{fmtFull((cm.createdAt||'').split('T')[0])}</span>
+              </div>
+              <div style={{fontSize:14,color:'#374151',lineHeight:1.6,background:'#F9FAFB',borderRadius:'0 12px 12px 12px',padding:'10px 13px'}}>
+                <CommentText text={cm.text} members={members}/>
+              </div>
+              <div style={{display:'flex',gap:12,marginTop:6}}>
+                <button onClick={()=>setReplyTo(replyTo===cm.id?null:cm.id)} style={{background:'none',border:'none',fontSize:12,color:c,fontWeight:700,cursor:'pointer'}}>↩ 답글</button>
+                {cm.authorId===user.id&&<button onClick={()=>onDelete(cm.id)} style={{background:'none',border:'none',fontSize:12,color:'#9CA3AF',cursor:'pointer'}}>삭제</button>}
+              </div>
+              {(cm.replies||[]).map(r=>(
+                <div key={r.id} style={{display:'flex',gap:8,marginTop:8,marginLeft:14}}>
+                  <div style={{width:26,height:26,borderRadius:'50%',background:'linear-gradient(135deg,'+c+',#7C3AED)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:900,flexShrink:0}}>{(r.authorName||'?')[0]}</div>
+                  <div>
+                    <span style={{fontSize:12,fontWeight:700,color:'#374151',marginRight:6}}>{r.authorName}</span>
+                    <span style={{fontSize:13,color:'#374151'}}><CommentText text={r.text} members={members}/></span>
+                  </div>
+                </div>
+              ))}
+              {replyTo===cm.id&&(
+                <div style={{marginTop:10,marginLeft:14}}>
+                  <CommentInput onSubmit={text=>{onAddReply(cm.id,text);setReplyTo(null);}} members={members} placeholder={'@'+cm.authorName+'에게 답글...'} accentColor={c}/>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div style={{marginTop:16}}>
+        <CommentInput onSubmit={text=>onAddComment(text)} members={members} accentColor={c}/>
+      </div>
+    </div>
+  );
+}
 
-const SPACE_TYPE_PRESETS = ['개인', '프로젝트', '회사', '마케팅', '스터디', '동아리', '가족', '팀'];
-const SPACE_TYPE_ICONS = { '개인':'✨', '프로젝트':'📊', '회사':'💼', '마케팅':'📢', '스터디':'📚', '동아리':'🎭', '가족':'🏠', '팀':'👥' };
-const genInviteCode = function() { return Math.random().toString(36).slice(2,8).toUpperCase(); };
-
+/* ══════ WORKSPACE SCREEN ══════ */
 function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
-  const cfg = WS.personal;
-  const [view, setView] = useState('list');
-  const [selSpace, setSelSpace] = useState(null);
-  const [form, setForm] = useState({ name:'', description:'', type:'개인' });
-  const [customType, setCustomType] = useState('');
+  const cfg=WS.personal;
+  const [view,setView]=useState('list');
+  const [selSpace,setSelSpace]=useState(null);
+  const [form,setForm]=useState({name:'',description:'',type:'개인'});
+  const [customType,setCustomType]=useState('');
+  const [invEmail,setInvEmail]=useState('');
+  const [invResult,setInvResult]=useState(null);
+  const [showMsgInput,setShowMsgInput]=useState(false);
+  const [invMsg,setInvMsg]=useState('');
+  const [invSent,setInvSent]=useState(false);
+  const [searching,setSearching]=useState(false);
+  const [codeCopied,setCodeCopied]=useState(false);
+  const [tab,setTab]=useState('members');
+  const [showTodoForm,setShowTodoForm]=useState(false);
+  const [todoForm,setTodoForm]=useState({title:'',priority:'medium',dueDate:'',assigneeId:''});
+  const [showEventForm,setShowEventForm]=useState(false);
+  const [eventForm,setEventForm]=useState({title:'',date:tod(),time:'',color:'#4F46E5'});
+  const [commentModal,setCommentModal]=useState(null);
 
-  // 이메일 초대 상태
-  const [invEmail, setInvEmail] = useState('');
-  const [invResult, setInvResult] = useState(null);
-  const [showMsgInput, setShowMsgInput] = useState(false);
-  const [invMsg, setInvMsg] = useState('');
-  const [invSent, setInvSent] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [showCodeInvite, setShowCodeInvite] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
+  const updateSpace=(updated)=>{const all=spaces.map(s=>s.id===updated.id?updated:s);setSpaces(all);sv('wl_spaces',all);setSelSpace(updated);};
 
-  const [tab, setTab] = useState('members');
-  const [showTodoForm, setShowTodoForm] = useState(false);
-  const [todoForm, setTodoForm] = useState({ title:'', priority:'medium', dueDate:'', assigneeId:'' });
-  const [showEventForm, setShowEventForm] = useState(false);
-  const [eventForm, setEventForm] = useState({ title:'', date:tod(), time:'', color:'#4F46E5' });
-  const [commentModal, setCommentModal] = useState(null);
-
-  const updateSpace = (updated) => {
-    const all = spaces.map(function(s) { return s.id===updated.id ? updated : s; });
-    setSpaces(all); sv('wl_spaces', all); setSelSpace(updated);
+  const createSpace=()=>{
+    if(!form.name.trim()) return;
+    const spaceType=customType.trim()||form.type;
+    const code=genInviteCode();
+    const space={id:uid(),name:form.name.trim(),description:form.description,type:spaceType,ownerId:user.id,members:[{id:user.id,name:user.nickname||user.name,role:'owner'}],todos:[],events:[],comments:[],inviteCode:code,createdAt:new Date().toISOString()};
+    const updated=[...spaces,space];
+    setSpaces(updated);sv('wl_spaces',updated);
+    setForm({name:'',description:'',type:'개인'});setCustomType('');
+    setSelSpace(space);setTab('members');setView('detail');
   };
 
-  const createSpace = () => {
-    if (!form.name.trim()) return;
-    const spaceType = customType.trim() || form.type;
-    const code = genInviteCode();
-    const space = {
-      id:uid(), name:form.name.trim(), description:form.description,
-      type:spaceType, ownerId:user.id,
-      members:[{ id:user.id, name:user.nickname||user.name, role:'owner' }],
-      todos:[], events:[], comments:[],
-      inviteCode: code,
-      createdAt:new Date().toISOString(),
-    };
-    const updated = [...spaces, space];
-    setSpaces(updated); sv('wl_spaces', updated);
-    setForm({ name:'', description:'', type:'개인' }); setCustomType('');
-    setSelSpace(space); setTab('members'); setView('detail');
-  };
-
-  const searchEmail = async () => {
-    if (!invEmail.trim()) return;
-    setSearching(true); setInvResult(null); setShowMsgInput(false);
-    setShowCodeInvite(false); setInvMsg('');
-    await new Promise(function(r) { return setTimeout(r, 400); });
+  const searchEmail=async()=>{
+    if(!invEmail.trim()) return;
+    setSearching(true);setInvResult(null);setShowMsgInput(false);setInvMsg('');
+    await new Promise(r=>setTimeout(r,400));
     setSearching(false);
-    const found = accounts.find(function(a) { return a.email.toLowerCase()===invEmail.trim().toLowerCase() && a.id!==user.id; });
-    const space = spaces.find(function(s) { return s.id===selSpace.id; });
-    if (found && space && space.members && space.members.find(function(m) { return m.id===found.id; })) {
-      setInvResult('already_member');
-    } else if (found) {
-      setInvResult(found);
-    } else {
+    const allAccounts=ld('wl_accounts',[]);
+    const found=allAccounts.find(a=>a.email&&a.email.toLowerCase()===invEmail.trim().toLowerCase()&&a.id!==user.id);
+    const space=spaces.find(s=>s.id===selSpace.id)||selSpace;
+    if(found&&space.members&&space.members.find(m=>m.id===found.id)){setInvResult('already_member');}
+    else if(found){setInvResult(found);}
+    else {
       setInvResult('not_found');
-      setShowCodeInvite(true);
-      // 미가입 이메일에 대한 pending invite 저장
-      const space2 = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-      const pendingKey = 'wl_pending_' + invEmail.trim().toLowerCase();
-      const existing = ld(pendingKey, []);
-      const alreadyPending = existing.find(function(p) { return p.spaceId===space2.id; });
-      if (!alreadyPending) {
-        sv(pendingKey, [...existing, {
-          id:uid(), spaceId:space2.id, spaceName:space2.name,
-          inviteCode:space2.inviteCode||genInviteCode(),
-          fromId:user.id, fromName:user.nickname||user.name,
-          email:invEmail.trim().toLowerCase(), sentAt:new Date().toISOString()
-        }]);
+      const pendingKey='wl_pending_'+invEmail.trim().toLowerCase();
+      const existing=ld(pendingKey,[]);
+      if(!existing.find(p=>p.spaceId===space.id)){
+        sv(pendingKey,[...existing,{id:uid(),spaceId:space.id,spaceName:space.name,inviteCode:space.inviteCode||genInviteCode(),fromId:user.id,fromName:user.nickname||user.name,email:invEmail.trim().toLowerCase(),sentAt:new Date().toISOString()}]);
       }
     }
   };
 
-  const sendInvite = () => {
-    if (!invResult||invResult==='not_found'||invResult==='already_member') return;
-    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-    const notif = {
-      id:uid(), type:'invite', fromId:user.id, fromName:user.nickname||user.name,
-      spaceId:space.id, spaceName:space.name, spaceType:space.type,
-      inviteCode:space.inviteCode, requiresCode:false,
-      message:invMsg.trim(), status:'pending', read:false,
-      createdAt:new Date().toISOString(),
-    };
-    sv('wl_notifs_'+invResult.id, [...ld('wl_notifs_'+invResult.id,[]), notif]);
-    setInvSent(true); setInvEmail(''); setInvResult(null);
-    setShowMsgInput(false); setInvMsg('');
-    setTimeout(function() { setInvSent(false); }, 3500);
+  const sendInvite=()=>{
+    if(!invResult||invResult==='not_found'||invResult==='already_member') return;
+    const space=spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const notif={id:uid(),type:'invite',fromId:user.id,fromName:user.nickname||user.name,spaceId:space.id,spaceName:space.name,inviteCode:space.inviteCode,requiresCode:false,message:invMsg.trim(),status:'pending',read:false,createdAt:new Date().toISOString()};
+    sv('wl_notifs_'+invResult.id,[...ld('wl_notifs_'+invResult.id,[]),notif]);
+    setInvSent(true);setInvEmail('');setInvResult(null);setShowMsgInput(false);setInvMsg('');
+    setTimeout(()=>setInvSent(false),3500);
   };
 
-  const copyCode = (code) => {
-    try { navigator.clipboard.writeText(code); } catch(e) {}
-    setCodeCopied(true);
-    setTimeout(function() { setCodeCopied(false); }, 2000);
+  const copyCode=(code)=>{try{navigator.clipboard.writeText(code);}catch(e){}setCodeCopied(true);setTimeout(()=>setCodeCopied(false),2000);};
+  const addTodo=()=>{
+    if(!todoForm.title.trim()) return;
+    const space=spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const assignee=space.members&&space.members.find(m=>m.id===todoForm.assigneeId);
+    const todo={id:uid(),title:todoForm.title.trim(),status:'todo',priority:todoForm.priority,dueDate:todoForm.dueDate,assigneeId:todoForm.assigneeId,assigneeName:assignee&&assignee.name||'',createdByName:user.nickname||user.name,createdAt:new Date().toISOString()};
+    updateSpace({...space,todos:[...(space.todos||[]),todo]});
+    setTodoForm({title:'',priority:'medium',dueDate:'',assigneeId:''});setShowTodoForm(false);
   };
-
-  const addTodo = () => {
-    if (!todoForm.title.trim()) return;
-    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-    const assignee = space.members && space.members.find(function(m) { return m.id===todoForm.assigneeId; });
-    const todo = { id:uid(), title:todoForm.title.trim(), status:'todo', priority:todoForm.priority, dueDate:todoForm.dueDate, assigneeId:todoForm.assigneeId, assigneeName:assignee&&assignee.name||'', createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
-    updateSpace({ ...space, todos:[...(space.todos||[]), todo] });
-    setTodoForm({ title:'', priority:'medium', dueDate:'', assigneeId:'' }); setShowTodoForm(false);
+  const cycleTodo=(id)=>{const s=spaces.find(x=>x.id===selSpace.id)||selSpace;const order=['todo','progress','done'];updateSpace({...s,todos:(s.todos||[]).map(t=>t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t)});};
+  const delTodo=(id)=>{const s=spaces.find(x=>x.id===selSpace.id)||selSpace;updateSpace({...s,todos:(s.todos||[]).filter(t=>t.id!==id)});};
+  const addEvent=()=>{
+    if(!eventForm.title.trim()) return;
+    const space=spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const ev={id:uid(),...eventForm,title:eventForm.title.trim(),createdByName:user.nickname||user.name,createdAt:new Date().toISOString()};
+    updateSpace({...space,events:[...(space.events||[]),ev].sort((a,b)=>a.date.localeCompare(b.date))});
+    setEventForm({title:'',date:tod(),time:'',color:'#4F46E5'});setShowEventForm(false);
   };
-  const cycleTodo = (id) => {
-    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-    const order = ['todo','progress','done'];
-    updateSpace({ ...space, todos:(space.todos||[]).map(function(t) { return t.id===id?{...t,status:order[(order.indexOf(t.status)+1)%order.length]}:t; }) });
-  };
-  const delTodo = (id) => { const s=spaces.find(function(x){return x.id===selSpace.id;})||selSpace; updateSpace({...s,todos:(s.todos||[]).filter(function(t){return t.id!==id;})}); };
+  const delEvent=(id)=>{const s=spaces.find(x=>x.id===selSpace.id)||selSpace;updateSpace({...s,events:(s.events||[]).filter(e=>e.id!==id)});};
+  const addComment=(text,linkedId,linkedType,linkedTitle)=>{const space=spaces.find(s=>s.id===selSpace.id)||selSpace;const c={id:uid(),linkedId,linkedType,linkedTitle,authorId:user.id,authorName:user.nickname||user.name,text,replies:[],createdAt:new Date().toISOString()};updateSpace({...space,comments:[...(space.comments||[]),c]});};
+  const addReply=(commentId,text)=>{const space=spaces.find(s=>s.id===selSpace.id)||selSpace;const r={id:uid(),authorId:user.id,authorName:user.nickname||user.name,text,createdAt:new Date().toISOString()};updateSpace({...space,comments:(space.comments||[]).map(c=>c.id===commentId?{...c,replies:[...(c.replies||[]),r]}:c)});};
+  const delComment=(id)=>{const s=spaces.find(x=>x.id===selSpace.id)||selSpace;updateSpace({...s,comments:(s.comments||[]).filter(c=>c.id!==id)});};
 
-  const addEvent = () => {
-    if (!eventForm.title.trim()) return;
-    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-    const ev = { id:uid(), ...eventForm, title:eventForm.title.trim(), createdByName:user.nickname||user.name, createdAt:new Date().toISOString() };
-    updateSpace({ ...space, events:[...(space.events||[]), ev].sort(function(a,b){return a.date.localeCompare(b.date);}) });
-    setEventForm({ title:'', date:tod(), time:'', color:'#4F46E5' }); setShowEventForm(false);
-  };
-  const delEvent = (id) => { const s=spaces.find(function(x){return x.id===selSpace.id;})||selSpace; updateSpace({...s,events:(s.events||[]).filter(function(e){return e.id!==id;})}); };
+  const mySpaces=spaces.filter(s=>s.members&&s.members.find(m=>m.id===user.id));
+  const EV_COLORS=['#4F46E5','#059669','#D97706','#DC2626','#0891B2','#BE185D'];
+  const COLS=['todo','progress','done'];
+  const TABS=[{id:'members',label:'👥 멤버'},{id:'todo',label:'✅ 할일'},{id:'cal',label:'📅 캘린더'},{id:'comments',label:'💬 댓글'}];
 
-  const addComment = (text, linkedId, linkedType, linkedTitle) => {
-    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-    const c = { id:uid(), linkedId, linkedType, linkedTitle, authorId:user.id, authorName:user.nickname||user.name, text, replies:[], createdAt:new Date().toISOString() };
-    updateSpace({ ...space, comments:[...(space.comments||[]), c] });
-  };
-  const addReply = (commentId, text) => {
-    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-    const r = { id:uid(), authorId:user.id, authorName:user.nickname||user.name, text, createdAt:new Date().toISOString() };
-    updateSpace({ ...space, comments:(space.comments||[]).map(function(c) { return c.id===commentId?{...c,replies:[...(c.replies||[]),r]}:c; }) });
-  };
-  const delComment = (id) => { const s=spaces.find(function(x){return x.id===selSpace.id;})||selSpace; updateSpace({...s,comments:(s.comments||[]).filter(function(c){return c.id!==id;})}); };
-
-  const mySpaces = spaces.filter(function(s) { return s.members && s.members.find(function(m) { return m.id===user.id; }); });
-
-  if (view==='detail' && selSpace) {
-    const space = spaces.find(function(s) { return s.id===selSpace.id; }) || selSpace;
-    const spaceIcon = SPACE_TYPE_ICONS[space.type] || '📁';
-    const isOwner = space.ownerId===user.id;
-    const members = space.members||[];
-    const todos = space.todos||[];
-    const events = space.events||[];
-    const comments = space.comments||[];
-    const EV_COLORS = ['#4F46E5','#059669','#D97706','#DC2626','#0891B2','#BE185D'];
-    const COLS = ['todo','progress','done'];
-    const TABS = [
-      { id:'members', label:'👥 멤버', count:members.length },
-      { id:'todo', label:'✅ 할일', count:todos.filter(function(t){return t.status!=='done';}).length||0 },
-      { id:'cal', label:'📅 캘린더', count:events.length||0 },
-      { id:'comments', label:'💬 댓글', count:comments.length||0 },
-    ];
-
+  if(view==='detail'&&selSpace){
+    const space=spaces.find(s=>s.id===selSpace.id)||selSpace;
+    const spaceIcon=SPACE_TYPE_ICONS[space.type]||'📁';
+    const isOwner=space.ownerId===user.id;
+    const members=space.members||[];
+    const todos=space.todos||[];
+    const events=space.events||[];
+    const comments=space.comments||[];
     return (
-      <div style={{ height:'100%',display:'flex',flexDirection:'column',overflow:'hidden' }}>
-        {/* 헤더 */}
-        <div style={{ padding:'14px 20px',borderBottom:'1px solid #F3F4F6',flexShrink:0,display:'flex',alignItems:'center',gap:12,background:'white' }}>
-          <button onClick={function(){setView('list');setInvResult(null);setInvEmail('');}} style={{ width:34,height:34,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>←</button>
-          <div style={{ flex:1 }}>
-            <div style={{ display:'flex',alignItems:'center',gap:8 }}>
-              <span style={{ fontSize:20 }}>{spaceIcon}</span>
-              <div style={{ fontSize:17,fontWeight:900,color:'#111827' }}>{space.name}</div>
-              <span style={{ fontSize:11,fontWeight:700,color:cfg.d,background:cfg.l,padding:'2px 8px',borderRadius:99 }}>{space.type}</span>
+      <div style={{height:'100%',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #F3F4F6',flexShrink:0,display:'flex',alignItems:'center',gap:12,background:'white'}}>
+          <button onClick={()=>{setView('list');setInvResult(null);setInvEmail('');}} style={{width:34,height:34,borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>←</button>
+          <div style={{flex:1}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:20}}>{spaceIcon}</span>
+              <div style={{fontSize:17,fontWeight:900,color:'#111827'}}>{space.name}</div>
+              <span style={{fontSize:11,fontWeight:700,color:cfg.d,background:cfg.l,padding:'2px 8px',borderRadius:99}}>{space.type}</span>
             </div>
-            <div style={{ fontSize:12,color:'#9CA3AF',marginTop:2 }}>{members.length}명 참여 중</div>
+            <div style={{fontSize:12,color:'#9CA3AF',marginTop:2}}>{members.length}명 참여 중</div>
           </div>
-          <div style={{ display:'flex',alignItems:'center',gap:5,background:'#ECFDF5',borderRadius:99,padding:'4px 10px' }}>
-            <div style={{ width:6,height:6,borderRadius:'50%',background:'#059669',animation:'pulse 1.5s ease-in-out infinite' }}/>
-            <span style={{ fontSize:11,fontWeight:700,color:'#059669' }}>실시간 동기화 중</span>
+          <div style={{display:'flex',alignItems:'center',gap:5,background:'#ECFDF5',borderRadius:99,padding:'4px 10px'}}>
+            <div style={{width:6,height:6,borderRadius:'50%',background:'#059669',animation:'pulse 1.5s ease-in-out infinite'}}/>
+            <span style={{fontSize:11,fontWeight:700,color:'#059669'}}>실시간 동기화 중</span>
           </div>
         </div>
-
-        {/* 탭 바 */}
-        <div style={{ display:'flex',borderBottom:'1px solid #F3F4F6',background:'white',flexShrink:0,padding:'0 16px',overflowX:'auto' }}>
-          {TABS.map(function(t) {
-            return (
-              <button key={t.id} onClick={function(){setTab(t.id);}} style={{ padding:'11px 13px',border:'none',background:'none',fontWeight:tab===t.id?800:600,fontSize:13,color:tab===t.id?cfg.c:'#6B7280',borderBottom:'2.5px solid '+(tab===t.id?cfg.c:'transparent'),cursor:'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap' }}>
-                {t.label}
-                {t.count>0&&<span style={{ fontSize:11,fontWeight:800,background:tab===t.id?cfg.l:'#F3F4F6',color:tab===t.id?cfg.c:'#9CA3AF',borderRadius:99,padding:'1px 6px' }}>{t.count}</span>}
-              </button>
-            );
-          })}
+        <div style={{display:'flex',borderBottom:'1px solid #F3F4F6',background:'white',flexShrink:0,padding:'0 16px',overflowX:'auto'}}>
+          {TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:'11px 13px',border:'none',background:'none',fontWeight:tab===t.id?800:600,fontSize:13,color:tab===t.id?cfg.c:'#6B7280',borderBottom:'2.5px solid '+(tab===t.id?cfg.c:'transparent'),cursor:'pointer',whiteSpace:'nowrap'}}>{t.label}</button>)}
         </div>
-
-        <div style={{ flex:1,overflowY:'auto',padding:'20px' }}>
-
-          {/* ── 멤버 탭 ── */}
+        <div style={{flex:1,overflowY:'auto',padding:'20px'}}>
           {tab==='members'&&(
             <div>
-              {/* 멤버 목록 */}
-              <div style={{ background:'white',borderRadius:14,padding:'16px',border:'1px solid #F3F4F6',marginBottom:16 }}>
-                <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:14 }}>멤버 ({members.length}명)</div>
-                {members.map(function(m) {
-                  return (
-                    <div key={m.id} style={{ display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #F9FAFB' }}>
-                      <div style={{ width:38,height:38,borderRadius:'50%',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:15,fontWeight:900,flexShrink:0 }}>{(m.name||'?')[0]}</div>
-                      <div style={{ flex:1 }}><div style={{ fontSize:14,fontWeight:700,color:'#111827' }}>{m.name}</div></div>
-                      <Badge color={m.role==='owner'?cfg.d:'#6B7280'} bg={m.role==='owner'?cfg.l:'#F3F4F6'}>{m.role==='owner' ? '관리자' : '멤버'}</Badge>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* 초대 코드 표시 (항상) */}
-              {space.inviteCode && (
-                <div style={{ background:'linear-gradient(135deg,'+cfg.l+',white)',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
-                  <div style={{ fontSize:13,fontWeight:800,color:cfg.d,marginBottom:10 }}>🔑 이 워크스페이스 초대 코드</div>
-                  <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-                    <div style={{ flex:1,fontSize:28,fontWeight:900,letterSpacing:6,color:cfg.c,fontFamily:'monospace' }}>{space.inviteCode}</div>
-                    <button onClick={function(){copyCode(space.inviteCode);}} style={{ padding:'8px 16px',borderRadius:10,border:'none',background:codeCopied?'#059669':cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer',transition:'background .2s' }}>
-                      {codeCopied ? '✓ 복사됨' : '복사'}
-                    </button>
+              <div style={{background:'white',borderRadius:14,padding:'16px',border:'1px solid #F3F4F6',marginBottom:16}}>
+                <div style={{fontSize:14,fontWeight:800,color:'#111827',marginBottom:14}}>멤버 ({members.length}명)</div>
+                {members.map(m=>(
+                  <div key={m.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #F9FAFB'}}>
+                    <div style={{width:38,height:38,borderRadius:'50%',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:15,fontWeight:900,flexShrink:0}}>{(m.name||'?')[0]}</div>
+                    <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'#111827'}}>{m.name}</div></div>
+                    <Badge color={m.role==='owner'?cfg.d:'#6B7280'} bg={m.role==='owner'?cfg.l:'#F3F4F6'}>{m.role==='owner' ? '관리자':'멤버'}</Badge>
                   </div>
-                  <div style={{ fontSize:12,color:cfg.d,marginTop:8 }}>친구에게 이 코드를 알려주면 워크스페이스에 참여할 수 있어요</div>
+                ))}
+              </div>
+              {space.inviteCode&&(
+                <div style={{background:'linear-gradient(135deg,'+cfg.l+',white)',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16}}>
+                  <div style={{fontSize:13,fontWeight:800,color:cfg.d,marginBottom:10}}>🔑 초대 코드</div>
+                  <div style={{display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{flex:1,fontSize:28,fontWeight:900,letterSpacing:6,color:cfg.c,fontFamily:'monospace'}}>{space.inviteCode}</div>
+                    <button onClick={()=>copyCode(space.inviteCode)} style={{padding:'8px 16px',borderRadius:10,border:'none',background:codeCopied?'#059669':cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>{codeCopied ? '✓ 복사됨':'복사'}</button>
+                  </div>
+                  <div style={{fontSize:12,color:cfg.d,marginTop:8}}>친구에게 이 코드를 알려주면 워크스페이스에 참여할 수 있어요</div>
                 </div>
               )}
-
-              {/* 친구 초대하기 */}
               {isOwner&&(
-                <div style={{ background:'white',borderRadius:14,padding:'18px',border:'1px solid #F3F4F6' }}>
-                  <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:4 }}>👋 친구 초대하기</div>
-                  <div style={{ fontSize:12,color:'#9CA3AF',marginBottom:14 }}>이메일로 친구를 찾거나, 초대 코드를 공유하세요</div>
-
-                  {invSent&&<div className="pp" style={{ background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#059669',marginBottom:12 }}>✉️ 초대 전송 완료!</div>}
-
-                  <div style={{ display:'flex',gap:8,marginBottom:10 }}>
-                    <input value={invEmail} onChange={function(e){setInvEmail(e.target.value);setInvResult(null);setShowCodeInvite(false);}} placeholder="친구 이메일 입력" onKeyDown={function(e){if(e.key==='Enter')searchEmail();}} style={{ flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit' }}/>
-                    <button onClick={searchEmail} disabled={!invEmail.trim()||searching} style={{ padding:'10px 16px',borderRadius:10,border:'none',background:invEmail.trim()?cfg.c:'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:'pointer',minWidth:64,display:'flex',alignItems:'center',justifyContent:'center' }}>
-                      {searching ? <div style={{ width:13,height:13,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .6s linear infinite' }}/> : '검색'}
+                <div style={{background:'white',borderRadius:14,padding:'18px',border:'1px solid #F3F4F6'}}>
+                  <div style={{fontSize:14,fontWeight:800,color:'#111827',marginBottom:14}}>👋 친구 초대하기</div>
+                  {invSent&&<div className="pp" style={{background:'#ECFDF5',border:'1.5px solid #A7F3D0',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#059669',marginBottom:12}}>✉️ 초대 전송 완료!</div>}
+                  <div style={{display:'flex',gap:8,marginBottom:10}}>
+                    <input value={invEmail} onChange={e=>{setInvEmail(e.target.value);setInvResult(null);}} placeholder="친구 이메일 입력" onKeyDown={e=>{if(e.key==='Enter')searchEmail();}} style={{flex:1,padding:'10px 13px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:10,fontFamily:'inherit'}}/>
+                    <button onClick={searchEmail} disabled={!invEmail.trim()||searching} style={{padding:'10px 16px',borderRadius:10,border:'none',background:invEmail.trim()?cfg.c:'#E5E7EB',color:'white',fontSize:13,fontWeight:700,cursor:'pointer',minWidth:64,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {searching ? <div style={{width:13,height:13,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .6s linear infinite'}}/> : '검색'}
                     </button>
                   </div>
-
-                  {/* 미가입 이메일 */}
                   {invResult==='not_found'&&(
                     <div className="fu">
-                      <div style={{ background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:10,padding:'12px 14px',marginBottom:12 }}>
-                        <div style={{ fontSize:13,fontWeight:700,color:'#DC2626',marginBottom:4 }}>❌ 등록된 이메일이 없어요</div>
-                        <div style={{ fontSize:12,color:'#6B7280' }}>코드를 보내 친구와 함께 작업하세요!</div>
+                      <div style={{background:'#FEF2F2',border:'1.5px solid #FECACA',borderRadius:10,padding:'12px 14px',marginBottom:12}}>
+                        <div style={{fontSize:13,fontWeight:700,color:'#DC2626',marginBottom:4}}>❌ 등록된 이메일이 없어요</div>
+                        <div style={{fontSize:12,color:'#6B7280'}}>코드를 보내 친구와 함께 작업하세요!</div>
                       </div>
-                      {space.inviteCode&&(
-                        <div style={{ background:'#F0FDF4',border:'1.5px solid #BBF7D0',borderRadius:10,padding:'14px' }}>
-                          <div style={{ fontSize:12,fontWeight:700,color:'#059669',marginBottom:8 }}>📨 친구에게 이 코드를 보내주세요</div>
-                          <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:8 }}>
-                            <div style={{ fontSize:24,fontWeight:900,letterSpacing:4,color:'#059669',fontFamily:'monospace',flex:1 }}>{space.inviteCode}</div>
-                            <button onClick={function(){copyCode(space.inviteCode);}} style={{ padding:'7px 14px',borderRadius:9,border:'none',background:codeCopied?'#059669':'#22C55E',color:'white',fontSize:12,fontWeight:700,cursor:'pointer' }}>
-                              {codeCopied ? '✓ 복사됨' : '코드 복사'}
-                            </button>
-                          </div>
-                          <div style={{ fontSize:12,color:'#6B7280',lineHeight:1.6 }}>
-                            친구가 Workly에 가입하면 알림함에서 초대를 확인하고,<br/>이 코드를 입력해서 참여할 수 있어요!
-                          </div>
+                      {space.inviteCode&&<div style={{background:'#F0FDF4',border:'1.5px solid #BBF7D0',borderRadius:10,padding:'14px'}}>
+                        <div style={{fontSize:12,fontWeight:700,color:'#059669',marginBottom:8}}>📨 친구에게 이 코드를 보내주세요</div>
+                        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                          <div style={{fontSize:24,fontWeight:900,letterSpacing:4,color:'#059669',fontFamily:'monospace',flex:1}}>{space.inviteCode}</div>
+                          <button onClick={()=>copyCode(space.inviteCode)} style={{padding:'7px 14px',borderRadius:9,border:'none',background:codeCopied?'#059669':'#22C55E',color:'white',fontSize:12,fontWeight:700,cursor:'pointer'}}>{codeCopied ? '✓ 복사됨':'코드 복사'}</button>
                         </div>
-                      )}
+                        <div style={{fontSize:12,color:'#6B7280',lineHeight:1.6}}>친구가 Workly에 가입하면 알림함에서 초대를 확인할 수 있어요!</div>
+                      </div>}
                     </div>
                   )}
-
-                  {invResult==='already_member'&&<div className="fu" style={{ background:'#FFFBEB',border:'1.5px solid #FDE68A',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#D97706' }}>ℹ️ 이미 멤버예요.</div>}
-
+                  {invResult==='already_member'&&<div className="fu" style={{background:'#FFFBEB',border:'1.5px solid #FDE68A',borderRadius:10,padding:'10px 14px',fontSize:13,fontWeight:700,color:'#D97706'}}>ℹ️ 이미 멤버예요.</div>}
                   {invResult&&invResult!=='not_found'&&invResult!=='already_member'&&(
-                    <div className="fu" style={{ background:'#F9FAFB',border:'1.5px solid #E5E7EB',borderRadius:12,overflow:'hidden' }}>
-                      <div style={{ padding:'14px',display:'flex',alignItems:'center',gap:12 }}>
-                        <div style={{ width:44,height:44,borderRadius:'50%',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:19,fontWeight:900,flexShrink:0 }}>{(invResult.nickname||invResult.name||'?')[0]}</div>
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>{invResult.nickname||invResult.name}</div>
-                          <div style={{ fontSize:12,color:'#9CA3AF' }}>{invResult.email}</div>
-                        </div>
-                        {!showMsgInput&&<button onClick={function(){setShowMsgInput(true);}} style={{ padding:'8px 14px',borderRadius:99,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>초대</button>}
+                    <div className="fu" style={{background:'#F9FAFB',border:'1.5px solid #E5E7EB',borderRadius:12,overflow:'hidden'}}>
+                      <div style={{padding:'14px',display:'flex',alignItems:'center',gap:12}}>
+                        <div style={{width:44,height:44,borderRadius:'50%',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:19,fontWeight:900,flexShrink:0}}>{(invResult.nickname||invResult.name||'?')[0]}</div>
+                        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:'#111827'}}>{invResult.nickname||invResult.name}</div><div style={{fontSize:12,color:'#9CA3AF'}}>{invResult.email}</div></div>
+                        {!showMsgInput&&<button onClick={()=>setShowMsgInput(true)} style={{padding:'8px 14px',borderRadius:99,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>초대</button>}
                       </div>
-                      {showMsgInput&&(
-                        <div style={{ padding:'0 14px 14px',borderTop:'1px solid #F3F4F6' }}>
-                          <textarea value={invMsg} onChange={function(e){setInvMsg(e.target.value);}} placeholder="초대 메시지 (선택)" rows={2} style={{ width:'100%',padding:'10px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:9,resize:'none',fontFamily:'inherit',marginTop:12,marginBottom:10 }}/>
-                          <div style={{ display:'flex',gap:8 }}>
-                            <button onClick={function(){setShowMsgInput(false);}} style={{ flex:1,padding:'9px',borderRadius:9,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer' }}>취소</button>
-                            <button onClick={sendInvite} style={{ flex:2,padding:'9px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>✉️ 초대 보내기</button>
-                          </div>
+                      {showMsgInput&&<div style={{padding:'0 14px 14px',borderTop:'1px solid #F3F4F6'}}>
+                        <textarea value={invMsg} onChange={e=>setInvMsg(e.target.value)} placeholder="초대 메시지 (선택)" rows={2} style={{width:'100%',padding:'10px',fontSize:13,border:'1.5px solid #E5E7EB',borderRadius:9,resize:'none',fontFamily:'inherit',marginTop:12,marginBottom:10}}/>
+                        <div style={{display:'flex',gap:8}}>
+                          <button onClick={()=>setShowMsgInput(false)} style={{flex:1,padding:'9px',borderRadius:9,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer'}}>취소</button>
+                          <button onClick={sendInvite} style={{flex:2,padding:'9px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>✉️ 초대 보내기</button>
                         </div>
-                      )}
+                      </div>}
                     </div>
                   )}
                 </div>
               )}
             </div>
           )}
-
-          {/* ── 할일 탭 ── */}
           {tab==='todo'&&(
             <div>
-              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
-                <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>공유 할일</div>
-                <button onClick={function(){setShowTodoForm(function(p){return !p;});}} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                <div style={{fontSize:14,fontWeight:800,color:'#111827'}}>공유 할일</div>
+                <button onClick={()=>setShowTodoForm(p=>!p)} style={{padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>+ 추가</button>
               </div>
               {showTodoForm&&(
-                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
-                  <Field value={todoForm.title} onChange={function(v){setTodoForm(function(p){return {...p,title:v};});}} label="할일 제목" placeholder="할일을 입력하세요" required/>
-                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
-                    <Select label="우선순위" value={todoForm.priority} onChange={function(v){setTodoForm(function(p){return {...p,priority:v};});}} options={Object.entries(PRIO).map(function(e){return {value:e[0],label:e[1].l};})}/>
-                    <Field value={todoForm.dueDate} onChange={function(v){setTodoForm(function(p){return {...p,dueDate:v};});}} label="마감일" type="date"/>
+                <div className="fu" style={{background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16}}>
+                  <Field value={todoForm.title} onChange={v=>setTodoForm(p=>({...p,title:v}))} label="할일 제목" placeholder="할일을 입력하세요" required/>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                    <Select label="우선순위" value={todoForm.priority} onChange={v=>setTodoForm(p=>({...p,priority:v}))} options={Object.entries(PRIO).map(([k,v])=>({value:k,label:v.l}))}/>
+                    <Field value={todoForm.dueDate} onChange={v=>setTodoForm(p=>({...p,dueDate:v}))} label="마감일" type="date"/>
                   </div>
-                  <div style={{ marginBottom:14 }}>
-                    <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em' }}>담당자</div>
-                    <select value={todoForm.assigneeId} onChange={function(e){setTodoForm(function(p){return {...p,assigneeId:e.target.value};});}} style={{ width:'100%',padding:'10px 13px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:10,background:'white' }}>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:5}}>담당자</div>
+                    <select value={todoForm.assigneeId} onChange={e=>setTodoForm(p=>({...p,assigneeId:e.target.value}))} style={{width:'100%',padding:'10px 13px',fontSize:14,border:'1.5px solid #E5E7EB',borderRadius:10,background:'white'}}>
                       <option value="">담당자 없음</option>
-                      {members.map(function(m){return <option key={m.id} value={m.id}>{m.name}</option>;})}
+                      {members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                   </div>
-                  <div style={{ display:'flex',gap:8 }}>
-                    <Btn onClick={function(){setShowTodoForm(false);}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-                    <Btn onClick={addTodo} bg={cfg.c} disabled={!todoForm.title.trim()} style={{ flex:2 }}>추가</Btn>
-                  </div>
+                  <div style={{display:'flex',gap:8}}><Btn onClick={()=>setShowTodoForm(false)} outline color="#6B7280" style={{flex:1}}>취소</Btn><Btn onClick={addTodo} bg={cfg.c} disabled={!todoForm.title.trim()} style={{flex:2}}>추가</Btn></div>
                 </div>
               )}
-              <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12 }}>
-                {COLS.map(function(col) {
-                  const colTodos = todos.filter(function(t){return t.status===col;});
-                  const S = STAT[col];
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+                {COLS.map(col=>{
+                  const colTodos=todos.filter(t=>t.status===col);
+                  const S=STAT[col];
                   return (
                     <div key={col}>
-                      <div style={{ display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:S.bg,borderRadius:9,marginBottom:10 }}>
-                        <span style={{ fontSize:12 }}>{S.icon}</span>
-                        <span style={{ fontSize:12,fontWeight:800,color:S.c }}>{S.l}</span>
-                        <span style={{ marginLeft:'auto',fontSize:11,fontWeight:700,color:S.c,background:'white',borderRadius:99,padding:'1px 6px' }}>{colTodos.length}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:S.bg,borderRadius:9,marginBottom:10}}>
+                        <span style={{fontSize:12}}>{S.icon}</span><span style={{fontSize:12,fontWeight:800,color:S.c}}>{S.l}</span>
+                        <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:S.c,background:'white',borderRadius:99,padding:'1px 6px'}}>{colTodos.length}</span>
                       </div>
-                      {colTodos.length===0&&<div style={{ textAlign:'center',padding:'20px 8px',color:'#D1D5DB',fontSize:12 }}>없음</div>}
-                      {colTodos.map(function(t) {
-                        return (
-                          <div key={t.id} style={{ background:'white',borderRadius:12,padding:'12px',border:'1px solid #F3F4F6',marginBottom:8,boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
-                            <div style={{ display:'flex',justifyContent:'space-between',gap:6,marginBottom:8 }}>
-                              <div style={{ fontSize:13,fontWeight:700,color:'#111827',lineHeight:1.4,textDecoration:t.status==='done' ? 'line-through':'none',opacity:t.status==='done' ? 0.6:1 }}>{t.title}</div>
-                              <button onClick={function(){delTodo(t.id);}} style={{ background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:12,flexShrink:0 }}>✕</button>
-                            </div>
-                            <div style={{ display:'flex',gap:4,flexWrap:'wrap',marginBottom:8 }}>
-                              <Badge color={PRIO[t.priority]&&PRIO[t.priority].c} bg={PRIO[t.priority]&&PRIO[t.priority].bg}>{PRIO[t.priority]&&PRIO[t.priority].l}</Badge>
-                              {t.dueDate&&<Badge color="#6B7280" bg="#F9FAFB">{'📅 '+fmtD(t.dueDate)}</Badge>}
-                              {t.assigneeName&&<Badge color={cfg.d} bg={cfg.l}>{'👤 '+t.assigneeName}</Badge>}
-                            </div>
-                            <div style={{ display:'flex',gap:6 }}>
-                              <button onClick={function(){cycleTodo(t.id);}} style={{ flex:1,padding:'5px 8px',borderRadius:7,border:'1px solid '+cfg.m,background:cfg.l,color:cfg.d,fontSize:11,fontWeight:700,cursor:'pointer' }}>상태 변경</button>
-                              <button onClick={function(){setCommentModal({id:t.id,type:'todo',title:t.title});}} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:11,fontWeight:700,cursor:'pointer' }}>
-                                {'💬 '+(comments.filter(function(c){return c.linkedId===t.id;}).length||'')}
-                              </button>
-                            </div>
+                      {colTodos.length===0&&<div style={{textAlign:'center',padding:'20px 8px',color:'#D1D5DB',fontSize:12}}>없음</div>}
+                      {colTodos.map(t=>(
+                        <div key={t.id} style={{background:'white',borderRadius:12,padding:'12px',border:'1px solid #F3F4F6',marginBottom:8}}>
+                          <div style={{display:'flex',justifyContent:'space-between',gap:6,marginBottom:8}}>
+                            <div style={{fontSize:13,fontWeight:700,color:'#111827',lineHeight:1.4}}>{t.title}</div>
+                            <button onClick={()=>delTodo(t.id)} style={{background:'none',border:'none',color:'#D1D5DB',cursor:'pointer',fontSize:12,flexShrink:0}}>✕</button>
                           </div>
-                        );
-                      })}
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8}}>
+                            <Badge color={PRIO[t.priority]&&PRIO[t.priority].c} bg={PRIO[t.priority]&&PRIO[t.priority].bg}>{PRIO[t.priority]&&PRIO[t.priority].l}</Badge>
+                            {t.dueDate&&<Badge color="#6B7280" bg="#F9FAFB">{'📅 '+fmtD(t.dueDate)}</Badge>}
+                            {t.assigneeName&&<Badge color={cfg.d} bg={cfg.l}>{'👤 '+t.assigneeName}</Badge>}
+                          </div>
+                          <div style={{display:'flex',gap:6}}>
+                            <button onClick={()=>cycleTodo(t.id)} style={{flex:1,padding:'5px 8px',borderRadius:7,border:'1px solid '+cfg.m,background:cfg.l,color:cfg.d,fontSize:11,fontWeight:700,cursor:'pointer'}}>상태 변경</button>
+                            <button onClick={()=>setCommentModal({id:t.id,type:'todo',title:t.title})} style={{padding:'5px 10px',borderRadius:7,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:11,fontWeight:700,cursor:'pointer'}}>{'💬 '+(comments.filter(c=>c.linkedId===t.id).length||'')}</button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
-
-          {/* ── 캘린더 탭 ── */}
           {tab==='cal'&&(
             <div>
-              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
-                <div style={{ fontSize:14,fontWeight:800,color:'#111827' }}>공유 일정</div>
-                <button onClick={function(){setShowEventForm(function(p){return !p;});}} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 추가</button>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                <div style={{fontSize:14,fontWeight:800,color:'#111827'}}>공유 일정</div>
+                <button onClick={()=>setShowEventForm(p=>!p)} style={{padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>+ 추가</button>
               </div>
               {showEventForm&&(
-                <div className="fu" style={{ background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16 }}>
-                  <Field value={eventForm.title} onChange={function(v){setEventForm(function(p){return {...p,title:v};});}} label="일정 제목" placeholder="일정 제목 입력" required/>
-                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
-                    <Field value={eventForm.date} onChange={function(v){setEventForm(function(p){return {...p,date:v};});}} label="날짜" type="date"/>
-                    <Field value={eventForm.time} onChange={function(v){setEventForm(function(p){return {...p,time:v};});}} label="시간" placeholder="14:00"/>
+                <div className="fu" style={{background:'white',borderRadius:14,padding:'16px',border:'1.5px solid '+cfg.m,marginBottom:16}}>
+                  <Field value={eventForm.title} onChange={v=>setEventForm(p=>({...p,title:v}))} label="일정 제목" placeholder="일정 제목 입력" required/>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                    <Field value={eventForm.date} onChange={v=>setEventForm(p=>({...p,date:v}))} label="날짜" type="date"/>
+                    <Field value={eventForm.time} onChange={v=>setEventForm(p=>({...p,time:v}))} label="시간" placeholder="14:00"/>
                   </div>
-                  <div style={{ marginBottom:14 }}>
-                    <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em' }}>색상</div>
-                    <div style={{ display:'flex',gap:8 }}>
-                      {EV_COLORS.map(function(c){return <button key={c} onClick={function(){setEventForm(function(p){return {...p,color:c};});}} style={{ width:26,height:26,borderRadius:'50%',background:c,border:eventForm.color===c ? '3px solid #111827':'3px solid transparent',cursor:'pointer' }}/>;}) }
-                    </div>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:6}}>색상</div>
+                    <div style={{display:'flex',gap:8}}>{EV_COLORS.map(c=><button key={c} onClick={()=>setEventForm(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:'50%',background:c,border:'3px solid '+(eventForm.color===c?'#111827':'transparent'),cursor:'pointer'}}/>)}</div>
                   </div>
-                  <div style={{ display:'flex',gap:8 }}>
-                    <Btn onClick={function(){setShowEventForm(false);}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-                    <Btn onClick={addEvent} bg={cfg.c} disabled={!eventForm.title.trim()} style={{ flex:2 }}>추가</Btn>
-                  </div>
+                  <div style={{display:'flex',gap:8}}><Btn onClick={()=>setShowEventForm(false)} outline color="#6B7280" style={{flex:1}}>취소</Btn><Btn onClick={addEvent} bg={cfg.c} disabled={!eventForm.title.trim()} style={{flex:2}}>추가</Btn></div>
                 </div>
               )}
               {events.length===0&&<Empty icon="📅" title="일정이 없어요" desc="+ 추가 버튼으로 팀 일정을 추가하세요"/>}
-              {events.map(function(ev) {
-                return (
-                  <div key={ev.id} style={{ background:'white',borderRadius:13,padding:'14px 16px',border:'1px solid #F3F4F6',marginBottom:10,display:'flex',gap:12,alignItems:'center' }}>
-                    <div style={{ width:4,alignSelf:'stretch',borderRadius:2,background:ev.color||cfg.c,flexShrink:0 }}/>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:14,fontWeight:700,color:'#111827',marginBottom:4 }}>{ev.title}</div>
-                      <div style={{ fontSize:12,color:'#6B7280' }}>{'📅 '+fmtFull(ev.date)+(ev.time ? ' · 🕐 '+ev.time:'')}</div>
-                      <div style={{ fontSize:11,color:'#9CA3AF',marginTop:2 }}>{'등록: '+ev.createdByName}</div>
-                    </div>
-                    <div style={{ display:'flex',gap:6 }}>
-                      <button onClick={function(){setCommentModal({id:ev.id,type:'event',title:ev.title});}} style={{ padding:'6px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:12,fontWeight:700,cursor:'pointer' }}>
-                        {'💬 '+(comments.filter(function(c){return c.linkedId===ev.id;}).length||'댓글')}
-                      </button>
-                      <button onClick={function(){delEvent(ev.id);}} style={{ padding:'6px 8px',borderRadius:8,border:'1px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,cursor:'pointer' }}>✕</button>
-                    </div>
+              {events.map(ev=>(
+                <div key={ev.id} style={{background:'white',borderRadius:13,padding:'14px 16px',border:'1px solid #F3F4F6',marginBottom:10,display:'flex',gap:12,alignItems:'center'}}>
+                  <div style={{width:4,alignSelf:'stretch',borderRadius:2,background:ev.color||cfg.c,flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:'#111827',marginBottom:4}}>{ev.title}</div>
+                    <div style={{fontSize:12,color:'#6B7280'}}>{'📅 '+fmtFull(ev.date)+(ev.time ? ' · '+ev.time:'')}</div>
                   </div>
-                );
-              })}
+                  <div style={{display:'flex',gap:6}}>
+                    <button onClick={()=>setCommentModal({id:ev.id,type:'event',title:ev.title})} style={{padding:'6px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:12,fontWeight:700,cursor:'pointer'}}>{'💬 '+(comments.filter(c=>c.linkedId===ev.id).length||'댓글')}</button>
+                    <button onClick={()=>delEvent(ev.id)} style={{padding:'6px 8px',borderRadius:8,border:'1px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,cursor:'pointer'}}>✕</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-
-          {/* ── 댓글 탭 ── */}
           {tab==='comments'&&(
             <div>
-              <div style={{ fontSize:14,fontWeight:800,color:'#111827',marginBottom:16 }}>전체 댓글</div>
+              <div style={{fontSize:14,fontWeight:800,color:'#111827',marginBottom:16}}>전체 댓글</div>
               <CommentSection comments={comments} members={members} user={user} onAddComment={addComment} onAddReply={addReply} onDelete={delComment} accentColor={cfg.c}/>
             </div>
           )}
         </div>
-
-        {/* 댓글 모달 */}
         {commentModal&&(
-          <div style={{ position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.4)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center' }}
-            onClick={function(e){if(e.target===e.currentTarget)setCommentModal(null);}}>
-            <div className="fu" style={{ background:'white',borderRadius:'20px 20px 0 0',width:'100%',maxWidth:640,maxHeight:'75vh',display:'flex',flexDirection:'column',boxShadow:'0 -8px 40px rgba(0,0,0,.15)' }}>
-              <div style={{ padding:'16px 20px',borderBottom:'1px solid #F3F4F6',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-                <div>
-                  <div style={{ fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:2 }}>{commentModal.type==='todo' ? '✅ 할일':'📅 일정'}에 댓글</div>
-                  <div style={{ fontSize:15,fontWeight:800,color:'#111827' }}>{commentModal.title}</div>
-                </div>
-                <button onClick={function(){setCommentModal(null);}} style={{ width:30,height:30,borderRadius:8,border:'none',background:'#F9FAFB',color:'#6B7280',fontSize:14,cursor:'pointer' }}>✕</button>
+          <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.4)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)setCommentModal(null);}}>
+            <div className="fu" style={{background:'white',borderRadius:'20px 20px 0 0',width:'100%',maxWidth:640,maxHeight:'75vh',display:'flex',flexDirection:'column'}}>
+              <div style={{padding:'16px 20px',borderBottom:'1px solid #F3F4F6',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                <div><div style={{fontSize:11,fontWeight:700,color:'#9CA3AF',marginBottom:2}}>{commentModal.type==='todo' ? '✅ 할일':'📅 일정'}에 댓글</div><div style={{fontSize:15,fontWeight:800,color:'#111827'}}>{commentModal.title}</div></div>
+                <button onClick={()=>setCommentModal(null)} style={{width:30,height:30,borderRadius:8,border:'none',background:'#F9FAFB',color:'#6B7280',fontSize:14,cursor:'pointer'}}>✕</button>
               </div>
-              <div style={{ flex:1,overflowY:'auto',padding:'16px 20px' }}>
-                <CommentSection
-                  comments={comments.filter(function(c){return c.linkedId===commentModal.id;})}
-                  members={members} user={user}
-                  onAddComment={function(text){addComment(text,commentModal.id,commentModal.type,commentModal.title);}}
-                  onAddReply={addReply} onDelete={delComment} accentColor={cfg.c}/>
+              <div style={{flex:1,overflowY:'auto',padding:'16px 20px'}}>
+                <CommentSection comments={comments.filter(c=>c.linkedId===commentModal.id)} members={members} user={user} onAddComment={text=>addComment(text,commentModal.id,commentModal.type,commentModal.title)} onAddReply={addReply} onDelete={delComment} accentColor={cfg.c}/>
               </div>
             </div>
           </div>
@@ -2768,330 +2612,164 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
     );
   }
 
-  // ── 워크스페이스 목록 ──
   return (
-    <div style={{ padding:'24px',height:'100%',overflowY:'auto' }}>
-      <div className="fu" style={{ marginBottom:24 }}>
-        <div style={{ fontSize:20,fontWeight:900,color:'#111827' }}>👥 협업 워크스페이스</div>
-        <div style={{ fontSize:13,color:'#6B7280',marginTop:2 }}>팀원들과 함께 작업하는 공간이에요</div>
+    <div style={{padding:'24px',height:'100%',overflowY:'auto'}}>
+      <div className="fu" style={{marginBottom:24}}>
+        <div style={{fontSize:20,fontWeight:900,color:'#111827'}}>👥 협업 워크스페이스</div>
+        <div style={{fontSize:13,color:'#6B7280',marginTop:2}}>팀원들과 함께 작업하는 공간이에요</div>
       </div>
-
       {view!=='create'&&(
-        <button onClick={function(){setView('create');}} style={{ width:'100%',padding:'20px',borderRadius:16,border:'2px dashed '+cfg.c,background:cfg.l,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',gap:14,textAlign:'left' }}>
-          <div style={{ width:48,height:48,borderRadius:14,background:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,.08)' }}>＋</div>
-          <div>
-            <div style={{ fontSize:15,fontWeight:800,color:cfg.c }}>새 워크스페이스 만들기</div>
-            <div style={{ fontSize:12,color:cfg.d,marginTop:3 }}>유형을 직접 만들고 이메일로 멤버를 초대해요</div>
-          </div>
+        <button onClick={()=>setView('create')} style={{width:'100%',padding:'20px',borderRadius:16,border:'2px dashed '+cfg.c,background:cfg.l,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',gap:14,textAlign:'left'}}>
+          <div style={{width:48,height:48,borderRadius:14,background:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,.08)'}}>＋</div>
+          <div><div style={{fontSize:15,fontWeight:800,color:cfg.c}}>새 워크스페이스 만들기</div><div style={{fontSize:12,color:cfg.d,marginTop:3}}>유형을 직접 만들고 이메일로 멤버를 초대해요</div></div>
         </button>
       )}
-
       {view==='create'&&(
-        <div className="fu" style={{ background:'white',borderRadius:16,padding:'20px',border:'1px solid #F3F4F6',marginBottom:20 }}>
-          <div style={{ fontSize:15,fontWeight:800,color:'#111827',marginBottom:16 }}>새 워크스페이스 만들기</div>
-          <Field value={form.name} onChange={function(v){setForm(function(p){return {...p,name:v};});}} label="이름" placeholder="예: 우리 팀 프로젝트, 스터디 그룹" required/>
-          <Field value={form.description} onChange={function(v){setForm(function(p){return {...p,description:v};});}} label="설명" placeholder="설명 (선택)" rows={2}/>
-
-          {/* 커스텀 유형 선택 */}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>유형 <span style={{ color:'#EF4444' }}>*</span></div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginBottom:10 }}>
-              {SPACE_TYPE_PRESETS.map(function(t) {
-                const isSelected = (customType==='' && form.type===t) || customType===t;
-                return (
-                  <button key={t} onClick={function(){setForm(function(p){return {...p,type:t};});setCustomType('');}} style={{ padding:'7px 14px',borderRadius:99,border:'2px solid '+(isSelected ? cfg.c:'#E5E7EB'),background:isSelected ? cfg.l:'white',color:isSelected ? cfg.c:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer',transition:'all .15s' }}>
-                    {(SPACE_TYPE_ICONS[t]||'📁')+' '+t}
-                  </button>
-                );
+        <div className="fu" style={{background:'white',borderRadius:16,padding:'20px',border:'1px solid #F3F4F6',marginBottom:20}}>
+          <div style={{fontSize:15,fontWeight:800,color:'#111827',marginBottom:16}}>새 워크스페이스 만들기</div>
+          <Field value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} label="이름" placeholder="예: 우리 팀 프로젝트" required/>
+          <Field value={form.description} onChange={v=>setForm(p=>({...p,description:v}))} label="설명" placeholder="설명 (선택)" rows={2}/>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em'}}>유형 <span style={{color:'#EF4444'}}>*</span></div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10}}>
+              {SPACE_TYPE_PRESETS.map(t=>{
+                const isSelected=(customType===''&&form.type===t)||customType===t;
+                return <button key={t} onClick={()=>{setForm(p=>({...p,type:t}));setCustomType('');}} style={{padding:'7px 14px',borderRadius:99,border:'2px solid '+(isSelected?cfg.c:'#E5E7EB'),background:isSelected?cfg.l:'white',color:isSelected?cfg.c:'#6B7280',fontSize:13,fontWeight:700,cursor:'pointer'}}>{(SPACE_TYPE_ICONS[t]||'📁')+' '+t}</button>;
               })}
             </div>
-            <input value={customType} onChange={function(e){setCustomType(e.target.value);}} placeholder="또는 직접 입력 (예: 마케팅, 동아리, 독서모임...)" style={{ width:'100%',padding:'10px 13px',fontSize:13,border:'1.5px solid '+(customType ? cfg.c:'#E5E7EB'),borderRadius:10,fontFamily:'inherit',color:'#1F2937' }}/>
-            {customType&&<div style={{ fontSize:12,color:cfg.d,marginTop:4 }}>유형: <strong>'{customType}'</strong> 으로 만들어요</div>}
+            <input value={customType} onChange={e=>setCustomType(e.target.value)} placeholder="또는 직접 입력 (예: 독서모임, 스타트업...)" style={{width:'100%',padding:'10px 13px',fontSize:13,border:'1.5px solid '+(customType?cfg.c:'#E5E7EB'),borderRadius:10,fontFamily:'inherit'}}/>
+            {customType&&<div style={{fontSize:12,color:cfg.d,marginTop:4}}>유형: <strong>'{customType}'</strong>으로 만들어요</div>}
           </div>
-
-          <div style={{ display:'flex',gap:10 }}>
-            <Btn onClick={function(){setView('list');}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-            <Btn onClick={createSpace} bg={cfg.c} disabled={!form.name.trim()} style={{ flex:2 }}>만들기 🚀</Btn>
+          <div style={{display:'flex',gap:10}}>
+            <Btn onClick={()=>setView('list')} outline color="#6B7280" style={{flex:1}}>취소</Btn>
+            <Btn onClick={createSpace} bg={cfg.c} disabled={!form.name.trim()} style={{flex:2}}>만들기 🚀</Btn>
           </div>
         </div>
       )}
-
       {mySpaces.length>0&&(
         <>
-          <div style={{ fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:12 }}>내 워크스페이스</div>
-          {mySpaces.map(function(s) {
-            const spaceIcon = SPACE_TYPE_ICONS[s.type]||'📁';
+          <div style={{fontSize:12,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:12}}>내 워크스페이스</div>
+          {mySpaces.map(s=>{
+            const spaceIcon=SPACE_TYPE_ICONS[s.type]||'📁';
             return (
-              <div key={s.id} onClick={function(){setSelSpace(s);setTab('members');setView('detail');setInvResult(null);setInvEmail('');}}
-                style={{ background:'white',borderRadius:14,padding:'16px 18px',border:'1px solid #F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',gap:14,marginBottom:10,boxShadow:'0 2px 8px rgba(0,0,0,.04)',transition:'all .15s' }}
-                onMouseEnter={function(e){e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)';e.currentTarget.style.transform='translateY(-1px)';}}
-                onMouseLeave={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';e.currentTarget.style.transform='translateY(0)';}}>
-                <div style={{ width:46,height:46,borderRadius:13,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,flexShrink:0 }}>{spaceIcon}</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:3 }}>
-                    <div style={{ fontSize:15,fontWeight:800,color:'#111827' }}>{s.name}</div>
-                    <span style={{ fontSize:11,fontWeight:700,color:cfg.d,background:cfg.l,padding:'1px 7px',borderRadius:99 }}>{s.type}</span>
+              <div key={s.id} style={{background:'white',borderRadius:14,padding:'16px 18px',border:'1px solid #F3F4F6',cursor:'pointer',display:'flex',alignItems:'center',gap:14,marginBottom:10,boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}
+                onClick={()=>{setSelSpace(s);setTab('members');setView('detail');setInvResult(null);setInvEmail('');}}>
+                <div style={{width:46,height:46,borderRadius:13,background:cfg.l,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,flexShrink:0}}>{spaceIcon}</div>
+                <div style={{flex:1}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                    <div style={{fontSize:15,fontWeight:800,color:'#111827'}}>{s.name}</div>
+                    <span style={{fontSize:11,fontWeight:700,color:cfg.d,background:cfg.l,padding:'1px 7px',borderRadius:99}}>{s.type}</span>
                   </div>
-                  <div style={{ fontSize:12,color:'#9CA3AF',display:'flex',gap:10 }}>
+                  <div style={{fontSize:12,color:'#9CA3AF',display:'flex',gap:10}}>
                     <span>{'👥 '+(s.members&&s.members.length||1)+'명'}</span>
-                    <span>{'✅ '+((s.todos||[]).filter(function(t){return t.status!=='done';}).length)+'개 진행중'}</span>
-                    {(s.comments||[]).length>0&&<span>{'💬 '+(s.comments||[]).length}</span>}
+                    <span>{'✅ '+((s.todos||[]).filter(t=>t.status!=='done').length)+'개 진행중'}</span>
                   </div>
                 </div>
-                <span style={{ fontSize:16,color:'#D1D5DB' }}>›</span>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <button onClick={e=>{e.stopPropagation();if(window.confirm(s.name+' 워크스페이스를 삭제할까요?')){const upd=spaces.filter(x=>x.id!==s.id);setSpaces(upd);sv('wl_spaces',upd);}}} style={{padding:'6px 10px',borderRadius:8,border:'1px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,fontWeight:700,cursor:'pointer'}}>삭제</button>
+                  <span style={{fontSize:16,color:'#D1D5DB'}}>›</span>
+                </div>
               </div>
             );
           })}
         </>
       )}
-
       {mySpaces.length===0&&view!=='create'&&<Empty icon="👥" title="참여 중인 워크스페이스가 없어요" desc="새 워크스페이스를 만들거나 초대를 기다려보세요"/>}
     </div>
   );
 }
 
-
-/* ══════════════════════════════════════════════════════════
-   PRO UPGRADE SCREEN
-══════════════════════════════════════════════════════════ */
+/* ══════ PRO UPGRADE SCREEN ══════ */
 function ProUpgradeScreen({ user, onUpgrade, onBack }) {
-  const cfg = WS.personal;
-  const [plan, setPlan] = useState('annual');
-  const [paying, setPaying] = useState(false);
-  const [done, setDone] = useState(false);
-
-  const PLANS = {
-    monthly: { l: '월간', price: '₩9,900', sub: '/월', save: null },
-    annual:  { l: '연간', price: '₩79,900', sub: '/년', save: '17% 절약' },
+  const cfg=WS.personal;
+  const [plan,setPlan]=useState('monthly');
+  const [processing,setProcessing]=useState(false);
+  const [done,setDone]=useState(false);
+  const PRICE={monthly:{label:'월간',price:'₩9,900',note:'매월 결제'},annual:{label:'연간',price:'₩79,900',note:'월 ₩6,658 · 2개월 무료'}};
+  const handleBuy=async()=>{
+    setProcessing(true);
+    await new Promise(r=>setTimeout(r,1800));
+    setProcessing(false); setDone(true);
+    setTimeout(onUpgrade,1500);
   };
-
-  const pay = async () => {
-    setPaying(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setPaying(false); setDone(true);
-    await new Promise(r => setTimeout(r, 1200));
-    onUpgrade();
-  };
-
-  const PERKS = [
-    { icon: '👥', title: '협업 워크스페이스', desc: '팀원들과 함께 작업하는 공간 생성' },
-    { icon: '🔗', title: '초대 코드 발급', desc: '링크나 코드로 멤버를 초대' },
-    { icon: '📊', title: '공유 할일 & 캘린더', desc: '팀과 함께 할일과 일정 관리' },
-    { icon: '♾️', title: '무제한 워크스페이스', desc: '원하는 만큼 공간 생성 가능' },
-  ];
-
-  if (done) return (
-    <div style={{ minHeight: '100vh', background: `linear-gradient(135deg, ${cfg.c}, ${cfg.d})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-      <div style={{ fontSize: 72, marginBottom: 16, animation: 'pop .5s ease' }}>🎉</div>
-      <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>Pro 가입 완료!</div>
-      <p style={{ fontSize: 15, opacity: 0.85 }}>이제 팀과 함께 작업해보세요 👥</p>
-    </div>
-  );
-
+  if(done) return <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}}><div style={{fontSize:64}}>🎉</div><div style={{fontSize:24,fontWeight:900,color:cfg.c}}>Pro 시작!</div><div style={{fontSize:14,color:'#6B7280'}}>이제 모든 기능을 사용할 수 있어요</div></div>;
   return (
-    <div style={{ height: '100%', background: '#FAFAFA', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 20px', background: 'white', borderBottom: '1px solid #F3F4F6', gap: 12 }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: 18, color: '#6B7280', cursor: 'pointer' }}>←</button>
-        <div style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>Pro 업그레이드</div>
+    <div style={{height:'100%',overflowY:'auto',padding:'32px 24px'}}>
+      <button onClick={onBack} style={{background:'none',border:'none',color:'#6B7280',fontSize:14,cursor:'pointer',marginBottom:24}}>← 뒤로</button>
+      <div style={{textAlign:'center',marginBottom:32}}>
+        <div style={{fontSize:48,marginBottom:12}}>⚡️</div>
+        <div style={{fontSize:28,fontWeight:900,color:'#111827',marginBottom:8}}>Workly Pro</div>
+        <div style={{fontSize:15,color:'#6B7280'}}>모든 기능을 제한 없이 사용하세요</div>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 40px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ fontSize: 44, marginBottom: 10 }}>⚡️</div>
-          <h2 style={{ fontSize: 24, fontWeight: 900, color: '#111827', marginBottom: 6 }}>Workly Pro</h2>
-          <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6 }}>{user.nickname}님의 팀과 함께하는<br />스마트한 협업 경험</p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-          {Object.entries(PLANS).map(([k, v]) => (
-            <button key={k} onClick={() => setPlan(k)} style={{ flex: 1, padding: '14px 10px', borderRadius: 14, border: `2px solid ${plan === k ? cfg.c : '#E5E7EB'}`, background: plan === k ? cfg.l : 'white', position: 'relative', cursor: 'pointer', textAlign: 'center' }}>
-              {v.save && <span style={{ position: 'absolute', top: -10, right: 8, background: '#059669', color: 'white', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 99 }}>{v.save}</span>}
-              <div style={{ fontSize: 13, fontWeight: 700, color: plan === k ? cfg.d : '#6B7280', marginBottom: 3 }}>{v.l}</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: plan === k ? cfg.c : '#111827' }}>{v.price}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{v.sub}</div>
-            </button>
-          ))}
-        </div>
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #F3F4F6', overflow: 'hidden', marginBottom: 20 }}>
-          {PERKS.map((p, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderBottom: i < PERKS.length - 1 ? '1px solid #F9FAFB' : 'none' }}>
-              <span style={{ fontSize: 22, flexShrink: 0 }}>{p.icon}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 1 }}>{p.title}</div>
-                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{p.desc}</div>
-              </div>
-              <span style={{ color: '#059669', fontSize: 14 }}>✓</span>
-            </div>
-          ))}
-        </div>
-        <button onClick={pay} disabled={paying} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: paying ? '#9CA3AF' : `linear-gradient(135deg, ${cfg.c}, ${cfg.d})`, color: 'white', fontSize: 15, fontWeight: 700, cursor: paying ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          {paying ? <><div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .7s linear infinite' }} /> 처리 중...</> : `💳 ${PLANS[plan].price} 결제하기`}
-        </button>
-        <p style={{ textAlign: 'center', fontSize: 11, color: '#9CA3AF', marginTop: 10 }}>언제든 해지 가능 · 부가세 포함</p>
+      <div style={{display:'flex',gap:12,marginBottom:28}}>
+        {Object.entries(PRICE).map(([k,v])=>(
+          <button key={k} onClick={()=>setPlan(k)} style={{flex:1,padding:'16px',borderRadius:14,border:'2px solid '+(plan===k?cfg.c:'#E5E7EB'),background:plan===k?cfg.l:'white',cursor:'pointer',textAlign:'center'}}>
+            <div style={{fontSize:14,fontWeight:800,color:plan===k?cfg.c:'#374151',marginBottom:4}}>{v.label}</div>
+            <div style={{fontSize:22,fontWeight:900,color:plan===k?cfg.c:'#111827'}}>{v.price}</div>
+            <div style={{fontSize:11,color:plan===k?cfg.d:'#9CA3AF',marginTop:4}}>{v.note}</div>
+          </button>
+        ))}
       </div>
+      <button onClick={handleBuy} disabled={processing} style={{width:'100%',padding:'16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',color:'white',fontSize:16,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        {processing ? <><div style={{width:18,height:18,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>처리 중...</>:'결제하기 →'}
+      </button>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   PROFILE SCREEN
-══════════════════════════════════════════════════════════ */
+/* ══════ PROFILE SCREEN ══════ */
 function ProfileScreen({ user, onUpdate, onLogout, onDeleteAccount, onShowPro, isProUser }) {
-  const cfg = WS.personal;
-  const [editNick, setEditNick] = useState(false);
-  const [nick, setNick] = useState(user.nickname || user.name);
-  const [showDel, setShowDel] = useState(false);
-  const fileRef = useRef(null);
-
-  const handleAvatar = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => onUpdate({ avatar: ev.target.result });
+  const cfg=WS.personal;
+  const [editNick,setEditNick]=useState(false);
+  const [nick,setNick]=useState(user.nickname||user.name||'');
+  const fileRef=useRef(null);
+  const handleImgChange=e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>onUpdate({avatar:ev.target.result});
     reader.readAsDataURL(file);
+    e.target.value='';
   };
-
+  const saveNick=()=>{if(nick.trim()&&nick.trim()!==user.nickname){onUpdate({nickname:nick.trim()});}setEditNick(false);};
+  const INFO=[['이름',user.name],['이메일',user.email],['플랜',isProUser ? '⚡️ Pro':'무료'],['가입일',fmtFull((user.createdAt||'').split('T')[0]||'')]];
   return (
-    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
-      <div className="fu" style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 24 }}>프로필 설정</div>
-      {/* Avatar + name */}
-      <div className="fu" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28, animationDelay: '.05s' }}>
-        <div style={{ position: 'relative', marginBottom: 14 }}>
-          <div style={{ width: 88, height: 88, borderRadius: '50%', background: `linear-gradient(135deg, ${cfg.c}, ${cfg.d})`, border: `3px solid ${cfg.c}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            {user.avatar ? <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <span style={{ fontSize: 36, color: 'white', fontWeight: 900 }}>{(user.nickname || user.name || '?')[0]}</span>}
+    <div style={{padding:'32px 24px',height:'100%',overflowY:'auto'}}>
+      <div className="fu" style={{textAlign:'center',marginBottom:32}}>
+        <div style={{position:'relative',display:'inline-block',marginBottom:16}}>
+          <div style={{width:88,height:88,borderRadius:'50%',background:'linear-gradient(135deg,'+cfg.c+','+cfg.d+')',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36,color:'white',fontWeight:900,margin:'0 auto',overflow:'hidden'}}>
+            {user.avatar ? <img src={user.avatar} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/> : (user.nickname||user.name||'?')[0]}
           </div>
-          <button onClick={() => { if(fileRef.current) fileRef.current.click(); }} style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%', background: '#111827', border: '2px solid white', color: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📷</button>
-          <input ref={fileRef} type="file" accept="image/*" onChange={handleAvatar} style={{ display: 'none' }} />
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleImgChange} style={{display:'none'}}/>
+          <button onClick={()=>{if(fileRef.current)fileRef.current.click();}} style={{position:'absolute',bottom:0,right:0,width:28,height:28,borderRadius:'50%',background:cfg.c,border:'2px solid white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:13}}>📷</button>
         </div>
         {editNick ? (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input value={nick} onChange={e => setNick(e.target.value)} autoFocus style={{ padding: '8px 12px', border: `2px solid ${cfg.c}`, borderRadius: 10, fontSize: 16, fontWeight: 700, textAlign: 'center' }} onKeyDown={e => e.key === 'Enter' && (() => { if (nick.trim()) onUpdate({ nickname: nick.trim() }); setEditNick(false); })()} />
-            <Btn onClick={() => { if (nick.trim()) onUpdate({ nickname: nick.trim() }); setEditNick(false); }} bg={cfg.c} sm>저장</Btn>
-            <Btn onClick={() => setEditNick(false)} outline color="#6B7280" sm>취소</Btn>
+          <div style={{display:'flex',gap:8,justifyContent:'center'}}>
+            <input value={nick} onChange={e=>setNick(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveNick()} style={{padding:'8px 12px',fontSize:18,fontWeight:800,border:'2px solid '+cfg.c,borderRadius:10,textAlign:'center',width:160}} autoFocus/>
+            <button onClick={saveNick} style={{padding:'8px 14px',borderRadius:10,border:'none',background:cfg.c,color:'white',fontWeight:700,cursor:'pointer'}}>저장</button>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{user.nickname || user.name}</span>
-            <button onClick={() => setEditNick(true)} style={{ background: cfg.l, border: 'none', borderRadius: 7, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: cfg.d, cursor: 'pointer' }}>수정</button>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+            <div style={{fontSize:22,fontWeight:900,color:'#111827'}}>{user.nickname||user.name}</div>
+            <button onClick={()=>setEditNick(true)} style={{background:'none',border:'none',color:'#9CA3AF',cursor:'pointer',fontSize:14}}>✏️</button>
           </div>
         )}
-        {isProUser && <Badge color="#D97706" bg="#FFFBEB" style={{ marginTop: 6 }}>✨ Pro</Badge>}
+        {!isProUser&&<button onClick={onShowPro} style={{marginTop:12,padding:'8px 20px',borderRadius:99,border:'none',background:'linear-gradient(135deg,#F59E0B,#D97706)',color:'white',fontSize:13,fontWeight:700,cursor:'pointer'}}>⚡️ Pro 업그레이드</button>}
       </div>
-
-      {/* Info */}
-      <div className="fu" style={{ background: 'white', borderRadius: 16, border: '1px solid #F3F4F6', padding: '0 18px', marginBottom: 16, animationDelay: '.08s' }}>
-        {[['이름', user.name], ['이메일', user.email], ['닉네임', user.nickname || user.name], ['워크스페이스 유형', `${WS.personal&&WS.personal.icon} ${WS.personal&&WS.personal.label}용`], ['플랜', isProUser ? '✨ Pro' : '무료']].map(([l, v]) => (
-          <div key={l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: '1px solid #F9FAFB' }}>
-            <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 600 }}>{l}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{v}</span>
+      <div style={{background:'white',borderRadius:16,border:'1px solid #F3F4F6',overflow:'hidden',marginBottom:16}}>
+        {INFO.map(([label,val],i)=>(
+          <div key={label} style={{display:'flex',padding:'14px 18px',borderBottom:i<INFO.length-1 ? '1px solid #F9FAFB':'none'}}>
+            <div style={{fontSize:13,fontWeight:600,color:'#9CA3AF',width:80,flexShrink:0}}>{label}</div>
+            <div style={{fontSize:14,fontWeight:700,color:'#111827'}}>{val||'-'}</div>
           </div>
         ))}
       </div>
-
-      {!isProUser && (
-        <button onClick={onShowPro} style={{ width: '100%', padding: '13px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg, #D97706, #DC2626)', color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 12 }}>⚡️ Pro로 업그레이드</button>
-      )}
-      <button onClick={onLogout} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}>로그아웃</button>
-      <button onClick={() => setShowDel(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px solid #F3F4F6', background: 'white', color: '#9CA3AF', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>회원 탈퇴</button>
-
-      {showDel && (
-        <Modal title="정말 탈퇴하시겠어요 ? " onClose={() => setShowDel(false)} width={360}>
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 18, fontSize: 13, color: '#DC2626', fontWeight: 600, textAlign: 'center' }}>모든 데이터가 영구 삭제됩니다.</div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Btn onClick={() => setShowDel(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
-            <Btn onClick={onDeleteAccount} bg="#EF4444" style={{ flex: 1 }}>탈퇴하기</Btn>
-          </div>
-        </Modal>
-      )}
+      <button onClick={onLogout} style={{width:'100%',padding:'13px',borderRadius:12,border:'1.5px solid #E5E7EB',background:'white',color:'#374151',fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:10}}>로그아웃</button>
+      <button onClick={()=>{if(window.confirm('정말 탈퇴하시겠어요? 모든 데이터가 삭제돼요.'))onDeleteAccount();}} style={{width:'100%',padding:'13px',borderRadius:12,border:'1.5px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:14,fontWeight:700,cursor:'pointer'}}>회원 탈퇴</button>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   EXAM SCREEN — 시험 D-day 트래커
-══════════════════════════════════════════════════════════ */
-function ExamScreen({ exams, setExams }) {
-  const cfg = WS.personal;
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ subject:'', date:'', type:'중간고사', memo:'' });
 
-  const addExam = () => {
-    if (!form.subject.trim() || !form.date) return;
-    setExams(function(p) { return [...p, { id:uid(), ...form, subject:form.subject.trim(), createdAt:new Date().toISOString() }].sort(function(a,b){return a.date.localeCompare(b.date);}); });
-    setForm({ subject:'', date:'', type:'중간고사', memo:'' });
-    setShowForm(false);
-  };
-
-  const getDday = function(dateStr) {
-    var today = new Date(); today.setHours(0,0,0,0);
-    var exam = new Date(dateStr + 'T00:00:00');
-    return Math.ceil((exam - today) / (1000*60*60*24));
-  };
-
-  var ddayColor = function(d) { return d<=0 ? '#DC2626':d<=3 ? '#D97706':d<=7 ? '#2563EB':'#059669'; };
-  var ddayBg = function(d) { return d<=0 ? '#FEF2F2':d<=3 ? '#FFFBEB':d<=7 ? '#EFF6FF':'#ECFDF5'; };
-  var ddayLabel = function(d) { return d<0?('D+'+Math.abs(d)):d===0 ? 'D-Day!':('D-'+d); };
-
-  var typeColors = { '중간고사':'#7C3AED', '기말고사':'#DC2626', '모의고사':'#2563EB', '수행평가':'#059669', '쪽지시험':'#D97706' };
-
-  return (
-    <div style={{ padding:'24px', height:'100%', overflowY:'auto' }}>
-      <div className="fu" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24 }}>
-        <div>
-          <div style={{ fontSize:20, fontWeight:900, color:'#111827' }}>📋 시험 관리</div>
-          <div style={{ fontSize:13, color:'#6B7280', marginTop:2 }}>시험 날짜를 등록하면 D-day가 상단에 표시돼요</div>
-        </div>
-        <button onClick={function(){setShowForm(function(p){return !p;});}} style={{ padding:'9px 16px', borderRadius:10, border:'none', background:cfg.c, color:'white', fontSize:13, fontWeight:700, cursor:'pointer' }}>+ 시험 추가</button>
-      </div>
-
-      {showForm && (
-        <div className="fu" style={{ background:'white', borderRadius:16, padding:'18px', border:'1.5px solid '+cfg.m, marginBottom:20 }}>
-          <div style={{ fontSize:14, fontWeight:800, color:'#111827', marginBottom:14 }}>새 시험 등록</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            <Field value={form.subject} onChange={function(v){setForm(function(p){return {...p,subject:v};});}} label="과목" placeholder="예: 수학, 영어" required />
-            <Select label="유형" value={form.type} onChange={function(v){setForm(function(p){return {...p,type:v};});}} options={['중간고사','기말고사','모의고사','수행평가','쪽지시험'].map(function(v){return {value:v,label:v};})} />
-          </div>
-          <Field value={form.date} onChange={function(v){setForm(function(p){return {...p,date:v};});}} label="시험 날짜" type="date" required />
-          <Field value={form.memo} onChange={function(v){setForm(function(p){return {...p,memo:v};});}} label="메모" placeholder="시험 범위, 준비사항 등 (선택)" />
-          <div style={{ display:'flex', gap:8 }}>
-            <Btn onClick={function(){setShowForm(false);}} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
-            <Btn onClick={addExam} bg={cfg.c} disabled={!form.subject.trim()||!form.date} style={{ flex:2 }}>등록하기</Btn>
-          </div>
-        </div>
-      )}
-
-      {exams.length === 0 && <Empty icon="📋" title="등록된 시험이 없어요" desc="시험을 추가하면 D-day가 상단 오른쪽에 항상 표시돼요" />}
-
-      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-        {exams.map(function(e) {
-          var d = getDday(e.date);
-          var isPast = d < 0;
-          return (
-            <div key={e.id} className="fu" style={{ background:'white', borderRadius:16, padding:'18px 20px', border:'1px solid #F3F4F6', display:'flex', alignItems:'center', gap:16, opacity:isPast?0.6:1, boxShadow:'0 2px 8px rgba(0,0,0,.04)' }}>
-              <div style={{ width:70, height:70, borderRadius:16, background:ddayBg(d), display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <div style={{ fontSize:20, fontWeight:900, color:ddayColor(d) }}>{ddayLabel(d)}</div>
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-                  <span style={{ fontSize:16, fontWeight:900, color:'#111827' }}>{e.subject}</span>
-                  <span style={{ fontSize:11, fontWeight:700, color:typeColors[e.type]||cfg.c, background:'#F3F4F6', padding:'2px 8px', borderRadius:99 }}>{e.type}</span>
-                </div>
-                <div style={{ fontSize:13, color:'#6B7280' }}>📅 {e.date}{isPast ? ' · 종료':d===0 ? ' · 오늘!':''}</div>
-                {e.memo && <div style={{ fontSize:12, color:'#9CA3AF', marginTop:4 }}>{e.memo}</div>}
-              </div>
-              <button onClick={function(){setExams(function(p){return p.filter(function(x){return x.id!==e.id;});});}} style={{ background:'none', border:'none', color:'#D1D5DB', cursor:'pointer', fontSize:16 }}>✕</button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════
-   AI CHAT SCREEN — Workly 전용 AI 어시스턴트
-   사용자의 실제 데이터(할일/목표/습관/성적 등)를 알고 대화
-══════════════════════════════════════════════════════════ */
-/* ══════════════════════════════════════════════════════════
-   SEARCH OVERLAY — 전체 통합 검색
-══════════════════════════════════════════════════════════ */
 function SearchOverlay({ todos, events, goals, habits, exams, journals, onClose, onNavigate }) {
   const cfg = WS.personal;
   const [q, setQ] = useState('');
@@ -3255,29 +2933,6 @@ function AIChatScreen({ user, todos, events, goals, habits, grades, journals, ti
       });
     }
 
-    if (goals && goals.length > 0) {
-      lines.push('');
-      lines.push('[목표 현황]');
-      goals.slice(0, 5).forEach(function(g) {
-        lines.push('- ' + g.title + ': ' + g.progress + '%');
-      });
-    }
-
-    if (habits && habits.length > 0) {
-      lines.push('');
-      lines.push('[습관 트래커]');
-      lines.push('오늘 완료: ' + todayHabits.length + '/' + habits.length + '개');
-      habits.slice(0, 5).forEach(function(h) {
-        var streak = 0;
-        var d = new Date();
-        while (h.log && h.log[d.toISOString().split('T')[0]]) {
-          streak++;
-          d.setDate(d.getDate() - 1);
-        }
-        lines.push('- ' + (h.icon || '') + ' ' + h.name + ': ' + streak + '일 연속');
-      });
-    }
-
     if (user.wsType === 'school' && grades && grades.length > 0) {
       var avg = Math.round(grades.reduce(function(a, b) { return a + b.pct; }, 0) / grades.length);
       lines.push('');
@@ -3320,7 +2975,7 @@ function AIChatScreen({ user, todos, events, goals, habits, grades, journals, ti
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 800,
         system: systemPrompt,
         messages: apiMessages,
@@ -3711,9 +3366,7 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
       case 'todo':     return <TodoScreen todos={todos} setTodos={setTodos} wsType='personal' />;
       case 'exam':     return <ExamScreen exams={exams} setExams={setExams} />;
       case 'cal':      return <CalendarScreen events={events} setEvents={setEvents} wsType={user.wsType} />;
-      case 'goals':    return <GoalsScreen goals={goals} setGoals={setGoals} />;
       case 'jour':     return <JournalScreen journals={journals} setJournals={setJournals} />;
-      case 'habits':   return <HabitsScreen habits={habits} setHabits={setHabits} />;
       case 'workspace':return <WorkspaceScreen user={user} accounts={accounts} spaces={spaces} setSpaces={setSpaces} />;
       case 'notif':    return <NotifScreen user={user} spaces={spaces} setSpaces={setSpaces} notifs={notifs} setNotifs={setNotifs} />;
       case 'ai':       return <AIChatScreen user={user} todos={todos} events={events} goals={goals} habits={habits} grades={grades} journals={journals} timeLogs={timeLogs} spaces={spaces} />;
@@ -3777,8 +3430,8 @@ function MainApp({ user, setUser, accounts, setAccounts }) {
           )}
         </nav>
         {/* 사이드바 접기 */}
-        <button onClick={() => setSidebarOpen(s=>!s)} style={{ padding:'14px',border:'none',background:'none',color:'#9CA3AF',cursor:'pointer',fontSize:16,borderTop:'1px solid #F9FAFB',display:'flex',alignItems:'center',justifyContent:sidebarOpen ? 'flex-end':'center',gap:8 }}>
-          {sidebarOpen ? '←':'→'}
+        <button onClick={() => setSidebarOpen(s=>!s)} style={{ padding:'14px',border:'none',background:'none',color:'#9CA3AF',cursor:'pointer',fontSize:18,borderTop:'1px solid #F9FAFB',display:'flex',alignItems:'center',justifyContent:sidebarOpen ? 'flex-end':'center',gap:8 }}>
+          {sidebarOpen ? '☰':'☰'}
         </button>
       </div>
 
