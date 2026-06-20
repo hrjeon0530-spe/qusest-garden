@@ -16,10 +16,13 @@ const supa = {
     if (upsert) headers['Prefer'] = 'resolution=merge-duplicates,return=representation';
     if (update) headers['Prefer'] = 'return=representation';
 
-    let qs = '?select=' + (select || '*');
-    if (eq) Object.entries(eq).forEach(function([k,v]) { qs += '&' + k + '=eq.' + encodeURIComponent(v); });
-    if (order) qs += '&order=' + order;
-    if (limit) qs += '&limit=' + limit;
+    let qs = '';
+    if (!del) qs = '?select=' + (select || '*');
+    if (eq) Object.entries(eq).forEach(function([k,v]) {
+      qs += (qs ? '&' : '?') + k + '=eq.' + encodeURIComponent(v);
+    });
+    if (order) qs += (qs ? '&' : '?') + 'order=' + order;
+    if (limit) qs += (qs ? '&' : '?') + 'limit=' + limit;
 
     let method = 'GET', body;
     if (insert) { method = 'POST'; body = JSON.stringify(Array.isArray(insert) ? insert : [insert]); }
@@ -464,12 +467,16 @@ function AuthScreen({ onAuth, onRegister, accounts, setAccounts }) {
     if (!email.trim() || !pw.trim()) { setErr('이메일과 비밀번호를 입력해주세요'); return; }
     setLoading(true); setErr('');
     try {
+      // 탈퇴한 계정 체크
+      const blockedEmails = ld('wl_deleted_accounts', []);
+      if (blockedEmails.includes(email.trim().toLowerCase())) {
+        setErr('탈퇴한 계정이에요. 새로 회원가입 해주세요.'); setLoading(false); return;
+      }
       let found = null;
       try {
         const row = await db.getAccount(email.trim().toLowerCase());
         if (row) found = db.dbToAcct(row);
       } catch(e) {
-        // Supabase 실패 → localStorage fallback
         const localAccts = ld('wl_accounts', []);
         found = localAccts.find(a => a.email.toLowerCase() === email.trim().toLowerCase()) || null;
       }
@@ -3888,20 +3895,27 @@ export default function App() {
 
   const logout = () => { setUser(null); };
 
-  const deleteAccount = async () => {
+  const deleteAccount = () => {
     const uid = user.id;
-    // Supabase에서 모든 데이터 삭제
-    try { await supa.query('todos', { del: true, eq: { user_id: uid } }); } catch(e) {}
-    try { await supa.query('events', { del: true, eq: { user_id: uid } }); } catch(e) {}
-    try { await supa.query('exams', { del: true, eq: { user_id: uid } }); } catch(e) {}
-    try { await supa.query('journals', { del: true, eq: { user_id: uid } }); } catch(e) {}
-    try { await supa.query('notifications', { del: true, eq: { user_id: uid } }); } catch(e) {}
-    try { await supa.query('space_members', { del: true, eq: { user_id: uid } }); } catch(e) {}
-    try { await supa.query('accounts', { del: true, eq: { id: uid } }); } catch(e) {}
-    // localStorage 전체 정리
-    const keys = Object.keys(localStorage);
-    keys.forEach(k => { if (k.includes(uid) || k === 'wl_current_user' || k === 'wl_spaces') { try { localStorage.removeItem(k); } catch {} } });
+    const email = user.email;
+    // 탈퇴한 이메일 블랙리스트에 추가 (재로그인 방지)
+    const blocked = ld('wl_deleted_accounts', []);
+    sv('wl_deleted_accounts', [...blocked, email]);
+    // 즉시 로그아웃 (동기)
+    try { localStorage.removeItem('wl_current_user'); } catch {}
+    Object.keys(localStorage).forEach(k => {
+      if (k.includes(uid)) try { localStorage.removeItem(k); } catch {}
+    });
     setUser(null);
+    // Supabase 삭제는 백그라운드에서
+    Promise.all([
+      supa.query('todos', { del: true, eq: { user_id: uid } }),
+      supa.query('events', { del: true, eq: { user_id: uid } }),
+      supa.query('exams', { del: true, eq: { user_id: uid } }),
+      supa.query('journals', { del: true, eq: { user_id: uid } }),
+      supa.query('notifications', { del: true, eq: { user_id: uid } }),
+      supa.query('accounts', { del: true, eq: { id: uid } }),
+    ]).catch(() => {});
   };
 
   if (loading) return (
