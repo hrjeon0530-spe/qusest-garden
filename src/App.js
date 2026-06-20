@@ -821,132 +821,213 @@ function TodoScreen({ todos, setTodos, wsType }) {
 /* ══════════════════════════════════════════════════════════
    CALENDAR SCREEN
 ══════════════════════════════════════════════════════════ */
-function CalendarScreen({ events, setEvents, wsType }) {
+function CalendarScreen({ events, setEvents }) {
   const cfg = WS.personal;
-  const now = new Date();
-  const [yr, setYr] = useState(now.getFullYear());
-  const [mo, setMo] = useState(now.getMonth());
-  const [selDay, setSelDay] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ title: '', time: '', color: cfg.c, notes: '' });
+  const today = new Date();
+  const [yr, setYr] = useState(today.getFullYear());
+  const [mo, setMo] = useState(today.getMonth());
+  const [selDate, setSelDate] = useState(tod());
+  const [showForm, setShowForm] = useState(false);
+  const [editEvent, setEditEvent] = useState(null);
+  const [form, setForm] = useState({ title:'', startDate:tod(), endDate:'', time:'', color:'#4F46E5', notes:'' });
+  const COLORS = ['#4F46E5','#059669','#D97706','#DC2626','#0891B2','#7C3AED','#BE185D','#EA580C'];
+  const DAY_NAMES = ['일','월','화','수','목','금','토'];
 
-  const days = dimMo(yr, mo);
-  const first = firstDay(yr, mo);
-  const todayDate = tod();
-  const COLORS = ['#2563EB', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0891B2', '#BE185D'];
-
-  const eventsForDay = (d) => {
-    const ds = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    return events.filter(e => e.date === ds);
+  // 날짜 범위 생성
+  const getDatesInRange = (start, end) => {
+    const dates = [];
+    const s = new Date(start + 'T00:00:00');
+    const e = end ? new Date(end + 'T00:00:00') : s;
+    const cur = new Date(s);
+    while (cur <= e) {
+      dates.push(cur.toISOString().split('T')[0]);
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
   };
 
-  const addEvent = () => {
-    if (!form.title.trim() || !selDay) return;
-    const ds = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}`;
-    setEvents(p => [...p, { id: uid(), ...form, title: form.title.trim(), date: ds }]);
-    setForm({ title: '', time: '', color: cfg.c, notes: '' });
-    setShowModal(false);
+  // 특정 날짜의 이벤트 반환
+  const getEventsForDate = (dateStr) => {
+    return events.filter(ev => {
+      const start = ev.startDate || ev.date;
+      const end = ev.endDate || ev.startDate || ev.date;
+      return dateStr >= start && dateStr <= end;
+    });
   };
 
-  const del = (id) => setEvents(p => p.filter(e => e.id !== id));
+  // 이벤트가 날짜 범위에서 첫날인지
+  const isFirstDay = (ev, dateStr) => (ev.startDate || ev.date) === dateStr;
+  const isLastDay = (ev, dateStr) => (ev.endDate || ev.startDate || ev.date) === dateStr;
 
-  const selDate = selDay ? `${yr}-${String(mo + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}` : null;
-  const selEvents = selDay ? eventsForDay(selDay) : [];
+  const addEvent = async () => {
+    if (!form.title.trim() || !form.startDate) return;
+    const newEv = { id: uid(), title: form.title.trim(), date: form.startDate, startDate: form.startDate, endDate: form.endDate || form.startDate, time: form.time, color: form.color, notes: form.notes, createdAt: new Date().toISOString() };
+    const updated = [...events, newEv].sort((a,b) => (a.startDate||a.date).localeCompare(b.startDate||b.date));
+    setEvents(updated);
+    // Supabase 저장
+    try { await supa.query('events', { upsert: { id: newEv.id, user_id: null, title: newEv.title, date: newEv.startDate, time: newEv.time||null, color: newEv.color||null, notes: newEv.notes||null, created_at: newEv.createdAt } }); } catch(e) {}
+    setForm({ title:'', startDate:selDate, endDate:'', time:'', color:'#4F46E5', notes:'' });
+    setShowForm(false);
+  };
+
+  const updateEvent = async () => {
+    if (!editEvent) return;
+    const updated = events.map(ev => ev.id === editEvent.id ? { ...ev, ...editEvent, startDate: editEvent.startDate||editEvent.date, endDate: editEvent.endDate||editEvent.startDate||editEvent.date } : ev);
+    setEvents(updated);
+    try { await supa.query('events', { update: { title: editEvent.title, date: editEvent.startDate||editEvent.date, time: editEvent.time||null, color: editEvent.color||null, notes: editEvent.notes||null }, eq: { id: editEvent.id } }); } catch(e) {}
+    setEditEvent(null);
+  };
+
+  const delEvent = async (id) => {
+    const updated = events.filter(ev => ev.id !== id);
+    setEvents(updated);
+    // Supabase + localStorage 둘 다 삭제
+    try { await supa.query('events', { del: true, eq: { id } }); } catch(e) {}
+    // localStorage fallback 삭제
+    try {
+      const stored = JSON.parse(localStorage.getItem('wl_events') || '[]');
+      localStorage.setItem('wl_events', JSON.stringify(stored.filter(e => e.id !== id)));
+    } catch {}
+  };
+
+  // 달력 생성
+  const firstDay = new Date(yr, mo, 1).getDay();
+  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const todayStr = today.toISOString().split('T')[0];
+  const fmtCell = (d) => { const m = String(mo+1).padStart(2,'0'); return `${yr}-${m}-${String(d).padStart(2,'0')}`; };
 
   return (
-    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>📅 {moNames[mo]} {yr}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => { if (mo === 0) { setYr(y => y - 1); setMo(11); } else setMo(m => m - 1); }} style={{ width: 34, height: 34, borderRadius: 9, border: '1.5px solid #E5E7EB', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-          <button onClick={() => { if (mo === 11) { setYr(y => y + 1); setMo(0); } else setMo(m => m + 1); }} style={{ width: 34, height: 34, borderRadius: 9, border: '1.5px solid #E5E7EB', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
-        </div>
+    <div style={{ height:'100%', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      {/* 헤더 */}
+      <div style={{ padding:'16px 20px', borderBottom:'1px solid #F3F4F6', display:'flex', alignItems:'center', gap:12, flexShrink:0, background:'white' }}>
+        <button onClick={()=>{ if(mo===0){setMo(11);setYr(y=>y-1);}else setMo(m=>m-1); }} style={{ width:32,height:32,borderRadius:8,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',fontSize:14 }}>‹</button>
+        <div style={{ flex:1, textAlign:'center', fontSize:18, fontWeight:900, color:'#111827' }}>📅 {yr}년 {mo+1}월</div>
+        <button onClick={()=>{ if(mo===11){setMo(0);setYr(y=>y+1);}else setMo(m=>m+1); }} style={{ width:32,height:32,borderRadius:8,border:'1.5px solid #E5E7EB',background:'white',cursor:'pointer',fontSize:14 }}>›</button>
+        <button onClick={()=>{setForm({title:'',startDate:selDate,endDate:'',time:'',color:'#4F46E5',notes:''});setShowForm(true);}} style={{ padding:'8px 14px',borderRadius:9,border:'none',background:cfg.c,color:'white',fontSize:13,fontWeight:700,cursor:'pointer' }}>+ 일정</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, flex: 1, minHeight: 0 }}>
-        {/* Calendar grid */}
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 8 }}>
-            {dayNames.map((d, i) => <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: i === 0 ? '#EF4444' : i === 6 ? '#2563EB' : '#9CA3AF', padding: '6px 0' }}>{d}</div>)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
-            {Array(first).fill(null).map((_, i) => <div key={`e${i}`} />)}
-            {Array.from({ length: days }, (_, i) => {
-              const d = i + 1;
-              const ds = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-              const isToday = ds === todayDate;
-              const isSel = d === selDay;
-              const dayEvts = eventsForDay(d);
-              return (
-                <div key={d} onClick={() => setSelDay(d)} style={{
-                  minHeight: 72, borderRadius: 11, padding: '8px 6px', cursor: 'pointer',
-                  background: isSel ? cfg.l : isToday ? '#F0F4FF' : 'white',
-                  border: `1.5px solid ${isSel ? cfg.c : isToday ? cfg.m : '#F3F4F6'}`,
-                  transition: 'all .15s',
-                }}>
-                  <div style={{ fontSize: 13, fontWeight: isSel || isToday ? 800 : 500, color: isSel ? cfg.c : isToday ? cfg.d : '#374151', marginBottom: 4 }}>{d}</div>
-                  {dayEvts.slice(0, 3).map(e => (
-                    <div key={e.id} style={{ fontSize: 10, fontWeight: 600, color: 'white', background: e.color || cfg.c, borderRadius: 4, padding: '1px 5px', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
-                  ))}
-                  {dayEvts.length > 3 && <div style={{ fontSize: 10, color: '#9CA3AF' }}>+{dayEvts.length - 3}개</div>}
-                </div>
-              );
-            })}
-          </div>
+      {/* 달력 */}
+      <div style={{ flex:1, overflowY:'auto', padding:'0 16px 16px' }}>
+        {/* 요일 헤더 */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4, padding:'10px 0 4px' }}>
+          {DAY_NAMES.map((d,i) => (
+            <div key={d} style={{ textAlign:'center', fontSize:12, fontWeight:700, color:i===0?'#EF4444':i===6?cfg.c:'#9CA3AF', padding:'4px 0' }}>{d}</div>
+          ))}
         </div>
-
-        {/* Side panel */}
-        <div style={{ background: 'white', borderRadius: 16, padding: '18px', border: '1px solid #F3F4F6', overflowY: 'auto' }}>
-          {selDay ? (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>{fmtFull(selDate)}</div>
-                <Btn onClick={() => setShowModal(true)} bg={cfg.c} sm>+ 추가</Btn>
-              </div>
-              {selEvents.length === 0
-                ? <Empty icon="📅" title="일정 없음" desc="+ 추가 버튼으로 일정을 추가하세요" />
-                : selEvents.map(e => (
-                  <div key={e.id} style={{ borderLeft: `3px solid ${e.color || cfg.c}`, padding: '10px 12px', background: '#FAFAFA', borderRadius: '0 10px 10px 0', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{e.title}</div>
-                      <button onClick={() => del(e.id)} style={{ background: 'none', border: 'none', color: '#D1D5DB', cursor: 'pointer', fontSize: 12 }}>✕</button>
+        {/* 날짜 그리드 */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
+          {cells.map((d, idx) => {
+            if (!d) return <div key={idx}/>;
+            const dateStr = fmtCell(d);
+            const isToday = dateStr === todayStr;
+            const isSel = dateStr === selDate;
+            const dayEvents = getEventsForDate(dateStr);
+            return (
+              <div key={idx} onClick={()=>{ setSelDate(dateStr); setForm(p=>({...p,startDate:dateStr})); }}
+                style={{ minHeight:80, borderRadius:10, padding:'6px 4px', background:isSel?cfg.l:isToday?'#F0FDF4':'white', border:'1.5px solid '+(isSel?cfg.c:isToday?'#86EFAC':'#F3F4F6'), cursor:'pointer', overflow:'hidden' }}>
+                <div style={{ fontSize:12, fontWeight:isToday||isSel?900:500, color:isToday?'#059669':isSel?cfg.c:'#374151', marginBottom:3 }}>{d}</div>
+                {dayEvents.map(ev => {
+                  const first = isFirstDay(ev, dateStr);
+                  const last = isLastDay(ev, dateStr);
+                  return (
+                    <div key={ev.id} onClick={e=>{e.stopPropagation();setEditEvent({...ev,startDate:ev.startDate||ev.date,endDate:ev.endDate||ev.startDate||ev.date});}}
+                      style={{ fontSize:10, fontWeight:700, color:'white', background:ev.color||cfg.c, padding:'2px 5px', borderRadius:`${first?4:0}px ${last?4:0}px ${last?4:0}px ${first?4:0}px`, marginBottom:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'pointer', marginLeft:first?0:-4, marginRight:last?0:-4 }}>
+                      {first ? ev.title : ''}
                     </div>
-                    {e.time && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 3 }}>🕐 {e.time}</div>}
-                    {e.notes && <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 5 }}>{e.notes}</div>}
-                  </div>
-                ))
-              }
-            </>
-          ) : (
-            <Empty icon="👆" title="날짜를 선택하세요" desc="날짜를 클릭해서 일정을 확인하고 추가하세요" />
-          )}
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
+
+        {/* 선택된 날짜 이벤트 목록 */}
+        {getEventsForDate(selDate).length > 0 && (
+          <div style={{ marginTop:16 }}>
+            <div style={{ fontSize:13, fontWeight:800, color:'#111827', marginBottom:10 }}>
+              {selDate} 일정
+            </div>
+            {getEventsForDate(selDate).map(ev => (
+              <div key={ev.id} style={{ display:'flex', alignItems:'center', gap:10, background:'white', borderRadius:12, padding:'12px 14px', border:'1px solid #F3F4F6', marginBottom:8 }}>
+                <div style={{ width:4, height:40, borderRadius:2, background:ev.color||cfg.c, flexShrink:0 }}/>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:'#111827' }}>{ev.title}</div>
+                  <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>
+                    {ev.startDate||ev.date}{ev.endDate&&ev.endDate!==(ev.startDate||ev.date) ? ' ~ '+ev.endDate : ''}{ev.time ? ' · '+ev.time : ''}
+                  </div>
+                </div>
+                <button onClick={()=>setEditEvent({...ev,startDate:ev.startDate||ev.date,endDate:ev.endDate||ev.startDate||ev.date})} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:12,cursor:'pointer' }}>수정</button>
+                <button onClick={()=>delEvent(ev.id)} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,cursor:'pointer' }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {showModal && (
-        <Modal title="일정 추가" onClose={() => setShowModal(false)}>
-          <Field value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} label="제목" placeholder="일정 제목 입력" required />
-          <Field value={form.time} onChange={v => setForm(p => ({ ...p, time: v }))} label="시간" placeholder="예: 14:00" />
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>색상</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {COLORS.map(c => <button key={c} onClick={() => setForm(p => ({ ...p, color: c }))} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: form.color === c ? '3px solid #111827' : '3px solid transparent', cursor: 'pointer' }} />)}
+      {/* 일정 추가 모달 */}
+      {showForm && (
+        <div style={{ position:'fixed',inset:0,zIndex:800,background:'rgba(0,0,0,.45)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:24 }}
+          onClick={e=>{if(e.target===e.currentTarget)setShowForm(false);}}>
+          <div className="pp" style={{ background:'white',borderRadius:20,padding:28,width:'100%',maxWidth:480,boxShadow:'0 24px 64px rgba(0,0,0,.2)' }}>
+            <div style={{ fontSize:18,fontWeight:900,color:'#111827',marginBottom:18 }}>📅 새 일정</div>
+            <Field value={form.title} onChange={v=>setForm(p=>({...p,title:v}))} label="제목" placeholder="일정 제목" required/>
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+              <Field value={form.startDate} onChange={v=>setForm(p=>({...p,startDate:v}))} label="시작 날짜" type="date" required/>
+              <Field value={form.endDate} onChange={v=>setForm(p=>({...p,endDate:v}))} label="종료 날짜 (선택)" type="date"/>
+            </div>
+            <Field value={form.time} onChange={v=>setForm(p=>({...p,time:v}))} label="시간 (선택)" placeholder="14:00"/>
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>색상</div>
+              <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+                {COLORS.map(c=><button key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{ width:28,height:28,borderRadius:'50%',background:c,border:'3px solid '+(form.color===c?'#111827':'transparent'),cursor:'pointer',transition:'transform .1s',transform:form.color===c?'scale(1.2)':'scale(1)' }}/>)}
+              </div>
+            </div>
+            <Field value={form.notes} onChange={v=>setForm(p=>({...p,notes:v}))} label="메모 (선택)" rows={2}/>
+            <div style={{ display:'flex',gap:10 }}>
+              <Btn onClick={()=>setShowForm(false)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+              <Btn onClick={addEvent} bg={cfg.c} disabled={!form.title.trim()||!form.startDate} style={{ flex:2 }}>추가하기</Btn>
             </div>
           </div>
-          <Field value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} label="메모" placeholder="선택 사항" rows={2} />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Btn onClick={() => setShowModal(false)} outline color="#6B7280" style={{ flex: 1 }}>취소</Btn>
-            <Btn onClick={addEvent} bg={cfg.c} style={{ flex: 2 }}>추가하기</Btn>
+        </div>
+      )}
+
+      {/* 일정 수정 모달 */}
+      {editEvent && (
+        <div style={{ position:'fixed',inset:0,zIndex:800,background:'rgba(0,0,0,.45)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:24 }}
+          onClick={e=>{if(e.target===e.currentTarget)setEditEvent(null);}}>
+          <div className="pp" style={{ background:'white',borderRadius:20,padding:28,width:'100%',maxWidth:480,boxShadow:'0 24px 64px rgba(0,0,0,.2)' }}>
+            <div style={{ fontSize:18,fontWeight:900,color:'#111827',marginBottom:18 }}>✏️ 일정 수정</div>
+            <Field value={editEvent.title} onChange={v=>setEditEvent(p=>({...p,title:v}))} label="제목" required/>
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+              <Field value={editEvent.startDate||editEvent.date} onChange={v=>setEditEvent(p=>({...p,startDate:v,date:v}))} label="시작 날짜" type="date"/>
+              <Field value={editEvent.endDate||''} onChange={v=>setEditEvent(p=>({...p,endDate:v}))} label="종료 날짜" type="date"/>
+            </div>
+            <Field value={editEvent.time||''} onChange={v=>setEditEvent(p=>({...p,time:v}))} label="시간" placeholder="14:00"/>
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:12,fontWeight:700,color:'#6B7280',marginBottom:8,textTransform:'uppercase',letterSpacing:'.04em' }}>색상</div>
+              <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+                {COLORS.map(c=><button key={c} onClick={()=>setEditEvent(p=>({...p,color:c}))} style={{ width:28,height:28,borderRadius:'50%',background:c,border:'3px solid '+(editEvent.color===c?'#111827':'transparent'),cursor:'pointer',transform:editEvent.color===c?'scale(1.2)':'scale(1)' }}/>)}
+              </div>
+            </div>
+            <Field value={editEvent.notes||''} onChange={v=>setEditEvent(p=>({...p,notes:v}))} label="메모" rows={2}/>
+            <div style={{ display:'flex',gap:10 }}>
+              <Btn onClick={()=>setEditEvent(null)} outline color="#6B7280" style={{ flex:1 }}>취소</Btn>
+              <Btn onClick={()=>delEvent(editEvent.id).then(()=>setEditEvent(null))} outline color="#EF4444" style={{ flex:1 }}>삭제</Btn>
+              <Btn onClick={updateEvent} bg={cfg.c} style={{ flex:2 }}>저장</Btn>
+            </div>
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   ASSIGNMENTS SCREEN (School)
-══════════════════════════════════════════════════════════ */
+
 function AssignmentsScreen({ assigns, setAssigns }) {
   const cfg = WS.personal;
   const [showModal, setShowModal] = useState(false);
@@ -1893,11 +1974,16 @@ function JournalScreen({ journals, setJournals }) {
     e.target.value='';
   };
 
-  var newEntry = function() {
+  var [showModeSelect, setShowModeSelect] = useState(false);
+  var [journalMode, setJournalMode] = useState('canvas'); // 'text' | 'canvas'
+
+  var newEntry = function(mode) {
     var id=uid(), today=tod();
-    var entry={id,title:'일기 '+today,date:today,canvasData:null};
+    var entry={id,title:'일기 '+today,date:today,canvasData:null,mode:mode||'canvas',textContent:''};
     setJournals(function(p){return [entry,...p];});
     setSelId(id); setEntryTitle(entry.title);
+    setJournalMode(mode||'canvas');
+    setShowModeSelect(false);
   };
 
   var deleteEntry = function(id) {
@@ -1922,7 +2008,7 @@ function JournalScreen({ journals, setJournals }) {
       {/* 왼쪽 목록 */}
       <div style={{width:240,flexShrink:0,borderRight:'1px solid #F3F4F6',display:'flex',flexDirection:'column',background:'white'}}>
         <div style={{padding:'12px',borderBottom:'1px solid #F3F4F6'}}>
-          <button onClick={newEntry} style={{width:'100%',padding:'10px',borderRadius:11,border:'none',background:cfg.c,color:'white',fontSize:14,fontWeight:700,cursor:'pointer'}}>+ 새 일기</button>
+          <button onClick={()=>setShowModeSelect(true)} style={{width:'100%',padding:'10px',borderRadius:11,border:'none',background:cfg.c,color:'white',fontSize:14,fontWeight:700,cursor:'pointer'}}>+ 새 일기</button>
         </div>
         <div style={{flex:1,overflowY:'auto',padding:'8px'}}>
           {journals.length===0&&<div style={{textAlign:'center',padding:40,color:'#D1D5DB',fontSize:13}}>아직 일기가 없어요</div>}
@@ -2085,6 +2171,27 @@ function JournalScreen({ journals, setJournals }) {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {showModeSelect && (
+        <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
+          <div className="fu" style={{background:'white',borderRadius:20,padding:28,width:'100%',maxWidth:360,textAlign:'center'}}>
+            <div style={{fontSize:20,fontWeight:900,color:'#111827',marginBottom:8}}>📖 일기 형식 선택</div>
+            <div style={{fontSize:13,color:'#6B7280',marginBottom:24}}>어떤 방식으로 일기를 쓸까요?</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+              <button onClick={()=>newEntry('text')} style={{padding:'20px 12px',borderRadius:16,border:'2px solid #E5E7EB',background:'white',cursor:'pointer'}}>
+                <div style={{fontSize:36,marginBottom:8}}>✍️</div>
+                <div style={{fontSize:15,fontWeight:800,color:'#111827'}}>텍스트</div>
+                <div style={{fontSize:12,color:'#9CA3AF',marginTop:4}}>글로 기록해요</div>
+              </button>
+              <button onClick={()=>newEntry('canvas')} style={{padding:'20px 12px',borderRadius:16,border:'2px solid '+cfg.c,background:cfg.l,cursor:'pointer'}}>
+                <div style={{fontSize:36,marginBottom:8}}>🎨</div>
+                <div style={{fontSize:15,fontWeight:800,color:cfg.c}}>그림판</div>
+                <div style={{fontSize:12,color:cfg.d,marginTop:4}}>그림과 글을 함께</div>
+              </button>
+            </div>
+            <button onClick={()=>setShowModeSelect(false)} style={{width:'100%',padding:'10px',borderRadius:10,border:'1.5px solid #E5E7EB',background:'white',color:'#6B7280',fontSize:14,fontWeight:600,cursor:'pointer'}}>취소</button>
           </div>
         </div>
       )}
@@ -3389,7 +3496,7 @@ function MainApp({ user, setUser, accounts, setAccounts, updateUser, logout, del
       try {
         const [t, ev, j, n, ex] = await Promise.all([
           db.getTodos(user.id).catch(() => []),
-          db.getEvents(user.id).catch(() => []),
+          db.getEvents(user.id).catch(() => ld('wl_events_' + user.id, [])),
           db.getJournals(user.id).catch(() => []),
           db.getNotifs(user.id).catch(() => []),
           db.getExams(user.id).catch(() => []),
@@ -3435,7 +3542,8 @@ function MainApp({ user, setUser, accounts, setAccounts, updateUser, logout, del
   const setEvents = async (v) => {
     const val = typeof v === 'function' ? v(events) : v;
     setEventsRaw(val);
-    try { for (const ev of val) await db.saveEvent(user.id, ev); } catch(e) { sv('wl_events_' + user.id, val); }
+    // localStorage에도 저장 (새로고침 후에도 유지)
+    sv('wl_events_' + user.id, val);
   };
   const setJournals = async (v) => {
     const val = typeof v === 'function' ? v(journals) : v;
@@ -3781,10 +3889,18 @@ export default function App() {
   const logout = () => { setUser(null); };
 
   const deleteAccount = async () => {
-    try { await supa.query('accounts', { del: true, eq: { id: user.id } }); } catch(e) {}
-    // localStorage도 정리
-    try { localStorage.removeItem('wl_current_user'); } catch {}
-    try { localStorage.removeItem('wl_accounts'); } catch {}
+    const uid = user.id;
+    // Supabase에서 모든 데이터 삭제
+    try { await supa.query('todos', { del: true, eq: { user_id: uid } }); } catch(e) {}
+    try { await supa.query('events', { del: true, eq: { user_id: uid } }); } catch(e) {}
+    try { await supa.query('exams', { del: true, eq: { user_id: uid } }); } catch(e) {}
+    try { await supa.query('journals', { del: true, eq: { user_id: uid } }); } catch(e) {}
+    try { await supa.query('notifications', { del: true, eq: { user_id: uid } }); } catch(e) {}
+    try { await supa.query('space_members', { del: true, eq: { user_id: uid } }); } catch(e) {}
+    try { await supa.query('accounts', { del: true, eq: { id: uid } }); } catch(e) {}
+    // localStorage 전체 정리
+    const keys = Object.keys(localStorage);
+    keys.forEach(k => { if (k.includes(uid) || k === 'wl_current_user' || k === 'wl_spaces') { try { localStorage.removeItem(k); } catch {} } });
     setUser(null);
   };
 
