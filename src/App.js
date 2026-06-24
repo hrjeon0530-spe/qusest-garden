@@ -1,5 +1,31 @@
 import { useState, useEffect, useRef } from "react";
 
+/* ── Toast / 에러 알림 시스템 ── */
+const ToastContext = React.createContext(null);
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const show = (msg, type='info', duration=3000) => {
+    const id = uid();
+    setToasts(p => [...p, { id, msg, type }]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
+  };
+  const COLORS = { success:'#059669', error:'#EF4444', info:'#4F46E5', warning:'#D97706' };
+  const ICONS = { success:'✅', error:'❌', info:'ℹ️', warning:'⚠️' };
+  return (
+    <ToastContext.Provider value={show}>
+      {children}
+      <div style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', zIndex:9999, display:'flex', flexDirection:'column', gap:8, alignItems:'center', pointerEvents:'none' }}>
+        {toasts.map(t => (
+          <div key={t.id} className="pp" style={{ background:'#1F2937', color:'white', borderRadius:12, padding:'10px 20px', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap', boxShadow:'0 8px 24px rgba(0,0,0,.25)', borderLeft:'3px solid '+COLORS[t.type] }}>
+            <span>{ICONS[t.type]}</span>{t.msg}
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+const useToast = () => React.useContext(ToastContext);
+
 /* ── Supabase 클라이언트 ── */
 const SUPA_URL = "https://ayfbirhubfuihbrbyoca.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5ZmJpcmh1YmZ1aWhicmJ5b2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NTQ3MTksImV4cCI6MjA5NzQzMDcxOX0.o7QBcum9Z-Cc9BSlIwOxViP_EvGwIkKM-CTCeh9znro";
@@ -338,7 +364,11 @@ function Styles({ isDark }) {
 ══════════════════════════════════════════════════════════ */
 function Btn({ children, onClick, color = '#111827', bg, outline, sm, full, disabled, style: s = {} }) {
   return (
-    <button onClick={onClick} disabled={disabled} style={{
+    <button onClick={onClick} disabled={disabled}
+      onMouseDown={e=>!disabled&&(e.currentTarget.style.transform='scale(.97)')}
+      onMouseUp={e=>e.currentTarget.style.transform='scale(1)'}
+      onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
+      style={{
       padding: sm ? '7px 14px' : '10px 20px',
       fontSize: sm ? 12 : 14, fontWeight: 700, borderRadius: sm ? 8 : 11,
       background: outline ? 'transparent' : (bg || color),
@@ -408,12 +438,13 @@ function Modal({ title, onClose, children, width = 460 }) {
   );
 }
 
-function Empty({ icon, title, desc }) {
+function Empty({ icon, title, desc, action, onAction }) {
   return (
     <div style={{ textAlign: 'center', padding: '60px 24px' }}>
-      <div style={{ fontSize: 48, marginBottom: 12 }}>{icon}</div>
+      <div style={{ fontSize: 52, marginBottom: 12, opacity: 0.75 }}>{icon}</div>
       <div style={{ fontSize: 16, fontWeight: 700, color: '#374151', marginBottom: 6 }}>{title}</div>
-      {desc && <p style={{ fontSize: 13, color: '#9CA3AF', lineHeight: 1.65 }}>{desc}</p>}
+      {desc && <p style={{ fontSize: 13, color: '#9CA3AF', lineHeight: 1.65, maxWidth: 260, margin: '0 auto' }}>{desc}</p>}
+      {action && onAction && <button onClick={onAction} style={{ marginTop: 20, padding: '10px 24px', borderRadius: 10, border: 'none', background: '#4F46E5', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{action}</button>}
     </div>
   );
 }
@@ -518,6 +549,11 @@ function AuthScreen({ onAuth, onRegister, accounts, setAccounts }) {
           <div style={{ fontSize:48, marginBottom:12 }}>🌿</div>
           <h1 style={{ fontSize:28, fontWeight:900, color:'#111827', margin:0 }}>Workly</h1>
           <p style={{ fontSize:14, color:'#6B7280', marginTop:8 }}>스마트한 나만의 워크스페이스</p>
+        <div style={{ display:'flex', gap:12, justifyContent:'center', marginTop:16, flexWrap:'wrap' }}>
+          {['✅ 할일관리','📅 캘린더','📖 일기','👥 협업','🤖 AI채팅'].map(f=>(
+            <span key={f} style={{ fontSize:12, fontWeight:600, color:'#6B7280', background:'white', padding:'4px 10px', borderRadius:99, border:'1px solid #E5E7EB' }}>{f}</span>
+          ))}
+        </div>
         </div>
         <div className="fu" style={{ background:'white', borderRadius:20, padding:28, boxShadow:'0 8px 32px rgba(0,0,0,.08)' }}>
           <div style={{ display:'flex', background:'#F3F4F6', borderRadius:12, padding:4, marginBottom:24 }}>
@@ -936,18 +972,14 @@ function CalendarScreen({ events, setEvents }) {
             const dayEvents = getEventsForDate(dateStr);
             return (
               <div key={idx} onClick={()=>{ setSelDate(dateStr); setForm(p=>({...p,startDate:dateStr})); }}
-                style={{ minHeight:80, borderRadius:10, padding:'6px 4px', background:isSel?cfg.l:isToday?'#F0FDF4':'white', border:'1.5px solid '+(isSel?cfg.c:isToday?'#86EFAC':'#F3F4F6'), cursor:'pointer', overflow:'hidden' }}>
-                <div style={{ fontSize:12, fontWeight:isToday||isSel?900:500, color:isToday?'#059669':isSel?cfg.c:'#374151', marginBottom:3 }}>{d}</div>
-                {dayEvents.map(ev => {
-                  const first = isFirstDay(ev, dateStr);
-                  const last = isLastDay(ev, dateStr);
-                  return (
-                    <div key={ev.id} onClick={e=>{e.stopPropagation();setEditEvent({...ev,startDate:ev.startDate||ev.date,endDate:ev.endDate||ev.startDate||ev.date});}}
-                      style={{ fontSize:10, fontWeight:700, color:'white', background:ev.color||cfg.c, padding:'2px 5px', borderRadius:`${first?4:0}px ${last?4:0}px ${last?4:0}px ${first?4:0}px`, marginBottom:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'pointer', marginLeft:first?0:-4, marginRight:last?0:-4 }}>
-                      {first ? ev.title : ''}
-                    </div>
-                  );
-                })}
+                style={{ minHeight:80, borderRadius:10, padding:'4px', background:isSel?cfg.l:isToday?'#F0FDF4':'white', border:'1.5px solid '+(isSel?cfg.c:isToday?'#86EFAC':'#F3F4F6'), cursor:'pointer', overflow:'hidden' }}>
+                <div style={{ fontSize:12, fontWeight:isToday||isSel?900:500, color:isToday?'#059669':isSel?cfg.c:'#374151', marginBottom:2, paddingLeft:2 }}>{d}</div>
+                {dayEvents.map(ev => (
+                  <div key={ev.id} onClick={e=>{e.stopPropagation();setEditEvent({...ev,startDate:ev.startDate||ev.date,endDate:ev.endDate||ev.startDate||ev.date});}}
+                    style={{ fontSize:10, fontWeight:700, color:'white', background:ev.color||cfg.c, padding:'2px 4px', borderRadius:4, marginBottom:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'pointer' }}>
+                    {ev.title}
+                  </div>
+                ))}
               </div>
             );
           })}
@@ -1793,37 +1825,46 @@ function JournalScreen({ journals, setJournals }) {
 
   const [selId, setSelId] = useState(null);
   const [entryTitle, setEntryTitle] = useState('');
+  const [showModeSelect, setShowModeSelect] = useState(false);
+  const [journalMode, setJournalMode] = useState('canvas');
+
+  // 텍스트 모드
+  const [textContent, setTextContent] = useState('');
+
+  // 캔버스 그리기 상태
   const [isDrawing, setIsDrawing] = useState(false);
   const [lastPos, setLastPos] = useState(null);
   const [startPos, setStartPos] = useState(null);
   const [savedImageData, setSavedImageData] = useState(null);
-
-  // 도구
   const [tool, setTool] = useState('brush');
   const [brushSize, setBrushSize] = useState(6);
   const [brushStyle, setBrushStyle] = useState('round');
   const [color, setColor] = useState('#1a1a1a');
   const [shapeType, setShapeType] = useState('rect');
-
-  // 텍스트 도구
   const [textSize, setTextSize] = useState(20);
   const [textBold, setTextBold] = useState(false);
   const [textFont, setTextFont] = useState('sans-serif');
   const [pendingText, setPendingText] = useState('');
-  const [textClickPos, setTextClickPos] = useState(null);
   const [showTextPanel, setShowTextPanel] = useState(false);
+  const [textLayers, setTextLayers] = useState([]);
+  const [selLayer, setSelLayer] = useState(null);
 
   const PALETTE = ['#1a1a1a','#EF4444','#F97316','#EAB308','#22C55E','#3B82F6','#8B5CF6','#EC4899','#06B6D4','#ffffff','#aaaaaa','#6B4C2A'];
+  const TOOLS = [{id:'brush',icon:'✏️',label:'붓'},{id:'eraser',icon:'◻️',label:'지우개'},{id:'text',icon:'T',label:'텍스트'},{id:'shape',icon:'△',label:'도형'}];
 
+  // 일기 선택 시 데이터 로드
   useEffect(function() {
-    var canvas = canvasRef.current;
-    if (!canvas) return;
-    var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (selId) {
-      var entry = journals.find(function(j) { return j.id === selId; });
-      if (entry && entry.canvasData) {
+    if (!selId) return;
+    var entry = journals.find(function(j) { return j.id === selId; });
+    if (!entry) return;
+    setJournalMode(entry.mode || 'canvas');
+    setTextContent(entry.textContent || '');
+    if (entry.mode === 'canvas' && canvasRef.current) {
+      var canvas = canvasRef.current;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (entry.canvasData) {
         var img = new Image();
         img.onload = function() { ctx.drawImage(img, 0, 0); };
         img.src = entry.canvasData;
@@ -1831,12 +1872,19 @@ function JournalScreen({ journals, setJournals }) {
     }
   }, [selId]);
 
+  // 텍스트 자동 저장
+  useEffect(function() {
+    if (!selId || journalMode !== 'text') return;
+    var t = setTimeout(function() {
+      setJournals(function(p) { return p.map(function(j) { return j.id === selId ? {...j, textContent: textContent} : j; }); });
+    }, 800);
+    return function() { clearTimeout(t); };
+  }, [textContent, selId]);
+
   var getPos = function(e) {
     var canvas = canvasRef.current;
     var rect = canvas.getBoundingClientRect();
-    var sx = canvas.width / rect.width;
-    var sy = canvas.height / rect.height;
-    return { x:(e.clientX-rect.left)*sx, y:(e.clientY-rect.top)*sy };
+    return { x:(e.clientX-rect.left)*(canvas.width/rect.width), y:(e.clientY-rect.top)*(canvas.height/rect.height) };
   };
 
   var autoSave = function() {
@@ -1847,150 +1895,72 @@ function JournalScreen({ journals, setJournals }) {
 
   var startDraw = function(e) {
     var pos = getPos(e);
-    if (tool==='text') {
-      setTextClickPos(pos);
-      setShowTextPanel(true);
-      setPendingText('');
-      return;
-    }
-    setIsDrawing(true);
-    setLastPos(pos);
-    setStartPos(pos);
-    if (tool==='shape') {
-      var ctx = canvasRef.current.getContext('2d');
-      setSavedImageData(ctx.getImageData(0,0,canvasRef.current.width,canvasRef.current.height));
-    }
-    if (tool==='brush') {
-      var ctx2 = canvasRef.current.getContext('2d');
-      ctx2.beginPath();
-      ctx2.arc(pos.x,pos.y,brushSize/2,0,Math.PI*2);
-      ctx2.fillStyle = color;
-      ctx2.fill();
-    }
+    if (tool==='text') { setPendingText(''); setShowTextPanel(true); return; }
+    setIsDrawing(true); setLastPos(pos); setStartPos(pos);
+    if (tool==='shape') { var ctx=canvasRef.current.getContext('2d'); setSavedImageData(ctx.getImageData(0,0,canvasRef.current.width,canvasRef.current.height)); }
+    if (tool==='brush') { var ctx2=canvasRef.current.getContext('2d'); ctx2.beginPath(); ctx2.arc(pos.x,pos.y,brushSize/2,0,Math.PI*2); ctx2.fillStyle=color; ctx2.fill(); }
   };
 
   var doDraw = function(e) {
     if (!isDrawing) return;
-    var canvas = canvasRef.current;
-    var ctx = canvas.getContext('2d');
-    var pos = getPos(e);
+    var ctx=canvasRef.current.getContext('2d'), pos=getPos(e);
     if (tool==='brush'||tool==='eraser') {
-      ctx.beginPath();
-      ctx.moveTo(lastPos.x,lastPos.y);
-      ctx.lineTo(pos.x,pos.y);
-      ctx.strokeStyle = tool==='eraser' ? '#FFFFFF' : color;
-      ctx.lineWidth = brushSize;
-      ctx.lineCap = brushStyle==='square' ? 'square' : 'round';
-      ctx.lineJoin = 'round';
-      if (brushStyle==='chalk') { ctx.globalAlpha=0.55+Math.random()*0.45; }
-      else if (brushStyle==='watercolor') { ctx.globalAlpha=0.25; ctx.lineWidth=brushSize*2.5; }
-      else { ctx.globalAlpha=1; }
-      ctx.stroke();
-      ctx.globalAlpha=1;
+      ctx.beginPath(); ctx.moveTo(lastPos.x,lastPos.y); ctx.lineTo(pos.x,pos.y);
+      ctx.strokeStyle=tool==='eraser'?'#FFFFFF':color; ctx.lineWidth=brushSize;
+      ctx.lineCap=brushStyle==='square'?'square':'round'; ctx.lineJoin='round';
+      if(brushStyle==='chalk'){ctx.globalAlpha=0.55+Math.random()*0.45;}
+      else if(brushStyle==='watercolor'){ctx.globalAlpha=0.25;ctx.lineWidth=brushSize*2.5;}
+      else{ctx.globalAlpha=1;}
+      ctx.stroke(); ctx.globalAlpha=1;
     } else if (tool==='shape') {
-      if (savedImageData) ctx.putImageData(savedImageData,0,0);
+      if(savedImageData) ctx.putImageData(savedImageData,0,0);
       ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=brushSize; ctx.lineCap='round';
       var w=pos.x-startPos.x, h=pos.y-startPos.y;
       ctx.beginPath();
-      if (shapeType==='rect') {
-        ctx.strokeRect(startPos.x,startPos.y,w,h);
-      } else if (shapeType==='circle') {
-        var rx=Math.abs(w)/2,ry=Math.abs(h)/2,cx=startPos.x+w/2,cy=startPos.y+h/2;
-        ctx.ellipse(cx,cy,Math.max(rx,1),Math.max(ry,1),0,0,Math.PI*2); ctx.stroke();
-      } else if (shapeType==='line') {
-        ctx.moveTo(startPos.x,startPos.y); ctx.lineTo(pos.x,pos.y); ctx.stroke();
-      } else if (shapeType==='arrow') {
-        ctx.moveTo(startPos.x,startPos.y); ctx.lineTo(pos.x,pos.y); ctx.stroke();
-        var ang=Math.atan2(pos.y-startPos.y,pos.x-startPos.x), hs=brushSize*4;
-        ctx.beginPath();
-        ctx.moveTo(pos.x,pos.y);
-        ctx.lineTo(pos.x-hs*Math.cos(ang-0.45),pos.y-hs*Math.sin(ang-0.45));
-        ctx.lineTo(pos.x-hs*Math.cos(ang+0.45),pos.y-hs*Math.sin(ang+0.45));
-        ctx.closePath(); ctx.fill();
-      }
+      if(shapeType==='rect'){ctx.strokeRect(startPos.x,startPos.y,w,h);}
+      else if(shapeType==='circle'){var rx=Math.abs(w)/2,ry=Math.abs(h)/2,cx=startPos.x+w/2,cy=startPos.y+h/2;ctx.ellipse(cx,cy,Math.max(rx,1),Math.max(ry,1),0,0,Math.PI*2);ctx.stroke();}
+      else if(shapeType==='line'){ctx.moveTo(startPos.x,startPos.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();}
+      else if(shapeType==='arrow'){ctx.moveTo(startPos.x,startPos.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();var ang=Math.atan2(pos.y-startPos.y,pos.x-startPos.x),hs=brushSize*4;ctx.beginPath();ctx.moveTo(pos.x,pos.y);ctx.lineTo(pos.x-hs*Math.cos(ang-0.45),pos.y-hs*Math.sin(ang-0.45));ctx.lineTo(pos.x-hs*Math.cos(ang+0.45),pos.y-hs*Math.sin(ang+0.45));ctx.closePath();ctx.fill();}
     }
     setLastPos(pos);
   };
 
-  var endDraw = function() {
-    if (isDrawing) { setIsDrawing(false); setSavedImageData(null); autoSave(); }
-  };
-
-  var [textLayers, setTextLayers] = useState([]);
-  var [selLayer, setSelLayer] = useState(null);
-  var [dragging, setDragging] = useState(null);
-  var [resizing, setResizing] = useState(null);
+  var endDraw = function() { if(isDrawing){setIsDrawing(false);setSavedImageData(null);autoSave();} };
 
   var placeText = function() {
-    if (!pendingText.trim()||!textClickPos) return;
-    var canvas = canvasRef.current;
-    var rect = canvas.getBoundingClientRect();
-    var scaleX = rect.width / canvas.width;
-    var newLayer = {
-      id: uid(), text: pendingText, x: textClickPos.x * scaleX, y: (textClickPos.y - textSize) * (rect.height/canvas.height),
-      fontSize: textSize, bold: textBold, font: textFont, color: color, width: 200
-    };
-    setTextLayers(function(p) { return [...p, newLayer]; });
-    setSelLayer(newLayer.id);
-    setShowTextPanel(false); setPendingText(''); setTextClickPos(null);
-  };
-
-  var renderLayersToCanvas = function() {
-    if (!canvasRef.current) return;
-    var canvas = canvasRef.current;
-    var ctx = canvas.getContext('2d');
-    var rect = canvas.getBoundingClientRect();
-    var scaleX = canvas.width / rect.width;
-    var scaleY = canvas.height / rect.height;
-    textLayers.forEach(function(l) {
-      ctx.font = (l.bold ? 'bold ':'') + Math.round(l.fontSize*scaleY) + 'px ' + l.font;
-      ctx.fillStyle = l.color;
-      ctx.fillText(l.text, l.x * scaleX, (l.y + l.fontSize) * scaleY);
-    });
-  };
-
-  var flattenToCanvas = function() {
-    renderLayersToCanvas();
-    setTextLayers([]);
-    setSelLayer(null);
-    autoSave();
+    if (!pendingText.trim()) return;
+    var canvas=canvasRef.current, ctx=canvas.getContext('2d');
+    ctx.font=(textBold?'bold ':'')+textSize+'px '+textFont; ctx.fillStyle=color;
+    ctx.fillText(pendingText, canvas.width/2 - ctx.measureText(pendingText).width/2, canvas.height/2);
+    setShowTextPanel(false); setPendingText(''); autoSave();
   };
 
   var clearCanvas = function() {
-    var canvas=canvasRef.current; var ctx=canvas.getContext('2d');
-    ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    autoSave();
+    var canvas=canvasRef.current, ctx=canvas.getContext('2d');
+    ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,canvas.width,canvas.height); autoSave();
   };
 
   var handleImageUpload = function(e) {
     var file=e.target.files[0]; if(!file) return;
     var reader=new FileReader();
-    reader.onload=function(ev){
-      var img=new Image();
-      img.onload=function(){
-        var canvas=canvasRef.current, ctx=canvas.getContext('2d');
-        var mw=canvas.width*0.65, mh=canvas.height*0.65;
-        var w=img.width, h=img.height;
-        if(w>mw){h=h*mw/w;w=mw;} if(h>mh){w=w*mh/h;h=mh;}
-        ctx.drawImage(img,30,30,w,h);
-        autoSave();
-      };
-      img.src=ev.target.result;
-    };
-    reader.readAsDataURL(file);
-    e.target.value='';
+    reader.onload=function(ev){ var img=new Image(); img.onload=function(){ var canvas=canvasRef.current,ctx=canvas.getContext('2d'); var mw=canvas.width*0.65,mh=canvas.height*0.65,w=img.width,h=img.height; if(w>mw){h=h*mw/w;w=mw;} if(h>mh){w=w*mh/h;h=mh;} ctx.drawImage(img,30,30,w,h); autoSave(); }; img.src=ev.target.result; };
+    reader.readAsDataURL(file); e.target.value='';
   };
-
-  var [showModeSelect, setShowModeSelect] = useState(false);
-  var [journalMode, setJournalMode] = useState('canvas'); // 'text' | 'canvas'
 
   var newEntry = function(mode) {
     var id=uid(), today=tod();
-    var entry={id,title:'일기 '+today,date:today,canvasData:null,mode:mode||'canvas',textContent:''};
+    var entry={id,title:'일기 '+today,date:today,mode:mode,canvasData:null,textContent:''};
     setJournals(function(p){return [entry,...p];});
     setSelId(id); setEntryTitle(entry.title);
-    setJournalMode(mode||'canvas');
-    setShowModeSelect(false);
+    setJournalMode(mode); setTextContent(''); setShowModeSelect(false);
+    if (mode==='canvas') {
+      setTimeout(function() {
+        if (canvasRef.current) {
+          var ctx=canvasRef.current.getContext('2d');
+          ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,canvasRef.current.width,canvasRef.current.height);
+        }
+      }, 50);
+    }
   };
 
   var deleteEntry = function(id) {
@@ -2003,17 +1973,12 @@ function JournalScreen({ journals, setJournals }) {
     setJournals(function(p){return p.map(function(j){return j.id===selId?{...j,title:entryTitle}:j;});});
   };
 
-  var TOOLS = [
-    {id:'brush',icon:'✏️',label:'붓'},
-    {id:'eraser',icon:'◻️',label:'지우개'},
-    {id:'text',icon:'T',label:'텍스트'},
-    {id:'shape',icon:'△',label:'도형'},
-  ];
+  var selEntry = journals.find(function(j){return j.id===selId;});
 
   return (
     <div style={{height:'100%',display:'flex',overflow:'hidden'}}>
       {/* 왼쪽 목록 */}
-      <div style={{width:240,flexShrink:0,borderRight:'1px solid #F3F4F6',display:'flex',flexDirection:'column',background:'white'}}>
+      <div style={{width:220,flexShrink:0,borderRight:'1px solid #F3F4F6',display:'flex',flexDirection:'column',background:'white'}}>
         <div style={{padding:'12px',borderBottom:'1px solid #F3F4F6'}}>
           <button onClick={()=>setShowModeSelect(true)} style={{width:'100%',padding:'10px',borderRadius:11,border:'none',background:cfg.c,color:'white',fontSize:14,fontWeight:700,cursor:'pointer'}}>+ 새 일기</button>
         </div>
@@ -2023,7 +1988,7 @@ function JournalScreen({ journals, setJournals }) {
             return (
               <div key={j.id} onClick={function(){setSelId(j.id);setEntryTitle(j.title);}}
                 style={{borderRadius:12,padding:'10px 12px',marginBottom:4,cursor:'pointer',background:selId===j.id?cfg.l:'transparent',border:'1.5px solid '+(selId===j.id?cfg.c:'transparent'),display:'flex',alignItems:'center',gap:8}}>
-                {j.canvasData&&<div style={{width:36,height:36,borderRadius:6,overflow:'hidden',flexShrink:0,border:'1px solid #E5E7EB'}}><img src={j.canvasData} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/></div>}
+                <div style={{fontSize:18,flexShrink:0}}>{j.mode==='text'?'✍️':'🎨'}</div>
                 <div style={{flex:1,overflow:'hidden'}}>
                   <div style={{fontSize:13,fontWeight:700,color:'#111827',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.title}</div>
                   <div style={{fontSize:11,color:'#9CA3AF',marginTop:2}}>{fmtFull(j.date)}</div>
@@ -2035,165 +2000,90 @@ function JournalScreen({ journals, setJournals }) {
         </div>
       </div>
 
-      {/* 오른쪽 그림판 */}
+      {/* 오른쪽: 내용 영역 */}
       {!selId ? (
         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,color:'#D1D5DB'}}>
-          <div style={{fontSize:52}}>🎨</div>
+          <div style={{fontSize:52}}>📖</div>
           <div style={{fontSize:16,fontWeight:700}}>일기를 선택하거나 새로 만드세요</div>
         </div>
       ) : (
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           {/* 제목 */}
           <div style={{padding:'10px 16px',borderBottom:'1px solid #F3F4F6',background:'white',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+            <span style={{fontSize:18}}>{journalMode==='text'?'✍️':'🎨'}</span>
             <input value={entryTitle} onChange={function(e){setEntryTitle(e.target.value);}} onBlur={saveTitle} style={{flex:1,fontSize:16,fontWeight:800,border:'none',outline:'none',color:'#111827',background:'transparent'}}/>
-            <span style={{fontSize:12,color:'#9CA3AF'}}>{journals.find(function(j){return j.id===selId;})?journals.find(function(j){return j.id===selId;}).date:''}</span>
+            <span style={{fontSize:12,color:'#9CA3AF'}}>{selEntry&&selEntry.date}</span>
           </div>
 
-          {/* 툴바 */}
-          <div style={{background:'white',borderBottom:'1px solid #F3F4F6',padding:'7px 12px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',flexShrink:0}}>
-            {/* 도구 */}
-            <div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:10,padding:3}}>
-              {TOOLS.map(function(t){
-                return <button key={t.id} onClick={function(){setTool(t.id);setShowTextPanel(false);}} title={t.label} style={{padding:'5px 10px',borderRadius:7,border:'none',background:tool===t.id?'white':'transparent',color:tool===t.id?cfg.c:'#6B7280',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:tool===t.id?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{t.icon}</button>;
-              })}
-            </div>
-
-            {/* 이미지 업로드 */}
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{display:'none'}}/>
-            <button onClick={function(){if(fileInputRef.current)fileInputRef.current.click();}} title="이미지 삽입" style={{padding:'5px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',cursor:'pointer',fontSize:14}}>🖼️</button>
-
-            <div style={{width:1,height:24,background:'#E5E7EB',flexShrink:0}}/>
-
-            {/* 크기 */}
-            <div style={{display:'flex',alignItems:'center',gap:5}}>
-              <span style={{fontSize:11,color:'#6B7280',fontWeight:600,whiteSpace:'nowrap'}}>크기</span>
-              <input type="range" min={tool==='text'?8:1} max={tool==='text'?72:50}
-                value={tool==='text'?textSize:brushSize}
-                onChange={function(e){tool==='text'?setTextSize(Number(e.target.value)):setBrushSize(Number(e.target.value));}}
-                style={{width:60}}/>
-              <span style={{fontSize:11,color:'#374151',fontWeight:700,minWidth:18}}>{tool==='text'?textSize:brushSize}</span>
-            </div>
-
-            {/* 붓 스타일 */}
-            {tool==='brush'&&(
-              <div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:8,padding:2}}>
-                {[['round','●'],['square','■'],['chalk','〰'],['watercolor','≈']].map(function(s){
-                  return <button key={s[0]} onClick={function(){setBrushStyle(s[0]);}} style={{padding:'3px 8px',borderRadius:6,border:'none',background:brushStyle===s[0]?'white':'transparent',color:brushStyle===s[0]?cfg.c:'#9CA3AF',fontSize:12,fontWeight:700,cursor:'pointer',boxShadow:brushStyle===s[0]?'0 1px 3px rgba(0,0,0,.1)':'none'}}>{s[1]}</button>;
-                })}
-              </div>
-            )}
-
-            {/* 도형 타입 */}
-            {tool==='shape'&&(
-              <div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:8,padding:2}}>
-                {[['rect','□'],['circle','○'],['line','—'],['arrow','→']].map(function(s){
-                  return <button key={s[0]} onClick={function(){setShapeType(s[0]);}} style={{padding:'3px 9px',borderRadius:6,border:'none',background:shapeType===s[0]?'white':'transparent',color:shapeType===s[0]?cfg.c:'#9CA3AF',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:shapeType===s[0]?'0 1px 3px rgba(0,0,0,.1)':'none'}}>{s[1]}</button>;
-                })}
-              </div>
-            )}
-
-            {/* 텍스트 옵션 */}
-            {tool==='text'&&(
-              <>
-                <button onClick={function(){setTextBold(function(p){return !p;});}} style={{padding:'4px 10px',borderRadius:8,border:'1.5px solid '+(textBold?cfg.c:'#E5E7EB'),background:textBold?cfg.l:'white',color:textBold?cfg.c:'#374151',fontSize:13,fontWeight:900,cursor:'pointer'}}>B</button>
-                <select value={textFont} onChange={function(e){setTextFont(e.target.value);}} style={{padding:'4px 8px',borderRadius:8,border:'1px solid #E5E7EB',fontSize:12}}>
-                  <option value="sans-serif">고딕</option>
-                  <option value="serif">바탕</option>
-                  <option value="monospace">코드체</option>
-                  <option value="Georgia">Georgia</option>
-                  <option value="cursive">필기체</option>
-                </select>
-              </>
-            )}
-
-            <div style={{width:1,height:24,background:'#E5E7EB',flexShrink:0}}/>
-
-            {/* 색상 팔레트 */}
-            <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
-              {PALETTE.map(function(c){
-                return <button key={c} onClick={function(){setColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,border:'2.5px solid '+(color===c?cfg.c:'#E5E7EB'),cursor:'pointer',flexShrink:0,boxShadow:color===c?'0 0 0 2px '+cfg.l:'none'}}/>;
-              })}
-              <input type="color" value={color} onChange={function(e){setColor(e.target.value);}} style={{width:22,height:22,border:'2px solid #E5E7EB',borderRadius:'50%',cursor:'pointer',padding:0,flexShrink:0}}/>
-            </div>
-
-            <div style={{marginLeft:'auto'}}>
-              <button onClick={clearCanvas} style={{padding:'5px 12px',borderRadius:8,border:'1.5px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,fontWeight:700,cursor:'pointer'}}>전체 지우기</button>
-            </div>
-          </div>
-
-          {/* 텍스트 입력 패널 */}
-          {showTextPanel&&(
-            <div className="fu" style={{background:'#EEF2FF',borderBottom:'1px solid '+cfg.m,padding:'8px 14px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-              <span style={{fontSize:12,fontWeight:700,color:cfg.d,whiteSpace:'nowrap'}}>📝 텍스트 입력 후 캔버스에 클릭</span>
-              <input autoFocus value={pendingText} onChange={function(e){setPendingText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')placeText();if(e.key==='Escape')setShowTextPanel(false);}} placeholder="입력 후 Enter 또는 캔버스 클릭" style={{flex:1,padding:'6px 12px',fontSize:14,border:'1.5px solid '+cfg.c,borderRadius:9,fontFamily:textFont,fontWeight:textBold?'bold':'normal',color:color}}/>
-              <Btn onClick={placeText} bg={cfg.c} sm>배치</Btn>
-              <Btn onClick={function(){setShowTextPanel(false);}} outline color="#9CA3AF" sm>취소</Btn>
+          {/* 텍스트 모드 */}
+          {journalMode==='text' && (
+            <div style={{flex:1,padding:'20px',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+              <textarea value={textContent} onChange={function(e){setTextContent(e.target.value);}}
+                placeholder="오늘 있었던 일을 자유롭게 기록해보세요..."
+                style={{flex:1,width:'100%',fontSize:16,lineHeight:1.8,border:'none',outline:'none',resize:'none',fontFamily:'inherit',color:'#374151',background:'transparent'}}/>
+              <div style={{fontSize:12,color:'#D1D5DB',textAlign:'right',marginTop:8}}>{textContent.length}자</div>
             </div>
           )}
 
-          {/* 캔버스 */}
-          <div style={{flex:1,overflow:'hidden',background:'#F1F5F9',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
-            <div style={{boxShadow:'0 8px 32px rgba(0,0,0,.15)',borderRadius:4}}>
-              <canvas ref={canvasRef} width={900} height={560}
-                style={{display:'block',cursor:tool==='eraser'?'cell':tool==='text'?'text':'crosshair',maxWidth:'calc(100vw - 320px)',maxHeight:'calc(100vh - 240px)',background:'white'}}
-                onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={endDraw} onMouseLeave={endDraw}/>
-
-              {/* 텍스트 레이어 오버레이 - 드래그/크기조절 가능 */}
-              {textLayers.map(function(l) {
-                var isSelected = selLayer === l.id;
-                return (
-                  <div key={l.id} style={{ position:'absolute', left:l.x, top:l.y, cursor:'move', userSelect:'none', border: isSelected ? '1.5px dashed #4F46E5' : '1.5px solid transparent', borderRadius:4, padding:'2px 4px' }}
-                    onClick={function(e){e.stopPropagation();setSelLayer(l.id);}}
-                    onMouseDown={function(e){
-                      e.stopPropagation();
-                      var startX=e.clientX-l.x, startY=e.clientY-l.y;
-                      var onMove=function(me){setTextLayers(function(p){return p.map(function(x){return x.id===l.id?{...x,x:me.clientX-startX,y:me.clientY-startY}:x;});});};
-                      var onUp=function(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
-                      document.addEventListener('mousemove',onMove);
-                      document.addEventListener('mouseup',onUp);
-                    }}>
-                    <span style={{ fontSize:l.fontSize+'px', fontFamily:l.font, fontWeight:l.bold?'bold':'normal', color:l.color, whiteSpace:'nowrap', lineHeight:1 }}>{l.text}</span>
-                    {isSelected && (
-                      <>
-                        {/* 삭제 */}
-                        <button onClick={function(e){e.stopPropagation();setTextLayers(function(p){return p.filter(function(x){return x.id!==l.id;});});setSelLayer(null);}} style={{ position:'absolute',top:-10,right:-10,width:18,height:18,borderRadius:'50%',background:'#EF4444',border:'none',color:'white',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1 }}>✕</button>
-                        {/* 크기 조절 핸들 */}
-                        <div style={{ position:'absolute',bottom:-6,right:-6,width:12,height:12,background:'#4F46E5',borderRadius:2,cursor:'se-resize' }}
-                          onMouseDown={function(e){
-                            e.stopPropagation();
-                            var startY=e.clientY, startSize=l.fontSize;
-                            var onMove=function(me){var delta=me.clientY-startY;setTextLayers(function(p){return p.map(function(x){return x.id===l.id?{...x,fontSize:Math.max(8,Math.min(120,startSize+delta*0.5))}:x;});});};
-                            var onUp=function(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
-                            document.addEventListener('mousemove',onMove);
-                            document.addEventListener('mouseup',onUp);
-                          }}/>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-              {textLayers.length > 0 && (
-                <button onClick={flattenToCanvas} style={{ position:'absolute',bottom:8,right:8,padding:'6px 12px',borderRadius:8,border:'none',background:'#4F46E5',color:'white',fontSize:12,fontWeight:700,cursor:'pointer' }}>
-                  텍스트 확정 (캔버스에 합치기)
-                </button>
+          {/* 그림판 모드 */}
+          {journalMode==='canvas' && (
+            <>
+              {/* 툴바 */}
+              <div style={{background:'white',borderBottom:'1px solid #F3F4F6',padding:'7px 12px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',flexShrink:0}}>
+                <div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:10,padding:3}}>
+                  {TOOLS.map(function(t){return <button key={t.id} onClick={function(){setTool(t.id);setShowTextPanel(false);}} title={t.label} style={{padding:'5px 10px',borderRadius:7,border:'none',background:tool===t.id?'white':'transparent',color:tool===t.id?cfg.c:'#6B7280',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:tool===t.id?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{t.icon}</button>;})}
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{display:'none'}}/>
+                <button onClick={function(){if(fileInputRef.current)fileInputRef.current.click();}} style={{padding:'5px 10px',borderRadius:8,border:'1px solid #E5E7EB',background:'white',cursor:'pointer',fontSize:14}}>🖼️</button>
+                <div style={{width:1,height:24,background:'#E5E7EB',flexShrink:0}}/>
+                <div style={{display:'flex',alignItems:'center',gap:5}}>
+                  <span style={{fontSize:11,color:'#6B7280',fontWeight:600}}>크기</span>
+                  <input type="range" min={tool==='text'?8:1} max={tool==='text'?72:50} value={tool==='text'?textSize:brushSize} onChange={function(e){tool==='text'?setTextSize(Number(e.target.value)):setBrushSize(Number(e.target.value));}} style={{width:60}}/>
+                  <span style={{fontSize:11,color:'#374151',fontWeight:700,minWidth:18}}>{tool==='text'?textSize:brushSize}</span>
+                </div>
+                {tool==='brush'&&<div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:8,padding:2}}>{[['round','●'],['square','■'],['chalk','〰'],['watercolor','≈']].map(function(s){return <button key={s[0]} onClick={function(){setBrushStyle(s[0]);}} style={{padding:'3px 8px',borderRadius:6,border:'none',background:brushStyle===s[0]?'white':'transparent',color:brushStyle===s[0]?cfg.c:'#9CA3AF',fontSize:12,fontWeight:700,cursor:'pointer'}}>{s[1]}</button>;})}</div>}
+                {tool==='shape'&&<div style={{display:'flex',gap:3,background:'#F3F4F6',borderRadius:8,padding:2}}>{[['rect','□'],['circle','○'],['line','—'],['arrow','→']].map(function(s){return <button key={s[0]} onClick={function(){setShapeType(s[0]);}} style={{padding:'3px 9px',borderRadius:6,border:'none',background:shapeType===s[0]?'white':'transparent',color:shapeType===s[0]?cfg.c:'#9CA3AF',fontSize:14,fontWeight:800,cursor:'pointer'}}>{s[1]}</button>;})}</div>}
+                {tool==='text'&&<><button onClick={function(){setTextBold(function(p){return !p;});}} style={{padding:'4px 10px',borderRadius:8,border:'1.5px solid '+(textBold?cfg.c:'#E5E7EB'),background:textBold?cfg.l:'white',color:textBold?cfg.c:'#374151',fontSize:13,fontWeight:900,cursor:'pointer'}}>B</button><select value={textFont} onChange={function(e){setTextFont(e.target.value);}} style={{padding:'4px 8px',borderRadius:8,border:'1px solid #E5E7EB',fontSize:12}}><option value="sans-serif">고딕</option><option value="serif">바탕</option><option value="monospace">코드체</option><option value="Georgia">Georgia</option><option value="cursive">필기체</option></select></>}
+                <div style={{width:1,height:24,background:'#E5E7EB',flexShrink:0}}/>
+                <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+                  {PALETTE.map(function(c){return <button key={c} onClick={function(){setColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,border:'2.5px solid '+(color===c?cfg.c:'#E5E7EB'),cursor:'pointer',flexShrink:0}}/>;})}<input type="color" value={color} onChange={function(e){setColor(e.target.value);}} style={{width:22,height:22,border:'2px solid #E5E7EB',borderRadius:'50%',cursor:'pointer',padding:0,flexShrink:0}}/>
+                </div>
+                <div style={{marginLeft:'auto'}}><button onClick={clearCanvas} style={{padding:'5px 12px',borderRadius:8,border:'1.5px solid #FECACA',background:'#FEF2F2',color:'#EF4444',fontSize:12,fontWeight:700,cursor:'pointer'}}>전체 지우기</button></div>
+              </div>
+              {showTextPanel&&(
+                <div style={{background:'#EEF2FF',borderBottom:'1px solid '+cfg.m,padding:'8px 14px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+                  <span style={{fontSize:12,fontWeight:700,color:cfg.d,whiteSpace:'nowrap'}}>📝 텍스트 입력</span>
+                  <input autoFocus value={pendingText} onChange={function(e){setPendingText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')placeText();if(e.key==='Escape')setShowTextPanel(false);}} placeholder="입력 후 Enter" style={{flex:1,padding:'6px 12px',fontSize:14,border:'1.5px solid '+cfg.c,borderRadius:9}}/>
+                  <Btn onClick={placeText} bg={cfg.c} sm>배치</Btn>
+                  <Btn onClick={function(){setShowTextPanel(false);}} outline color="#9CA3AF" sm>취소</Btn>
+                </div>
               )}
-            </div>
-          </div>
+              <div style={{flex:1,overflow:'hidden',background:'#F1F5F9',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <div style={{boxShadow:'0 8px 32px rgba(0,0,0,.15)',borderRadius:4}}>
+                  <canvas ref={canvasRef} width={900} height={560}
+                    style={{display:'block',cursor:tool==='eraser'?'cell':tool==='text'?'text':'crosshair',maxWidth:'calc(100vw - 280px)',maxHeight:'calc(100vh - 200px)',background:'white'}}
+                    onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={endDraw} onMouseLeave={endDraw}/>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
+
+      {/* 모드 선택 모달 */}
       {showModeSelect && (
         <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
-          <div className="fu" style={{background:'white',borderRadius:20,padding:28,width:'100%',maxWidth:360,textAlign:'center'}}>
+          <div style={{background:'white',borderRadius:20,padding:28,width:'100%',maxWidth:360,textAlign:'center'}}>
             <div style={{fontSize:20,fontWeight:900,color:'#111827',marginBottom:8}}>📖 일기 형식 선택</div>
             <div style={{fontSize:13,color:'#6B7280',marginBottom:24}}>어떤 방식으로 일기를 쓸까요?</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-              <button onClick={()=>newEntry('text')} style={{padding:'20px 12px',borderRadius:16,border:'2px solid #E5E7EB',background:'white',cursor:'pointer'}}>
-                <div style={{fontSize:36,marginBottom:8}}>✍️</div>
+              <button onClick={()=>newEntry('text')} style={{padding:'24px 12px',borderRadius:16,border:'2px solid #E5E7EB',background:'white',cursor:'pointer'}}>
+                <div style={{fontSize:40,marginBottom:10}}>✍️</div>
                 <div style={{fontSize:15,fontWeight:800,color:'#111827'}}>텍스트</div>
-                <div style={{fontSize:12,color:'#9CA3AF',marginTop:4}}>글로 기록해요</div>
+                <div style={{fontSize:12,color:'#9CA3AF',marginTop:4}}>글로만 기록해요</div>
               </button>
-              <button onClick={()=>newEntry('canvas')} style={{padding:'20px 12px',borderRadius:16,border:'2px solid '+cfg.c,background:cfg.l,cursor:'pointer'}}>
-                <div style={{fontSize:36,marginBottom:8}}>🎨</div>
+              <button onClick={()=>newEntry('canvas')} style={{padding:'24px 12px',borderRadius:16,border:'2px solid '+cfg.c,background:cfg.l,cursor:'pointer'}}>
+                <div style={{fontSize:40,marginBottom:10}}>🎨</div>
                 <div style={{fontSize:15,fontWeight:800,color:cfg.c}}>그림판</div>
                 <div style={{fontSize:12,color:cfg.d,marginTop:4}}>그림과 글을 함께</div>
               </button>
@@ -2591,17 +2481,23 @@ function WorkspaceScreen({ user, accounts, spaces, setSpaces }) {
     setSearching(true);setInvResult(null);setShowMsgInput(false);setInvMsg('');
     await new Promise(r=>setTimeout(r,400));
     setSearching(false);
-    // Supabase에서 직접 검색 (어느 기기에서 가입했든 찾을 수 있음)
+    const searchTarget = invEmail.trim().toLowerCase();
     let found = null;
+    // 1. Supabase 검색
     try {
-      const rows = await supa.query('accounts', { eq: { email: invEmail.trim().toLowerCase() }, limit: 1 });
-      if (rows && rows[0] && rows[0].id !== user.id) {
-        found = db.dbToAcct(rows[0]);
-      }
-    } catch(e) {
-      // fallback to local
-      const allAccounts=ld('wl_accounts',[]).concat(accounts).filter((a,i,arr)=>arr.findIndex(x=>x.id===a.id)===i);
-      found=allAccounts.find(a=>a.email&&a.email.toLowerCase()===invEmail.trim().toLowerCase()&&a.id!==user.id)||null;
+      const rows = await supa.query('accounts', { eq: { email: searchTarget }, limit: 1 });
+      if (rows && rows[0] && rows[0].id !== user.id) found = db.dbToAcct(rows[0]);
+    } catch(e) {}
+    // 2. localStorage fallback
+    if (!found) {
+      const localAccts = ld('wl_accounts', []);
+      const localFound = localAccts.find(a => a.email && a.email.toLowerCase() === searchTarget && a.id !== user.id);
+      if (localFound) found = localFound;
+    }
+    // 3. accounts prop fallback
+    if (!found) {
+      const propFound = accounts.find(a => a.email && a.email.toLowerCase() === searchTarget && a.id !== user.id);
+      if (propFound) found = propFound;
     }
     const space=spaces.find(s=>s.id===selSpace.id)||selSpace;
     if(found&&space.members&&space.members.find(m=>m.id===found.id)){setInvResult('already_member');}
@@ -3528,16 +3424,39 @@ function MainApp({ user, setUser, accounts, setAccounts, updateUser, logout, del
         }));
         if (mounted) setSpacesRaw(hydrated);
       } catch(e) { console.error('Data load error:', e); }
-      if (mounted) setDataLoaded(true);
+      if (mounted) {
+        setDataLoaded(true);
+        // 로드 완료 후 탭 타이틀 업데이트
+        try { document.title = 'Workly'; } catch {}
+      }
     };
     loadAll();
-    // 폴링으로 알림 + 워크스페이스 갱신
+    // 실시간 폴링 (알림 + 워크스페이스)
     const poll = setInterval(async () => {
       try {
-        const n = await db.getNotifs(user.id);
-        if (mounted) setNotifsRaw(n);
+        const [n, spRows, memberRows] = await Promise.all([
+          db.getNotifs(user.id),
+          supa.query('spaces'),
+          supa.query('space_members'),
+        ]);
+        if (!mounted) return;
+        setNotifsRaw(n);
+        const mySpaceIds = memberRows.filter(m => m.user_id === user.id).map(m => m.space_id);
+        const mySpaces = spRows.filter(s => s.owner_id === user.id || mySpaceIds.includes(s.id));
+        if (mySpaces.length > 0) {
+          const [stRows, seRows] = await Promise.all([supa.query('space_todos'), supa.query('space_events')]);
+          const hydrated = mySpaces.map(s => ({
+            id: s.id, name: s.name, description: s.description, type: s.type,
+            ownerId: s.owner_id, inviteCode: s.invite_code, createdAt: s.created_at,
+            members: memberRows.filter(m => m.space_id === s.id).map(m => ({ id: m.user_id, name: m.member_name||m.user_id, role: m.role })),
+            todos: stRows.filter(t => t.space_id === s.id).map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.due_date, assigneeId: t.assignee_id, assigneeName: t.assignee_name, createdByName: t.created_by_name, createdAt: t.created_at })),
+            events: seRows.filter(e => e.space_id === s.id).map(e => ({ id: e.id, title: e.title, date: e.date, time: e.time, color: e.color, createdByName: e.created_by_name, createdAt: e.created_at })),
+            comments: ld('wl_comments_' + s.id, []),
+          }));
+          setSpacesRaw(hydrated);
+        }
       } catch {}
-    }, 3000);
+    }, 5000);
     return () => { mounted = false; clearInterval(poll); };
   }, [user.id]);
 
@@ -3829,7 +3748,7 @@ function MainApp({ user, setUser, accounts, setAccounts, updateUser, logout, del
 /* ══════════════════════════════════════════════════════════
    APP ROOT
 ══════════════════════════════════════════════════════════ */
-export default function App() {
+function AppInner() {
   const [user, setUserRaw] = useState(() => {
     try {
       const saved = localStorage.getItem('wl_current_user');
@@ -3873,10 +3792,10 @@ export default function App() {
   };
 
   const handleRegister = async (acct) => {
-    try { await db.saveAccount(acct); } catch(e) {
-      console.warn('Supabase 저장 실패, localStorage로 대체:', e.message);
-      sv('wl_accounts', [...ld('wl_accounts', []), acct]);
-    }
+    // 항상 localStorage에도 저장 (검색 fallback용)
+    const existing = ld('wl_accounts', []);
+    sv('wl_accounts', [...existing.filter(a => a.id !== acct.id), acct]);
+    try { await db.saveAccount(acct); } catch(e) {}
     setAccounts(p => [...p, acct]);
   };
 
@@ -3884,6 +3803,23 @@ export default function App() {
     const updated = { ...user, nickname, wsType, onboardingDone: true };
     setUser(updated);
     try { await db.saveAccount(updated); } catch(e) {}
+    // 샘플 데이터 생성 (첫 가입자 경험 개선)
+    const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date(Date.now()+86400000).toISOString().split('T')[0];
+    const sampleTodos = [
+      { id: uid(), title: 'Workly 할일 기능 사용해보기 ✅', status: 'todo', priority: 'high', dueDate: today, category: '개인', notes: '더블클릭하면 수정할 수 있어요!', createdAt: new Date().toISOString() },
+      { id: uid(), title: '캘린더에 일정 추가해보기 📅', status: 'todo', priority: 'medium', dueDate: tomorrow, category: '개인', notes: '', createdAt: new Date().toISOString() },
+      { id: uid(), title: '일기 써보기 📖', status: 'todo', priority: 'low', dueDate: '', category: '개인', notes: '텍스트와 그림판 중 선택할 수 있어요', createdAt: new Date().toISOString() },
+    ];
+    const sampleEvents = [
+      { id: uid(), title: '🎉 Workly 시작!', date: today, startDate: today, endDate: today, time: '', color: '#4F46E5', notes: '환영해요!', createdAt: new Date().toISOString() },
+    ];
+    try {
+      sv('wl_todos_' + user.id, sampleTodos);
+      sv('wl_events_' + user.id, sampleEvents);
+      await db.syncTodos(user.id, sampleTodos);
+      for (const ev of sampleEvents) await db.saveEvent(user.id, ev);
+    } catch(e) {}
     await checkPendingInvites(user.id, user.email, nickname || user.name);
   };
 
@@ -3919,13 +3855,27 @@ export default function App() {
   };
 
   if (loading) return (
-    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16 }}>
-      <div style={{ width:40, height:40, border:'3px solid #E5E7EB', borderTopColor:'#4F46E5', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
-      <div style={{ fontSize:14, color:'#6B7280' }}>잠시만요...</div>
+    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16, background:'linear-gradient(135deg,#EEF2FF,#F5F3FF)' }}>
+      <div style={{ fontSize:48, animation:'pulse 1.5s ease-in-out infinite' }}>🌿</div>
+      <div style={{ fontSize:20, fontWeight:900, color:'#4F46E5' }}>Workly</div>
+      <div style={{ fontSize:13, color:'#9CA3AF' }}>불러오는 중...</div>
     </div>
   );
 
   if (!user) return <AuthScreen onAuth={handleAuth} onRegister={handleRegister} accounts={accounts} setAccounts={setAccounts} />;
   if (!user.onboardingDone) return <OnboardingScreen user={user} onDone={handleOnboardingDone} />;
   return <MainApp user={user} setUser={setUser} accounts={accounts} setAccounts={setAccounts} updateUser={updateUser} logout={logout} deleteAccount={deleteAccount} />;
+}
+
+export default function App() {
+  useEffect(() => {
+    document.title = 'Workly';
+    // Favicon
+    const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+    link.type = 'image/svg+xml';
+    link.rel = 'icon';
+    link.href = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>";
+    document.head.appendChild(link);
+  }, []);
+  return <ToastProvider><AppInner /></ToastProvider>;
 }
