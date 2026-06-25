@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 
 /* ── Toast / 에러 알림 시스템 ── */
-const ToastContext = React.createContext(null);
+const ToastContext = createContext(null);
 function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const show = (msg, type='info', duration=3000) => {
@@ -24,7 +24,7 @@ function ToastProvider({ children }) {
     </ToastContext.Provider>
   );
 }
-const useToast = () => React.useContext(ToastContext);
+const useToast = () => useContext(ToastContext);
 
 /* ── Supabase 클라이언트 ── */
 const SUPA_URL = "https://ayfbirhubfuihbrbyoca.supabase.co";
