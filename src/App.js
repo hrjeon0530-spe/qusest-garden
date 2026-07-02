@@ -325,8 +325,9 @@ function Styles({ isDark }) {
     el.textContent = `
       @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
       *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-      html,body,#root{width:100%;height:100%;overflow:hidden;}
-      body{font-family:'Nunito',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+      *{box-sizing:border-box;}
+      html,body,#root{width:100%;height:100%;overflow:hidden;max-width:100vw;}
+      body{font-family:'Nunito',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
       button,input,textarea,select{font-family:inherit;}
       input:focus,textarea:focus,select:focus{outline:none;}
       ::-webkit-scrollbar{width:5px;height:5px;}
@@ -396,6 +397,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', rows, requi
     fontSize: 14, fontWeight: 500, border: `1.5px solid ${foc ? '#6366F1' : '#E5E7EB'}`,
     borderRadius: 10, background: 'white', color: '#1F2937',
     transition: 'border-color .2s', boxShadow: foc ? '0 0 0 3px rgba(99,102,241,.1)' : 'none',
+    boxSizing: 'border-box', maxWidth: '100%', fontFamily: 'inherit',
   };
   return (
     <div style={{ marginBottom: 14 }}>
@@ -426,14 +428,14 @@ function Select({ label, value, onChange, options }) {
 
 function Modal({ title, onClose, children, width = 460 }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 16px', boxSizing: 'border-box' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="pp" style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,.18)' }}>
+      <div className="pp" style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', overflowX: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.18)', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #F3F4F6' }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: '#111827' }}>{title}</div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#F9FAFB', color: '#6B7280', fontSize: 14, cursor: 'pointer' }}>✕</button>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#F9FAFB', color: '#6B7280', fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>✕</button>
         </div>
-        <div style={{ padding: '20px 22px' }}>{children}</div>
+        <div style={{ padding: '20px 22px', boxSizing: 'border-box', width: '100%' }}>{children}</div>
       </div>
     </div>
   );
@@ -871,10 +873,10 @@ function TodoScreen({ todos, setTodos }) {
           <Field value={form.dueDate} onChange={v=>setForm(p=>({...p,dueDate:v}))} label="마감일" type="date"/>
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:12, fontWeight:700, color:'#6B7280', marginBottom:8, textTransform:'uppercase', letterSpacing:'.04em' }}>카테고리</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8, maxWidth:'100%' }}>
               {CATS.map(cat=><button key={cat} onClick={()=>setForm(p=>({...p,category:cat}))} style={{ padding:'6px 12px', borderRadius:99, border:'2px solid '+(form.category===cat?cfg.c:'#E5E7EB'), background:form.category===cat?cfg.l:'white', color:form.category===cat?cfg.c:'#6B7280', fontSize:13, fontWeight:700, cursor:'pointer' }}>{cat}</button>)}
             </div>
-            <input value={CATS.includes(form.category||'')?'':(form.category||'')} onChange={e=>setForm(p=>({...p,category:e.target.value}))} placeholder="또는 직접 입력" style={{ width:'100%', padding:'8px 12px', fontSize:13, border:'1.5px solid #E5E7EB', borderRadius:10, fontFamily:'inherit' }}/>
+            <input value={CATS.includes(form.category||'')?'':(form.category||'')} onChange={e=>setForm(p=>({...p,category:e.target.value}))} placeholder="또는 직접 입력" style={{ width:'100%', padding:'8px 12px', fontSize:13, border:'1.5px solid #E5E7EB', borderRadius:10, fontFamily:'inherit', boxSizing:'border-box' }}/>
           </div>
           <Field value={form.notes} onChange={v=>setForm(p=>({...p,notes:v}))} label="메모" placeholder="추가 설명 (선택)" rows={2}/>
           <div style={{ display:'flex', gap:10 }}>
@@ -1306,7 +1308,7 @@ function JournalScreen({ journals, setJournals }) {
               {showTextPanel&&(<div style={{background:'#EEF2FF',borderBottom:'1px solid '+cfg.m,padding:'8px 14px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:cfg.d,whiteSpace:'nowrap'}}>📝 텍스트 입력</span><input autoFocus value={pendingText} onChange={function(e){setPendingText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')placeText();if(e.key==='Escape')setShowTextPanel(false);}} placeholder="입력 후 Enter" style={{flex:1,padding:'6px 12px',fontSize:14,border:'1.5px solid '+cfg.c,borderRadius:9}}/><Btn onClick={placeText} bg={cfg.c} sm>배치</Btn><Btn onClick={function(){setShowTextPanel(false);}} outline color="#9CA3AF" sm>취소</Btn></div>)}
               <div style={{flex:1,overflow:'hidden',background:'#F1F5F9',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <div style={{boxShadow:'0 8px 32px rgba(0,0,0,.15)',borderRadius:4}}>
-                  <canvas ref={canvasRef} width={900} height={560} style={{display:'block',cursor:tool==='eraser'?'cell':tool==='text'?'text':'crosshair',maxWidth:'calc(100vw - 280px)',maxHeight:'calc(100vh - 200px)',background:'white'}} onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={endDraw} onMouseLeave={endDraw}/>
+                  <canvas ref={canvasRef} width={900} height={560} style={{display:'block',cursor:tool==='eraser'?'cell':tool==='text'?'text':'crosshair',maxWidth:'min(900px, calc(100vw - 280px))',maxHeight:'calc(100vh - 200px)',background:'white',display:'block'}} onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={endDraw} onMouseLeave={endDraw}/>
                 </div>
               </div>
             </>
